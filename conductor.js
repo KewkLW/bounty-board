@@ -12,7 +12,7 @@
  *   node conductor.js status <agentId>
  */
 
-const fetch = require('node-fetch');
+// Use native fetch (Node 18+)
 
 const BOUNTY_BOARD_URL = process.env.BOUNTY_BOARD_URL || 'http://localhost:3777';
 
