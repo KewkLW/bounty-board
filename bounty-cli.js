@@ -186,11 +186,11 @@ async function createBounty(positional, flags) {
 
     // Warning if no active agents
     if (activeAgentCount === 0) {
-      console.log(`\n  ${'\x1b[33m'}⚠️  WARNING: No active agents available${'\x1b[0m'}`);
+      console.log(`\n  ⚠️  WARNING: No active agents available`);
       console.log(`  Bounty created but no agents will claim it.`);
       console.log(`  Use 'conductor.js list' to check agent status.\n`);
     } else {
-      console.log(`\n  ${'\x1b[32m'}✅ Available agents: ${activeAgentCount}${'\x1b[0m']}\n`);
+      console.log(`\n  ✅ Available agents: ${activeAgentCount}\n`);
     }
   } catch (err) {
     console.error(`❌ Error:`, err.message);
