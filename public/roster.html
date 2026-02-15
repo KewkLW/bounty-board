@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Active Agent Roster</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<script src="/avatars.js"></script>
+<script>
+tailwind.config = {
+  darkMode: "class",
+  theme: { extend: {
+    colors: { "primary": "#20f20d", "background-dark": "#112210" },
+    fontFamily: { "display": ["Space Grotesk", "sans-serif"] },
+    boxShadow: { 'cel': '4px 4px 0px 0px rgba(0,0,0,1)', 'cel-lg': '8px 8px 0px 0px rgba(0,0,0,1)', 'cel-sm': '2px 2px 0px 0px rgba(0,0,0,1)' },
+  }},
+}
+</script>
+<style>
+body { background-color: #112210; background-image: radial-gradient(#20f20d1a 1px, transparent 1px), radial-gradient(#20f20d1a 1px, transparent 1px); background-size: 20px 20px; background-position: 0 0, 10px 10px; }
+.border-cel { border: 3px solid #000; }
+.text-outline { text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 3px 3px 0 rgba(0,0,0,0.5); }
+</style>
+</head>
+<body class="bg-[#112210] min-h-screen text-white font-display relative overflow-x-hidden">
+<div class="fixed inset-0 z-0 opacity-5 pointer-events-none" style="background-image: url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22n%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23n)%22/%3E%3C/svg%3E');"></div>
+
+<div class="relative z-10 container mx-auto px-4 py-8 pb-32 max-w-7xl">
+  <!-- Header -->
+  <header class="mb-12 flex flex-col md:flex-row gap-6 items-start md:items-end justify-between">
+    <div class="relative">
+      <div class="bg-primary border-cel shadow-cel-lg p-6 transform -rotate-1 relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-16 h-16 bg-white/20 -mr-8 -mt-8 rotate-45"></div>
+        <h1 class="text-4xl md:text-6xl font-black text-black uppercase tracking-tighter" style="text-shadow: 2px 2px 0px rgba(255,255,255,0.4);">Active Agents</h1>
+        <div class="text-black font-bold text-sm tracking-widest mt-1 border-t-2 border-black pt-1 flex justify-between items-center">
+          <span>// SYS.ROSTER.V9</span>
+          <span class="animate-pulse">&#9679; ONLINE</span>
+        </div>
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-4">
+      <div class="bg-gray-800 border-cel shadow-cel p-3 min-w-[140px]">
+        <p class="text-xs text-primary/70 font-bold uppercase mb-1">Total Agents</p>
+        <p id="stat-total" class="text-2xl font-black text-white">--</p>
+      </div>
+      <div class="bg-gray-800 border-cel shadow-cel p-3 min-w-[140px]">
+        <p class="text-xs text-primary/70 font-bold uppercase mb-1">Active Now</p>
+        <p id="stat-active" class="text-2xl font-black text-primary">--</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- Filters -->
+  <div id="filters" class="mb-8 flex gap-4 overflow-x-auto pb-4"></div>
+
+  <!-- Roster Grid -->
+  <div id="roster" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"></div>
+</div>
+
+<!-- Bottom Nav -->
+<div class="fixed bottom-0 left-0 w-full z-50 px-4 pb-4">
+  <div class="container mx-auto max-w-4xl">
+    <div class="bg-gray-900 border-cel shadow-cel p-2 flex items-center justify-center gap-2 md:gap-4 relative">
+      <a href="/" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 border-2 border-black p-3 md:p-4 transition-all group">
+        <div class="flex flex-col items-center justify-center">
+          <span class="material-icons text-2xl group-hover:text-white">dashboard</span>
+          <span class="text-[10px] uppercase font-bold mt-1 tracking-widest hidden md:block">Board</span>
+        </div>
+      </a>
+      <a href="/roster" class="flex-1 bg-primary text-black border-2 border-black p-3 md:p-4 shadow-[inset_0_0_20px_rgba(255,255,255,0.4)] relative -mt-4 transform scale-110 z-10">
+        <div class="flex flex-col items-center justify-center">
+          <span class="material-icons text-3xl">people_alt</span>
+          <span class="text-xs uppercase font-black mt-1 tracking-widest hidden md:block">Roster</span>
+        </div>
+      </a>
+      <a href="/leaderboard" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 border-2 border-black p-3 md:p-4 transition-all group">
+        <div class="flex flex-col items-center justify-center">
+          <span class="material-icons text-2xl group-hover:text-white">emoji_events</span>
+          <span class="text-[10px] uppercase font-bold mt-1 tracking-widest hidden md:block">Leaderboard</span>
+        </div>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentFilter = 'all';
+
+function statusBadge(s) {
+  const map = {
+    active: { bg: 'bg-primary', text: 'text-black', label: 'ACTIVE' },
+    idle: { bg: 'bg-gray-400', text: 'text-black', label: 'IDLE' },
+    repairing: { bg: 'bg-orange-500', text: 'text-black', label: 'REPAIRING' },
+    offline: { bg: 'bg-red-600', text: 'text-white', label: 'OFFLINE' },
+  };
+  const m = map[s] || map.offline;
+  return `<div class="absolute -top-3 -right-3 ${m.bg} ${m.text} font-black px-4 py-1 rotate-2 border-2 border-black shadow-md z-20">${m.label}</div>`;
+}
+
+function statusAccent(s) {
+  return { active: 'bg-primary', idle: 'bg-gray-400', repairing: 'bg-orange-500', offline: 'bg-red-600' }[s] || 'bg-gray-400';
+}
+
+function actionButton(a) {
+  if (a.status === 'repairing') {
+    return `<button class="w-full bg-gray-700 text-gray-400 font-black uppercase py-2 border-cel shadow-cel-sm flex items-center justify-center gap-2 cursor-not-allowed opacity-70">
+      <span class="material-icons text-lg">build</span> Maintenance
+    </button>`;
+  }
+  if (a.status === 'idle') {
+    return `<button class="w-full bg-gray-200 text-black font-black uppercase py-2 border-cel shadow-cel-sm hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all flex items-center justify-center gap-2 hover:bg-white">
+      <span class="material-icons text-lg">play_arrow</span> Assign Task
+    </button>`;
+  }
+  return `<button class="w-full bg-primary text-black font-black uppercase py-2 border-cel shadow-cel-sm hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all flex items-center justify-center gap-2">
+    <span class="material-icons text-lg">radar</span> Ping Unit
+  </button>`;
+}
+
+async function loadRoster() {
+  const agents = await fetch('/api/agents').then(r => r.json());
+
+  const counts = { all: agents.length, active: 0, idle: 0, repairing: 0, offline: 0 };
+  agents.forEach(a => counts[a.status] = (counts[a.status] || 0) + 1);
+
+  document.getElementById('stat-total').textContent = agents.length;
+  document.getElementById('stat-active').textContent = counts.active;
+
+  // Build filters
+  document.getElementById('filters').innerHTML = ['all', 'active', 'idle', 'repairing'].map(f => {
+    const isActive = f === currentFilter;
+    const label = f === 'all' ? `All Units` : `${f.charAt(0).toUpperCase() + f.slice(1)} [${counts[f] || 0}]`;
+    return `<button onclick="setFilter('${f}')" class="${isActive ? 'bg-black text-primary' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'} border-cel shadow-cel-sm px-6 py-2 font-bold transition-colors uppercase whitespace-nowrap">${label}</button>`;
+  }).join('');
+
+  // Filter agents
+  const filtered = currentFilter === 'all' ? agents : agents.filter(a => a.status === currentFilter);
+
+  const successRate = (a) => (a.missions_completed + a.missions_failed) > 0
+    ? Math.round(a.missions_completed / (a.missions_completed + a.missions_failed) * 100) : 0;
+
+  document.getElementById('roster').innerHTML = filtered.map(a => {
+    const rate = successRate(a);
+    const accent = statusAccent(a.status);
+    const directive = a.current_directive || (a.status === 'idle' ? 'Awaiting deployment orders.' : a.status === 'repairing' ? 'Diagnostic in progress...' : 'Standing by.');
+
+    return `<div class="bg-gray-900 border-cel shadow-cel-lg relative group transition-transform hover:-translate-y-1">
+      ${statusBadge(a.status)}
+      <div class="p-4 bg-gray-800 border-b-4 border-black relative overflow-hidden">
+        <div class="aspect-square bg-gray-700 border-2 border-black relative overflow-hidden flex items-center justify-center">
+          <img src="${window.AgentAvatars ? AgentAvatars.getUrl(a.id, 200) : ''}" alt="${a.name}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"/>
+          <div class="absolute inset-0 items-center justify-center hidden"><span class="text-6xl font-black text-white/10">${a.name.charAt(0)}</span></div>
+          <div class="absolute inset-0 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]"></div>
+          <div class="absolute bottom-2 left-2 text-[10px] ${a.status === 'active' ? 'text-primary' : 'text-gray-500'} font-mono bg-black/80 px-1">
+            ${a.status === 'active' ? 'ONLINE' : a.status.toUpperCase()}
+          </div>
+        </div>
+      </div>
+      <div class="p-4 space-y-4">
+        <div>
+          <h3 class="text-2xl font-black uppercase text-white tracking-tight">${a.name} <span class="text-primary text-sm font-mono ml-1">Lv.${a.level}</span></h3>
+          <span class="text-xs text-gray-500 font-mono">Class: ${a.class} // ${a.total_loot.toLocaleString()} XP</span>
+          <div class="h-1 w-full bg-gray-700 mt-2"><div class="h-full ${accent}" style="width:${rate}%"></div></div>
+        </div>
+        <div class="bg-black/40 border border-white/10 p-3">
+          <p class="text-xs text-gray-400 uppercase font-bold mb-1">Current Directive:</p>
+          <p class="text-sm font-bold ${a.status === 'repairing' ? 'text-orange-400' : 'text-white'} leading-tight">${directive}</p>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="bg-black/30 p-1 rounded"><span class="text-[10px] text-gray-500 block">Done</span><span class="text-sm font-bold text-green-400">${a.missions_completed}</span></div>
+          <div class="bg-black/30 p-1 rounded"><span class="text-[10px] text-gray-500 block">Failed</span><span class="text-sm font-bold text-red-400">${a.missions_failed}</span></div>
+          <div class="bg-black/30 p-1 rounded"><span class="text-[10px] text-gray-500 block">Streak</span><span class="text-sm font-bold text-primary">${a.streak}x</span></div>
+        </div>
+        ${actionButton(a)}
+      </div>
+      <div class="absolute top-2 left-2 w-2 h-2 rounded-full bg-gray-500 border border-black flex items-center justify-center"><div class="w-full h-[1px] bg-black rotate-45"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function setFilter(f) { currentFilter = f; loadRoster(); }
+
+loadRoster();
+setInterval(loadRoster, 5000);
+</script>
+</body></html>

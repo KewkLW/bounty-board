@@ -1,0 +1,108 @@
+╔════════════════════════════════════════════════════════════╗
+║   WASTELAND BOUNTY BOARD - QUICK COMMANDS REFERENCE         ║
+╚════════════════════════════════════════════════════════════╝
+
+LAUNCH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  start-all.bat                      Launch everything (server + 5 agents)
+  start-server-only.bat              Launch server only
+
+MANAGE AGENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  node conductor-spawn.js spawn opus       Spawn Opus agent
+  node conductor-spawn.js spawn codex      Spawn Codex agent
+  node conductor-spawn.js spawn sonnet     Spawn Sonnet agent
+  node conductor-spawn.js spawn haiku      Spawn Haiku agent
+  node conductor-spawn.js spawn gemini     Spawn Gemini agent
+
+  node conductor-spawn.js list             List active agents
+  node conductor-spawn.js attach opus      Attach to Opus session
+  node conductor-spawn.js kill opus        Kill Opus session
+
+  tmux attach-session -t opus-agent-1      Watch Opus work
+  tmux attach-session -t codex-agent-1     Watch Codex work
+  (Detach: Ctrl+B then D)
+
+CREATE WORK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  node bounty-cli.js create "Title" --type task --tier A
+  node bounty-cli.js create "Title" --type bug --tier A --priority critical
+  node bounty-cli.js create "Title" --type task --tier C
+
+VIEW WORK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  node bounty-cli.js list                  All bounties
+  node bounty-cli.js list --status pending Pending only
+  node bounty-cli.js list --type bug       Bugs only
+  node bounty-cli.js view 5                Details for bounty #5
+
+STATISTICS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  node bounty-cli.js stats                 Board statistics
+  node bounty-cli.js leaderboard           Agent rankings by XP
+
+REGISTRY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  node agent-registry.js list              List registered agents
+  node agent-registry.js get opus wsl      Get agent details
+  node agent-registry.js create opus wsl   Create/get agent
+  node agent-registry.js reset             Clear all agents
+
+SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  node server.js                           Start server manually
+  bash reset.sh                            Reset everything (Unix)
+  powershell -File reset.ps1               Reset everything (PowerShell)
+
+URLS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  http://localhost:3777                    Kanban board
+  http://localhost:3777/roster             Agent roster
+  http://localhost:3777/leaderboard        Leaderboard
+  ws://localhost:3777                      WebSocket
+
+TIERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  S = 5,000 XP    (Critical/Black Ops)
+  A = 2,000-2,500 XP  (High Priority/Merc Contract)
+  B = 750-1,000 XP    (Medium/Salvage Run)
+  C = 150-250 XP      (Low/Scrap Work)
+
+PRIORITIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  critical, high, normal, low
+
+EXAMPLES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create a critical bug:
+  node bounty-cli.js create "Production crash on login" --type bug --tier A --priority critical
+
+Create a simple task:
+  node bounty-cli.js create "Update button color" --type task --tier C
+
+Create a complex task:
+  node bounty-cli.js create "Refactor database layer" --type task --tier A --priority high --desc "Use connection pooling"
+
+WORKFLOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. start-all.bat                          Launch everything
+2. node bounty-cli.js create ...           Create work
+3. node bounty-cli.js leaderboard          Watch competition
+4. tmux attach-session -t opus-agent-1    Monitor agents
+5. node bounty-cli.js stats                Check results
+
+═══════════════════════════════════════════════════════════════
+Generated: Feb 15, 2026 | See LAUNCH-GUIDE.md for full details
+═══════════════════════════════════════════════════════════════
