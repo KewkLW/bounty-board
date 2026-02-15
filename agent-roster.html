@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Active Agent Roster</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#20f20d",
+                        "background-light": "#f6f8f5",
+                        "background-dark": "#112210",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                    boxShadow: {
+                        'cel': '4px 4px 0px 0px rgba(0,0,0,1)',
+                        'cel-lg': '8px 8px 0px 0px rgba(0,0,0,1)',
+                        'cel-sm': '2px 2px 0px 0px rgba(0,0,0,1)',
+                    },
+                    backgroundImage: {
+                        'noise': "url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22 opacity=%220.05%22/%3E%3C/svg%3E')",
+                        'scratches': "linear-gradient(45deg, rgba(0,0,0,0) 48%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0) 52%), linear-gradient(-45deg, rgba(0,0,0,0) 48%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0) 52%)",
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom Cel-Shaded Styles */
+        body {
+            background-color: #112210;
+            background-image: 
+                radial-gradient(#20f20d1a 1px, transparent 1px), 
+                radial-gradient(#20f20d1a 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+        }
+
+        .border-cel {
+            border: 3px solid #000000;
+        }
+
+        .text-outline {
+            text-shadow: 
+                -1px -1px 0 #000,  
+                1px -1px 0 #000,
+                -1px 1px 0 #000,
+                1px 1px 0 #000,
+                3px 3px 0 rgba(0,0,0,0.5);
+        }
+
+        .clip-notch {
+            clip-path: polygon(
+                0% 0%, 
+                100% 0%, 
+                100% 85%, 
+                90% 100%, 
+                0% 100%
+            );
+        }
+
+        .clip-header {
+            clip-path: polygon(
+                0% 0%, 
+                95% 0%, 
+                100% 50%, 
+                95% 100%, 
+                0% 100%
+            );
+        }
+
+        .grunge-overlay {
+            mix-blend-mode: overlay;
+            pointer-events: none;
+        }
+
+        /* Tape Effect */
+        .tape {
+            background-color: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            transform: rotate(-2deg);
+            border-left: 1px dashed rgba(0,0,0,0.1);
+            border-right: 1px dashed rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen text-white font-display relative overflow-x-hidden">
+<!-- Global Noise/Grunge Overlay -->
+<div class="fixed inset-0 z-50 pointer-events-none opacity-20 bg-noise"></div>
+<div class="fixed inset-0 z-40 pointer-events-none opacity-10 bg-scratches"></div>
+<!-- Main Container -->
+<div class="relative z-10 container mx-auto px-4 py-8 pb-32 max-w-7xl">
+<!-- Header Section -->
+<header class="mb-12 flex flex-col md:flex-row gap-6 items-start md:items-end justify-between">
+<div class="relative w-full md:w-auto">
+<!-- Title Container -->
+<div class="bg-primary border-cel shadow-cel-lg p-6 transform -rotate-1 relative overflow-hidden group">
+<div class="absolute top-0 right-0 w-16 h-16 bg-white/20 -mr-8 -mt-8 rotate-45 transform"></div>
+<h1 class="text-4xl md:text-6xl font-black text-black uppercase tracking-tighter" style="text-shadow: 2px 2px 0px rgba(255,255,255,0.4);">
+                        Active Agents
+                    </h1>
+<div class="text-black font-bold text-sm tracking-widest mt-1 border-t-2 border-black pt-1 flex justify-between items-center">
+<span>// SYS.ROSTER.V9</span>
+<span class="animate-pulse">● ONLINE</span>
+</div>
+</div>
+</div>
+<!-- Stats Bar -->
+<div class="flex flex-wrap gap-4 w-full md:w-auto">
+<div class="bg-gray-800 border-cel shadow-cel p-3 flex-1 md:flex-none min-w-[140px]">
+<p class="text-xs text-primary/70 font-bold uppercase mb-1">Total Bounties</p>
+<p class="text-2xl font-black text-white">8,492</p>
+</div>
+<div class="bg-gray-800 border-cel shadow-cel p-3 flex-1 md:flex-none min-w-[140px]">
+<p class="text-xs text-primary/70 font-bold uppercase mb-1">Server Load</p>
+<div class="w-full bg-black h-4 border border-white/20 mt-1 relative">
+<div class="absolute inset-0 bg-primary w-[72%] border-r-2 border-white"></div>
+<div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSI0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik00IDBMMCA0IiBzdHJva2U9IiMwMDAiIHN0cm9rZS13aWR0aD0iMSIvPjwvc3ZnPg==')] opacity-20"></div>
+</div>
+</div>
+</div>
+</header>
+<!-- Filters / Sort -->
+<div class="mb-8 flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+<button class="bg-black text-primary border-cel shadow-cel px-6 py-2 font-bold hover:bg-primary hover:text-black transition-colors uppercase whitespace-nowrap">
+                All Units
+            </button>
+<button class="bg-gray-800 text-gray-400 border-cel shadow-cel-sm px-6 py-2 font-bold hover:bg-gray-700 hover:text-white transition-colors uppercase whitespace-nowrap">
+                Active [7]
+            </button>
+<button class="bg-gray-800 text-gray-400 border-cel shadow-cel-sm px-6 py-2 font-bold hover:bg-gray-700 hover:text-white transition-colors uppercase whitespace-nowrap">
+                Repairing [2]
+            </button>
+<button class="bg-gray-800 text-gray-400 border-cel shadow-cel-sm px-6 py-2 font-bold hover:bg-gray-700 hover:text-white transition-colors uppercase whitespace-nowrap">
+                Idle [3]
+            </button>
+</div>
+<!-- Roster Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+<!-- Agent Card: ACTIVE -->
+<div class="bg-gray-900 border-cel shadow-cel-lg relative group transition-transform hover:-translate-y-1">
+<!-- Status Tape -->
+<div class="absolute -top-3 -right-3 bg-primary text-black font-black px-4 py-1 rotate-3 border-2 border-black shadow-md z-20">
+                    ACTIVE
+                </div>
+<!-- Portrait Section -->
+<div class="p-4 bg-gray-800 border-b-4 border-black relative overflow-hidden">
+<div class="aspect-square bg-gray-700 border-2 border-black relative overflow-hidden">
+<img alt="Stylized robotic head with glowing green eyes and exposed wires" class="w-full h-full object-cover filter contrast-125 sepia-[.3] grayscale-[.2]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuArIn2lYMwWxq3E8tBQnJ2pyODxAyE4JSWLLZ_hlFg5bSM1DvLvH1SyssKskYrWnJ3CnhfvYhjqCQDtLztOZV1yoHCVacaEKvAezdRzV8QlUZ5N8CGvxHsScX9dfyc5dPx-NxgifYu_VkjbrxjV4Ve_YwsyT8WUUwBRl7vdgMc7ZZQbq9i6oPOexAv9dOx0vGNYGe9meopBy2YihASDUaVBQLbgbGQl2nIzRx-O83Ar565JPFkrvEzQdqzE8AAizUyy9mBcEnrREJs"/>
+<div class="absolute inset-0 bg-primary mix-blend-color opacity-20"></div>
+<div class="absolute inset-0 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]"></div>
+<!-- Cyber Overlay -->
+<div class="absolute bottom-2 left-2 text-[10px] text-primary font-mono bg-black/80 px-1">
+                            CAM_04 :: ONLINE
+                        </div>
+</div>
+</div>
+<!-- Info Section -->
+<div class="p-4 space-y-4">
+<div>
+<h3 class="text-2xl font-black uppercase text-white tracking-tight -rotate-1">Unit-734 <span class="text-primary text-sm font-mono ml-2">v4.0</span></h3>
+<div class="h-1 w-full bg-gray-700 mt-2">
+<div class="h-full bg-primary w-[85%]"></div>
+</div>
+</div>
+<div class="bg-black/40 border border-white/10 p-3">
+<p class="text-xs text-gray-400 uppercase font-bold mb-1">Current Directive:</p>
+<p class="text-sm font-bold text-white leading-tight">Scraping Sector 7 Data Nodes for encryption keys.</p>
+</div>
+<button class="w-full bg-primary text-black font-black uppercase py-2 border-cel shadow-cel-sm hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all flex items-center justify-center gap-2 group-hover:bg-white">
+<span class="material-icons text-lg">radar</span> Ping Unit
+                    </button>
+</div>
+<!-- Decorative screw -->
+<div class="absolute top-2 left-2 w-2 h-2 rounded-full bg-gray-500 border border-black flex items-center justify-center">
+<div class="w-full h-[1px] bg-black rotate-45"></div>
+</div>
+</div>
+<!-- Agent Card: REPAIRING -->
+<div class="bg-gray-900 border-cel shadow-cel-lg relative group transition-transform hover:-translate-y-1">
+<div class="absolute -top-3 -right-3 bg-orange-500 text-black font-black px-4 py-1 -rotate-2 border-2 border-black shadow-md z-20">
+                    REPAIRING
+                </div>
+<div class="p-4 bg-gray-800 border-b-4 border-black relative overflow-hidden">
+<div class="aspect-square bg-gray-700 border-2 border-black relative overflow-hidden">
+<img alt="Damaged robot head with sparks and welding marks" class="w-full h-full object-cover filter contrast-125 grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBkDAMT7WWlRrIFp5Rfu1sCLs6MJDxckjYQTW6fsu_f2IwW00vChLlpBECJepcu9DeLsc17NAKt6OF-ASeKd-G-s4KbKteYoG3bg7XrArVXqSZtXpa13Q18iVw9lekbuiPO2ww1DhikEtCMTvGHNxE15X5QcBCYXkHVWKAnanlNU4uRYxsvM9-E6S2aCSraaB6fpJMSDnpzeARHKTCGMpQnuGqBGxP8m6Kqyl-_KPcpYoKxhK9cmQeE7SjzlQ6tSZgfKnZODINLhGo"/>
+<div class="absolute inset-0 bg-orange-500 mix-blend-color opacity-30"></div>
+<div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwYXRoIGQ9Ik0wIDhMOCAwIiBzdHJva2U9InJnYmEoMCwwLDAsMC41KSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9zdmc+')] opacity-40"></div>
+</div>
+</div>
+<div class="p-4 space-y-4">
+<div>
+<h3 class="text-2xl font-black uppercase text-white tracking-tight rotate-1">Claptrap-X</h3>
+<div class="h-1 w-full bg-gray-700 mt-2">
+<div class="h-full bg-orange-500 w-[12%] animate-pulse"></div>
+</div>
+</div>
+<div class="bg-black/40 border border-white/10 p-3">
+<p class="text-xs text-gray-400 uppercase font-bold mb-1">Diagnostic Log:</p>
+<p class="text-sm font-bold text-orange-400 leading-tight">CRITICAL: Logic Loop Failure. Rebooting core...</p>
+</div>
+<button class="w-full bg-gray-700 text-gray-400 font-black uppercase py-2 border-cel shadow-cel-sm flex items-center justify-center gap-2 cursor-not-allowed opacity-70">
+<span class="material-icons text-lg">build</span> Maintenance
+                    </button>
+</div>
+<!-- Decorative screw -->
+<div class="absolute top-2 left-2 w-2 h-2 rounded-full bg-gray-500 border border-black flex items-center justify-center">
+<div class="w-full h-[1px] bg-black rotate-45"></div>
+</div>
+</div>
+<!-- Agent Card: IDLE -->
+<div class="bg-gray-900 border-cel shadow-cel-lg relative group transition-transform hover:-translate-y-1">
+<div class="absolute -top-3 -right-3 bg-gray-400 text-black font-black px-4 py-1 rotate-1 border-2 border-black shadow-md z-20">
+                    IDLE
+                </div>
+<div class="p-4 bg-gray-800 border-b-4 border-black relative overflow-hidden">
+<div class="aspect-square bg-gray-700 border-2 border-black relative overflow-hidden">
+<img alt="Sleek white minimalistic robot face looking calm" class="w-full h-full object-cover filter contrast-100 grayscale-[0.8]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuALP_IxVNniqPP2k5mWvW2iAnOH_UJdbnBH0809mOvL5c3K39VWM-edgLCuWK35XzF3CCQyNMLtSyRczYpcv9bgHQ9X6uzFwoBAu-yocynso56NeVHg9ZpyY4Y7VHDm2WXOiP6bzKYF2YCFub_XJLwCRnqqhpriv8IMlZWuSrEDED_fheYQSQ3LE98mTMoqOaHx11kQNg6I7TIRPPl80Xi90gY7g0vfJ6F1dy76Jt5FCfl5cxECFG2HR6YMcvit-SUXG2KUolwPTTo"/>
+<div class="absolute inset-0 bg-blue-900 mix-blend-color opacity-20"></div>
+</div>
+</div>
+<div class="p-4 space-y-4">
+<div>
+<h3 class="text-2xl font-black uppercase text-white tracking-tight">Zero-One</h3>
+<div class="h-1 w-full bg-gray-700 mt-2">
+<div class="h-full bg-gray-400 w-full"></div>
+</div>
+</div>
+<div class="bg-black/40 border border-white/10 p-3">
+<p class="text-xs text-gray-400 uppercase font-bold mb-1">Status Report:</p>
+<p class="text-sm font-bold text-gray-300 leading-tight">Awaiting deployment orders. Battery at 98%.</p>
+</div>
+<button class="w-full bg-gray-200 text-black font-black uppercase py-2 border-cel shadow-cel-sm hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all flex items-center justify-center gap-2 hover:bg-white">
+<span class="material-icons text-lg">play_arrow</span> Assign Task
+                    </button>
+</div>
+<!-- Decorative screw -->
+<div class="absolute top-2 left-2 w-2 h-2 rounded-full bg-gray-500 border border-black flex items-center justify-center">
+<div class="w-full h-[1px] bg-black rotate-45"></div>
+</div>
+</div>
+<!-- Agent Card: ACTIVE -->
+<div class="bg-gray-900 border-cel shadow-cel-lg relative group transition-transform hover:-translate-y-1">
+<div class="absolute -top-3 -right-3 bg-primary text-black font-black px-4 py-1 -rotate-1 border-2 border-black shadow-md z-20">
+                    ACTIVE
+                </div>
+<div class="p-4 bg-gray-800 border-b-4 border-black relative overflow-hidden">
+<div class="aspect-square bg-gray-700 border-2 border-black relative overflow-hidden">
+<img alt="Heavy industrial robot head with bulky armor plating" class="w-full h-full object-cover filter contrast-125 sepia-[.4]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtAvJRH72jq56RnSIvDJBQn3WPBl4jeaJhO_1BuXIIJPdCsK_JnIMmJI-RUKZqW3EdUWD2cQusA0DhwNKwTLBAhICqtJhKP8OSsGb11hxY4uuHWm8GWv1kWrvwaSJyoLmPbcwqYlxgOyV5P3AX1rqQpIXBso9V4eKHpyaK-K1h0nxVLPhuyIm5cQqiW7F_vc5DxsewMx-A9Ulg2VUow_fqzsWTIF5REv-X5LMF26bFgvrG0o6ghmMBlHPsVind4T49bFrG2EYSUf4"/>
+<div class="absolute inset-0 bg-primary mix-blend-color opacity-10"></div>
+<!-- Glitch overlay -->
+<div class="absolute top-1/2 left-0 w-full h-1 bg-primary/50 skew-x-12"></div>
+</div>
+</div>
+<div class="p-4 space-y-4">
+<div>
+<h3 class="text-2xl font-black uppercase text-white tracking-tight -rotate-2">Brick-9</h3>
+<div class="h-1 w-full bg-gray-700 mt-2">
+<div class="h-full bg-primary w-[65%]"></div>
+</div>
+</div>
+<div class="bg-black/40 border border-white/10 p-3">
+<p class="text-xs text-gray-400 uppercase font-bold mb-1">Current Directive:</p>
+<p class="text-sm font-bold text-white leading-tight">Brute Force Decryption on Vault 3.</p>
+</div>
+<button class="w-full bg-primary text-black font-black uppercase py-2 border-cel shadow-cel-sm hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all flex items-center justify-center gap-2 group-hover:bg-white">
+<span class="material-icons text-lg">radar</span> Ping Unit
+                    </button>
+</div>
+<!-- Decorative screw -->
+<div class="absolute top-2 left-2 w-2 h-2 rounded-full bg-gray-500 border border-black flex items-center justify-center">
+<div class="w-full h-[1px] bg-black rotate-45"></div>
+</div>
+</div>
+<!-- Agent Card: ACTIVE (More) -->
+<div class="bg-gray-900 border-cel shadow-cel-lg relative group transition-transform hover:-translate-y-1 hidden lg:block">
+<div class="absolute -top-3 -right-3 bg-primary text-black font-black px-4 py-1 rotate-2 border-2 border-black shadow-md z-20">
+                    ACTIVE
+                </div>
+<div class="p-4 bg-gray-800 border-b-4 border-black relative overflow-hidden">
+<div class="aspect-square bg-gray-700 border-2 border-black relative overflow-hidden">
+<img alt="Futuristic cybernetic interface with complex data streams" class="w-full h-full object-cover filter contrast-150 grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC_1h0RJMeji64tSU8L3MnlBRO9tD8ccElbPsQhT3awPUpS6-OaUI6IUV0K_CmOOoOKTc4bPXE5KpWBsUaiTtofLXob7wb_xxjeHE1kJAFEYe2XpnyOOQqoJOaR-2jDx3DUmfGZ5iQzbzOVUYJDuiitSq7uS0x32wSm2A541-sMbySJwtUVQjmBlu56VZISmYVsbUY_mfNcXa7G0U_Ryncpjvpmm0_8WdzCoMjDE8SHdTkm19aHcQmtehrbxdz5MEO82dy3HnaTphY"/>
+<div class="absolute inset-0 bg-green-900/50 mix-blend-overlay"></div>
+</div>
+</div>
+<div class="p-4 space-y-4">
+<div>
+<h3 class="text-2xl font-black uppercase text-white tracking-tight">Viper-07</h3>
+<div class="h-1 w-full bg-gray-700 mt-2">
+<div class="h-full bg-primary w-[40%]"></div>
+</div>
+</div>
+<div class="bg-black/40 border border-white/10 p-3">
+<p class="text-xs text-gray-400 uppercase font-bold mb-1">Current Directive:</p>
+<p class="text-sm font-bold text-white leading-tight">Network infiltration. Firewall bypass in progress.</p>
+</div>
+<button class="w-full bg-primary text-black font-black uppercase py-2 border-cel shadow-cel-sm hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all flex items-center justify-center gap-2 group-hover:bg-white">
+<span class="material-icons text-lg">radar</span> Ping Unit
+                    </button>
+</div>
+<!-- Decorative screw -->
+<div class="absolute top-2 left-2 w-2 h-2 rounded-full bg-gray-500 border border-black flex items-center justify-center">
+<div class="w-full h-[1px] bg-black rotate-45"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation Dock -->
+<div class="fixed bottom-0 left-0 w-full z-50 px-4 pb-4">
+<div class="container mx-auto max-w-4xl">
+<div class="bg-gray-900 border-cel shadow-cel-lg p-2 flex items-center justify-center gap-2 md:gap-4 clip-notch relative">
+<!-- Decoration lines -->
+<div class="absolute top-1 left-2 w-16 h-[2px] bg-white/20"></div>
+<div class="absolute bottom-1 right-2 w-16 h-[2px] bg-white/20"></div>
+<button class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 border-2 border-black p-3 md:p-4 transition-all group relative overflow-hidden">
+<div class="absolute inset-0 bg-white/5 translate-y-full group-hover:translate-y-0 transition-transform"></div>
+<div class="flex flex-col items-center justify-center">
+<span class="material-icons text-2xl group-hover:text-white transition-colors">dashboard</span>
+<span class="text-[10px] uppercase font-bold mt-1 tracking-widest hidden md:block">Mission Board</span>
+</div>
+</button>
+<button class="flex-1 bg-primary text-black border-2 border-black p-3 md:p-4 shadow-[inset_0_0_20px_rgba(255,255,255,0.4)] relative -mt-4 transform scale-110 z-10 clip-notch">
+<div class="flex flex-col items-center justify-center">
+<span class="material-icons text-3xl">people_alt</span>
+<span class="text-xs uppercase font-black mt-1 tracking-widest hidden md:block">Roster</span>
+</div>
+</button>
+<button class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 border-2 border-black p-3 md:p-4 transition-all group relative overflow-hidden">
+<div class="absolute inset-0 bg-white/5 translate-y-full group-hover:translate-y-0 transition-transform"></div>
+<div class="flex flex-col items-center justify-center">
+<span class="material-icons text-2xl group-hover:text-white transition-colors">emoji_events</span>
+<span class="text-[10px] uppercase font-bold mt-1 tracking-widest hidden md:block">Leaderboard</span>
+</div>
+</button>
+</div>
+</div>
+</div>
+<!-- Decorative Splatters (Absolute positioning) -->
+<div class="fixed top-20 right-10 w-32 h-32 bg-primary/20 rounded-full blur-3xl pointer-events-none mix-blend-screen"></div>
+<div class="fixed bottom-32 left-10 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl pointer-events-none mix-blend-screen"></div>
+<!-- SVG Splatter imitation using clip path or shapes -->
+<div class="fixed top-1/4 left-5 opacity-40 pointer-events-none">
+<svg fill="#20f20d" height="100" viewbox="0 0 100 100" width="100">
+<path d="M40 10 C 30 20, 10 20, 15 40 C 5 50, 20 70, 40 80 C 60 90, 80 80, 85 60 C 90 40, 70 20, 40 10 Z" style="filter: blur(1px);"></path>
+<circle cx="20" cy="20" r="3"></circle>
+<circle cx="80" cy="80" r="2"></circle>
+</svg>
+</div>
+</body></html>

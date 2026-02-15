@@ -1,0 +1,56 @@
+{
+  "agents": {
+    "opus-wsl": {
+      "agentId": "opus-wsl-1",
+      "agentName": "Opus-Conductor",
+      "sessionName": "opus-agent-1",
+      "model": "opus",
+      "platform": "wsl",
+      "instanceNum": 1,
+      "createdAt": "2026-02-15T23:17:00.206Z"
+    },
+    "codex-wsl": {
+      "agentId": "codex-wsl-1",
+      "agentName": "Codex-Agent",
+      "sessionName": "codex-agent-1",
+      "model": "codex",
+      "platform": "wsl",
+      "instanceNum": 1,
+      "createdAt": "2026-02-15T23:17:01.183Z"
+    },
+    "sonnet-wsl": {
+      "agentId": "sonnet-wsl-1",
+      "agentName": "Sonnet-Agent",
+      "sessionName": "sonnet-agent-1",
+      "model": "sonnet",
+      "platform": "wsl",
+      "instanceNum": 1,
+      "createdAt": "2026-02-15T23:17:02.161Z"
+    },
+    "haiku-wsl": {
+      "agentId": "haiku-wsl-1",
+      "agentName": "Haiku-Agent",
+      "sessionName": "haiku-agent-1",
+      "model": "haiku",
+      "platform": "wsl",
+      "instanceNum": 1,
+      "createdAt": "2026-02-15T23:17:03.240Z"
+    },
+    "gemini-wsl": {
+      "agentId": "gemini-wsl-1",
+      "agentName": "Gemini-Agent",
+      "sessionName": "gemini-agent-1",
+      "model": "gemini",
+      "platform": "wsl",
+      "instanceNum": 1,
+      "createdAt": "2026-02-15T23:17:04.218Z"
+    }
+  },
+  "nextId": {
+    "opus": 2,
+    "codex": 2,
+    "sonnet": 2,
+    "haiku": 2,
+    "gemini": 2
+  }
+}

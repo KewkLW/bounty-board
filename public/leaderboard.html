@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Scavenger Leaderboard</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="/avatars.js"></script>
+<script>
+tailwind.config = {
+  darkMode: "class",
+  theme: { extend: {
+    colors: { "primary": "#f2df0d", "primary-dark": "#c4b40b", "background-dark": "#222110" },
+    fontFamily: { "display": ["Space Grotesk", "sans-serif"] },
+    boxShadow: { "hard": "4px 4px 0px 0px #000000", "hard-sm": "2px 2px 0px 0px #000000", "hard-lg": "8px 8px 0px 0px #000000", "glow": "0 0 20px rgba(242, 223, 13, 0.5)" },
+  }},
+}
+</script>
+<style>
+.halftone-pattern { background-image: radial-gradient(#4b4b4b 1px, transparent 1px); background-size: 20px 20px; }
+.card-border { border: 3px solid #121212; }
+.text-stroke { -webkit-text-stroke: 2px black; }
+.scavenger-row:hover { transform: scale(1.02) translateX(-5px); box-shadow: 6px 6px 0px 0px #f2df0d; border-color: #f2df0d; }
+.progress-bar-striped { background-image: linear-gradient(45deg, rgba(0,0,0,0.15) 25%, transparent 25%, transparent 50%, rgba(0,0,0,0.15) 50%, rgba(0,0,0,0.15) 75%, transparent 75%, transparent); background-size: 1rem 1rem; }
+</style>
+</head>
+<body class="bg-[#222110] text-white font-display min-h-screen relative overflow-x-hidden selection:bg-primary selection:text-black">
+<div class="fixed inset-0 z-0 halftone-pattern opacity-5 pointer-events-none"></div>
+
+<div class="relative z-10 container mx-auto px-4 py-8 max-w-6xl pb-32">
+  <!-- Header -->
+  <header class="mb-12 relative">
+    <div class="absolute top-10 right-0 w-64 h-2 bg-primary transform -rotate-2 shadow-hard"></div>
+    <div class="flex flex-col md:flex-row items-start md:items-end justify-between gap-6">
+      <div>
+        <div class="inline-block bg-primary px-4 py-1 transform -skew-x-12 border-2 border-black shadow-hard-sm mb-2">
+          <span class="block transform skew-x-12 text-black font-bold tracking-widest text-sm uppercase">Weekly Haul // Sector 7</span>
+        </div>
+        <h1 class="text-6xl md:text-8xl font-black italic tracking-tighter text-primary drop-shadow-[4px_4px_0_rgba(0,0,0,1)] text-stroke">TOP SCAVENGERS</h1>
+      </div>
+      <div class="flex flex-col items-end">
+        <div class="text-right mb-1">
+          <span class="text-sm text-gray-400 font-mono uppercase tracking-widest">System Status</span>
+          <span class="ml-2 text-primary font-bold animate-pulse">&#9679; ONLINE</span>
+        </div>
+        <div class="bg-zinc-800 border-2 border-black p-4 shadow-hard transform rotate-1 rounded-sm max-w-xs">
+          <p class="text-xs text-gray-300 font-mono leading-tight">&gt; WARNING: Competition for loot creates erratic behavior in AI agents. Maintain safe distance.</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Leaderboard -->
+  <main id="leaderboard" class="space-y-6"></main>
+</div>
+
+<!-- Bottom Nav -->
+<div class="fixed bottom-0 left-0 w-full z-50 px-4 pb-4">
+  <div class="container mx-auto max-w-4xl">
+    <div class="bg-gray-900 card-border shadow-hard p-2 flex items-center justify-center gap-2 md:gap-4 relative">
+      <a href="/" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 border-2 border-black p-3 md:p-4 transition-all group">
+        <div class="flex flex-col items-center justify-center">
+          <span class="material-icons text-2xl group-hover:text-white">dashboard</span>
+          <span class="text-[10px] uppercase font-bold mt-1 tracking-widest hidden md:block">Board</span>
+        </div>
+      </a>
+      <a href="/roster" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 border-2 border-black p-3 md:p-4 transition-all group">
+        <div class="flex flex-col items-center justify-center">
+          <span class="material-icons text-2xl group-hover:text-white">people_alt</span>
+          <span class="text-[10px] uppercase font-bold mt-1 tracking-widest hidden md:block">Roster</span>
+        </div>
+      </a>
+      <a href="/leaderboard" class="flex-1 bg-primary text-black border-2 border-black p-3 md:p-4 shadow-[inset_0_0_20px_rgba(255,255,255,0.4)] relative -mt-4 transform scale-110 z-10">
+        <div class="flex flex-col items-center justify-center">
+          <span class="material-icons text-3xl">emoji_events</span>
+          <span class="text-xs uppercase font-black mt-1 tracking-widest hidden md:block">Leaderboard</span>
+        </div>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadLeaderboard() {
+  const agents = await fetch('/api/agents/leaderboard').then(r => r.json());
+  const container = document.getElementById('leaderboard');
+
+  container.innerHTML = agents.map((a, i) => {
+    const rank = i + 1;
+    const barColor = rank === 1 ? 'bg-primary' : rank === 2 ? 'bg-yellow-500' : rank === 3 ? 'bg-yellow-600' : 'bg-zinc-500';
+    const statusColor = { active: 'text-green-400', idle: 'text-gray-400', repairing: 'text-orange-400', offline: 'text-red-400' }[a.status] || 'text-gray-400';
+
+    if (rank === 1) {
+      return `<div class="relative group">
+        <div class="absolute -inset-1 bg-gradient-to-r from-primary to-yellow-600 rounded-lg blur opacity-40 group-hover:opacity-75 transition duration-1000 animate-pulse"></div>
+        <div class="relative flex flex-col md:flex-row items-center gap-6 bg-zinc-900 border-4 border-primary rounded-lg p-6 shadow-hard-lg transform transition-all duration-300 hover:-translate-y-1">
+          <div class="absolute -top-6 -left-4 md:-left-6 w-20 h-20 bg-primary border-4 border-black rotate-12 flex items-center justify-center shadow-hard z-20 rounded-full">
+            <span class="material-icons text-5xl text-black">emoji_events</span>
+          </div>
+          <div class="relative flex-shrink-0 ml-4 md:ml-6">
+            <div class="w-24 h-24 md:w-32 md:h-32 border-4 border-black bg-zinc-800 overflow-hidden flex items-center justify-center" style="clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);">
+              <img src="${AgentAvatars.getUrl(a.id, 200)}" alt="${a.name}" class="w-full h-full object-cover"/>
+            </div>
+            <div class="absolute bottom-0 left-0 right-0 bg-primary/90 text-black text-center text-xs font-bold py-1">LEGENDARY</div>
+          </div>
+          <div class="flex-grow text-center md:text-left z-10 w-full">
+            <div class="flex flex-col md:flex-row md:items-baseline gap-2 md:gap-4 mb-2">
+              <h2 class="text-4xl font-black text-white uppercase tracking-tight italic">${a.name}</h2>
+              <span class="bg-zinc-800 text-primary px-2 py-0.5 text-xs font-mono border border-primary/30 rounded">Class: ${a.class}</span>
+              <span class="${statusColor} text-xs font-bold uppercase">&#9679; ${a.status}</span>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+              <div class="bg-black/40 p-3 rounded border border-zinc-700">
+                <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Total Loot</span>
+                <div class="flex items-center gap-2"><span class="material-icons text-primary animate-bounce">diamond</span><span class="text-2xl font-mono text-white font-bold">${a.total_loot.toLocaleString()}</span></div>
+              </div>
+              <div class="bg-black/40 p-3 rounded border border-zinc-700">
+                <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Success Rate</span>
+                <div class="flex items-center gap-2">
+                  <div class="flex-grow bg-zinc-800 h-4 rounded-full overflow-hidden border border-zinc-600"><div class="h-full bg-primary progress-bar-striped" style="width:${a.success_rate}%"></div></div>
+                  <span class="text-xl font-mono text-primary font-bold">${a.success_rate}%</span>
+                </div>
+              </div>
+              <div class="bg-black/40 p-3 rounded border border-zinc-700">
+                <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Missions</span>
+                <span class="text-xl font-mono text-white font-bold">${a.missions_completed}</span>
+              </div>
+              <div class="bg-black/40 p-3 rounded border border-zinc-700">
+                <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Streak</span>
+                <span class="text-xl font-mono text-primary font-bold">${a.streak}x</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    if (rank <= 3) {
+      const badgeBg = rank === 2 ? 'bg-white' : 'bg-zinc-400';
+      return `<div class="scavenger-row relative flex flex-col md:flex-row items-center gap-4 bg-zinc-800 card-border rounded-md p-4 shadow-hard transition-all duration-200">
+        <div class="absolute -left-3 top-1/2 transform -translate-y-1/2 w-10 h-10 ${badgeBg} border-2 border-black rotate-45 flex items-center justify-center shadow-sm z-20">
+          <span class="text-2xl font-black text-black -rotate-45">${rank}</span>
+        </div>
+        <div class="flex-shrink-0 ml-4 w-16 h-16 rounded-full border-2 border-white bg-zinc-700 overflow-hidden flex items-center justify-center">
+          <img src="${AgentAvatars.getUrl(a.id, 100)}" alt="${a.name}" class="w-full h-full object-cover"/>
+        </div>
+        <div class="flex-grow w-full grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+          <div class="md:col-span-4 text-center md:text-left">
+            <h3 class="text-2xl font-bold text-white uppercase italic">${a.name}</h3>
+            <span class="text-xs text-gray-400 font-mono">Class: ${a.class} // Level ${a.level} // <span class="${statusColor}">${a.status}</span></span>
+          </div>
+          <div class="md:col-span-3 flex items-center justify-center md:justify-start gap-2 bg-black/20 p-2 rounded">
+            <span class="material-icons text-yellow-400 text-sm">savings</span>
+            <span class="text-xl font-mono text-primary font-bold">${a.total_loot.toLocaleString()}</span>
+            <span class="text-xs text-gray-500 uppercase">Loot</span>
+          </div>
+          <div class="md:col-span-4">
+            <div class="flex items-center gap-2 w-full">
+              <span class="text-xs font-bold text-gray-400 w-12 text-right">${a.success_rate}%</span>
+              <div class="flex-grow bg-zinc-900 h-3 transform -skew-x-12 border border-zinc-600"><div class="h-full ${barColor} progress-bar-striped" style="width:${a.success_rate}%"></div></div>
+            </div>
+          </div>
+          <div class="md:col-span-1 text-center font-mono text-primary text-sm">${a.streak}x</div>
+        </div>
+      </div>`;
+    }
+
+    return `<div class="scavenger-row relative flex flex-col md:flex-row items-center gap-4 bg-zinc-800/80 card-border rounded-md p-3 shadow-hard-sm transition-all duration-200">
+      <div class="w-8 flex justify-center font-mono text-gray-500 font-bold">#${rank}</div>
+      <div class="w-10 h-10 rounded border border-black bg-zinc-700 overflow-hidden flex items-center justify-center"><img src="${AgentAvatars.getUrl(a.id, 60)}" alt="${a.name}" class="w-full h-full object-cover"/></div>
+      <div class="flex-grow w-full grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+        <div class="md:col-span-4"><h3 class="text-lg font-bold text-gray-200 uppercase">${a.name}</h3><span class="text-[10px] text-gray-500 font-mono"><span class="${statusColor}">&#9679;</span> ${a.status}</span></div>
+        <div class="md:col-span-3 flex items-center gap-2"><span class="text-lg font-mono text-gray-300">${a.total_loot.toLocaleString()}</span><span class="text-[10px] text-gray-600 uppercase">Loot</span></div>
+        <div class="md:col-span-4"><div class="flex items-center gap-2 w-full"><span class="text-xs font-bold text-gray-500 w-8 text-right">${a.success_rate}%</span><div class="flex-grow bg-zinc-900 h-2 rounded-full border border-zinc-700"><div class="h-full bg-zinc-500" style="width:${a.success_rate}%"></div></div></div></div>
+        <div class="md:col-span-1 text-center font-mono text-gray-500 text-sm">${a.streak}x</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+loadLeaderboard();
+setInterval(loadLeaderboard, 5000);
+</script>
+</body></html>
