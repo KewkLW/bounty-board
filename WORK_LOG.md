@@ -89,3 +89,13 @@
 - Bounty: ERR_6965
 - Title: Agents in Roster
 - Status: FIXED
+
+## 2026-02-16T07:59:26.666Z - OPUS
+- Bounty: TSK_7259
+- Title: Github
+- Status: FIXED
+
+## 2026-02-16T07:59:31.202Z - CODEX
+- Bounty: TSK_1248
+- Title: Kanban Cards
+- Status: FIXED
