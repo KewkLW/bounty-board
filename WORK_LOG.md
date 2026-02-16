@@ -129,3 +129,8 @@
 - Bounty: ERR_3430
 - Title: Ping unit does nothing
 - Status: FIXED
+
+## 2026-02-16T08:22:06.620Z - OPUS
+- Bounty: ERR_9247
+- Title: Nothing on the leaderboard
+- Status: FIXED
