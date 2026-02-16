@@ -139,3 +139,8 @@
 - Bounty: ERR_5488
 - Title: Agents dont have their avatars
 - Status: FIXED
+
+## 2026-02-16T08:22:20.632Z - OPUS
+- Bounty: TSK_9292
+- Title: Need new bounty button on all screens
+- Status: FIXED
