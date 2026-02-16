@@ -134,3 +134,8 @@
 - Bounty: ERR_9247
 - Title: Nothing on the leaderboard
 - Status: FIXED
+
+## 2026-02-16T08:22:07.354Z - CODEX
+- Bounty: ERR_5488
+- Title: Agents dont have their avatars
+- Status: FIXED
