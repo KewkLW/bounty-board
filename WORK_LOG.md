@@ -74,3 +74,18 @@
 - Bounty: TSK_9890
 - Title: Roster
 - Status: FIXED
+
+## 2026-02-16T07:59:07.485Z - OPUS
+- Bounty: TSK_3044
+- Title: Canvas
+- Status: FIXED
+
+## 2026-02-16T07:59:14.577Z - OPUS
+- Bounty: TSK_9133
+- Title: Kanban Cards
+- Status: FIXED
+
+## 2026-02-16T07:59:16.145Z - CODEX
+- Bounty: ERR_6965
+- Title: Agents in Roster
+- Status: FIXED
