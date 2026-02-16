@@ -10,3 +10,14 @@
   WebSocket:   ws://localhost:3777
   CLI:         node bounty-cli.js [command]
 
+SqliteError: UNIQUE constraint failed: bounties.ticket_id
+    at F:\bounty-board\server.js:221:6
+    at Layer.handleRequest (F:\bounty-board\node_modules\router\lib\layer.js:152:17)
+    at next (F:\bounty-board\node_modules\router\lib\route.js:157:13)
+    at Route.dispatch (F:\bounty-board\node_modules\router\lib\route.js:117:3)
+    at handle (F:\bounty-board\node_modules\router\index.js:435:11)
+    at Layer.handleRequest (F:\bounty-board\node_modules\router\lib\layer.js:152:17)
+    at F:\bounty-board\node_modules\router\index.js:295:15
+    at processParams (F:\bounty-board\node_modules\router\index.js:582:12)
+    at next (F:\bounty-board\node_modules\router\index.js:291:5)
+    at serveStatic (F:\bounty-board\node_modules\serve-static\index.js:74:16)
