@@ -144,3 +144,8 @@
 - Bounty: TSK_9292
 - Title: Need new bounty button on all screens
 - Status: FIXED
+
+## 2026-02-16T08:23:47.784Z - OPUS
+- Bounty: ERR_3027
+- Title: Current directive should show what the agent is working on
+- Status: FIXED
