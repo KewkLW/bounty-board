@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const http = require('http');
 const WebSocket = require('ws');
+const { execSync } = require('child_process');
 const {
   db,
   TIER_REWARDS,
@@ -18,6 +19,9 @@ const {
   markAgentOffline,
   getAgentEventHistory
 } = require('./db');
+
+// GitHub configuration
+const GITHUB_REPO = 'https://github.com/KewkLW/bounty-board';
 
 const app = express();
 const server = http.createServer(app);
@@ -313,6 +317,33 @@ app.post('/api/bounties/:id/progress', (req, res) => {
 
   const bounty = db.prepare('SELECT * FROM bounties WHERE id = ?').get(req.params.id);
   res.json(bounty);
+});
+
+// POST /api/bounties/:id/submit-pr - Agent submits GitHub PR for review
+app.post('/api/bounties/:id/submit-pr', (req, res) => {
+  const { agent_id, pr_url, pr_number, evidence, notes } = req.body;
+  if (!pr_url && !pr_number) return res.status(400).json({ error: 'pr_url or pr_number is required' });
+
+  try {
+    const fullPrUrl = pr_number ? `${GITHUB_REPO}/pull/${pr_number}` : pr_url;
+
+    db.prepare(`
+      UPDATE bounties SET
+        work_evidence = ?, work_notes = ?, status = 'review_needed',
+        progress = 100, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND claimed_by = ?
+    `).run(`PR: ${fullPrUrl}\n${evidence || 'See PR for details'}`, notes || '', req.params.id, agent_id);
+
+    const bounty = db.prepare('SELECT * FROM bounties WHERE id = ?').get(req.params.id);
+    res.json({
+      message: 'PR submitted for review',
+      pr_url: fullPrUrl,
+      bounty
+    });
+  } catch (err) {
+    console.error('Error submitting PR:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/bounties/:id/submit-work - Agent submits work evidence for review

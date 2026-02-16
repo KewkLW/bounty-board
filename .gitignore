@@ -1,0 +1,50 @@
+# Database files
+bounty-board.db
+bounty-board.db-shm
+bounty-board.db-wal
+
+# Logs
+*.log
+server.log
+server.err
+/tmp/*.log
+
+# Node
+node_modules/
+package-lock.json
+npm-debug.log
+
+# Runtime
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+.project
+.classpath
+
+# Build artifacts
+dist/
+build/
+*.o
+*.a
+*.so
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary
+.tmp/
+tmp/
+temp/
