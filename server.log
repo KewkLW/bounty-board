@@ -1,0 +1,12 @@
+✓ Initialized 7 agents in status registry
+
+  WASTELAND BOUNTY BOARD
+  =====================
+  Server online at http://localhost:3777
+  Board:       http://localhost:3777/
+  Roster:      http://localhost:3777/roster
+  Leaderboard: http://localhost:3777/leaderboard
+  API:         http://localhost:3777/api/bounties
+  WebSocket:   ws://localhost:3777
+  CLI:         node bounty-cli.js [command]
+

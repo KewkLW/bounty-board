@@ -152,6 +152,25 @@
       color: #fff;
     }
 
+    .agent-avatar {
+      width: 100%;
+      height: 150px;
+      margin: 10px 0;
+      border-radius: 5px;
+      overflow: hidden;
+      background: #1a1f3a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(0, 255, 0, 0.2);
+    }
+
+    .agent-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
     .agent-info {
       font-size: 12px;
       color: #aaa;
@@ -319,6 +338,7 @@
   </div>
 
   <script>
+    console.log('🚀 AGENTS PAGE LOADED - SCRIPT EXECUTING');
     let ws = null;
     const agentCards = new Map();
 
@@ -375,11 +395,15 @@
         const res = await fetch('/api/agents/status/all');
         const agents = await res.json();
 
+        console.log('Loaded agents from API:', agents);
+        console.log('First agent avatar_url:', agents[0]?.avatar_url);
+
         // Clear old cards
         document.getElementById('agentsContainer').innerHTML = '';
         agentCards.clear();
 
         agents.forEach(agent => {
+          console.log(`Creating card for ${agent.agentId}, avatar: ${agent.avatar_url}`);
           createAgentCard(agent);
         });
 
@@ -406,6 +430,12 @@
             ${(agent.status || 'offline').toUpperCase()}
           </div>
         </div>
+
+        ${agent.avatar_url ? `
+          <div class="agent-avatar">
+            <img src="${agent.avatar_url}" alt="${agent.name || agent.agentId}" />
+          </div>
+        ` : ''}
 
         <div class="agent-info">
           <div class="info-row">
@@ -472,6 +502,12 @@
               ${status.toUpperCase()}
             </div>
           </div>
+
+          ${cardData.agent.avatar_url ? `
+            <div class="agent-avatar">
+              <img src="${cardData.agent.avatar_url}" alt="${cardData.agent.name || agentId}" />
+            </div>
+          ` : ''}
 
           <div class="agent-info">
             <div class="info-row">

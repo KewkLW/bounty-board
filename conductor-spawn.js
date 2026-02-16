@@ -29,8 +29,8 @@ const AGENTS = {
     name: 'Opus-Conductor',
     class: 'Conductor / Orchestrator',
     level: 9001,
-    cmd_wsl: `claude --dangerously-skip-permissions --chrome codex --yolo`,
-    cmd_mac: `claude --dangerously-skip-permissions --chrome codex --yolo`,
+    cmd_wsl: `node agent-worker.js opus`,
+    cmd_mac: `node agent-worker.js opus`,
     session_prefix: 'opus-agent',
     max_instances: 1,
   },
@@ -38,8 +38,8 @@ const AGENTS = {
     name: 'Sonnet-Agent',
     class: 'Research / Testing',
     level: 42,
-    cmd_wsl: `claude --dangerously-skip-permissions --chrome sonnet --yolo`,
-    cmd_mac: `claude --dangerously-skip-permissions --chrome sonnet --yolo`,
+    cmd_wsl: `node agent-worker.js sonnet`,
+    cmd_mac: `node agent-worker.js sonnet`,
     session_prefix: 'sonnet-agent',
     max_instances: 1,
   },
@@ -47,8 +47,8 @@ const AGENTS = {
     name: 'Haiku-Agent',
     class: 'Research / Quick Tasks',
     level: 25,
-    cmd_wsl: `claude --dangerously-skip-permissions --chrome haiku --yolo`,
-    cmd_mac: `claude --dangerously-skip-permissions --chrome haiku --yolo`,
+    cmd_wsl: `node agent-worker.js haiku`,
+    cmd_mac: `node agent-worker.js haiku`,
     session_prefix: 'haiku-agent',
     max_instances: 1,
   },
@@ -56,8 +56,8 @@ const AGENTS = {
     name: 'Codex-Agent',
     class: 'Coding / Research / Testing',
     level: 50,
-    cmd_wsl: `codex --yolo --model gpt-5.3-codex --reasoning-effort high`,
-    cmd_mac: `codex --yolo --model gpt-5.3-codex --reasoning-effort high`,
+    cmd_wsl: `node agent-worker.js codex`,
+    cmd_mac: `node agent-worker.js codex`,
     session_prefix: 'codex-agent',
     max_instances: 1,
   },
@@ -65,8 +65,8 @@ const AGENTS = {
     name: 'Gemini-Agent',
     class: 'Research / Coding',
     level: 38,
-    cmd_wsl: `gemini --yolo`,
-    cmd_mac: `gemini --yolo`,
+    cmd_wsl: `node agent-worker.js gemini`,
+    cmd_mac: `node agent-worker.js gemini`,
     session_prefix: 'gemini-agent',
     max_instances: 1,
   },
@@ -143,7 +143,9 @@ async function spawnOnWSL(model, sessionName) {
     await execAsync(titleCmd);
 
     // Send the model's CLI command to run in the session
-    const sendCmd = `wsl bash -c ${JSON.stringify(`tmux send-keys -t ${sessionName} '${agent.cmd_wsl}' Enter`)}`;
+    // Pass BOUNTY_BOARD_URL so agents can reach Windows server from WSL
+    const cmd = `BOUNTY_BOARD_URL=http://10.255.255.254:3777 ${agent.cmd_wsl}`;
+    const sendCmd = `wsl bash -c ${JSON.stringify(`tmux send-keys -t ${sessionName} '${cmd}' Enter`)}`;
     await sleep(500);
     await execAsync(sendCmd);
 

@@ -31,18 +31,23 @@ db.exec(`
     description TEXT,
     type TEXT NOT NULL CHECK(type IN ('task', 'bug')),
     tier TEXT NOT NULL DEFAULT 'C' CHECK(tier IN ('S', 'A', 'B', 'C')),
-    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'done', 'failed')),
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'review_needed', 'done', 'failed')),
     priority TEXT DEFAULT 'normal' CHECK(priority IN ('critical', 'high', 'normal', 'low')),
     reward INTEGER NOT NULL DEFAULT 150,
     tags TEXT, -- JSON array of tags
     claimed_by TEXT,
     progress INTEGER DEFAULT 0, -- 0-100
     error_log TEXT,
+    work_evidence TEXT, -- Agent's description of work done
+    work_notes TEXT, -- Additional details/artifacts
+    verified_by TEXT, -- Agent/conductor that verified the work
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     claimed_at DATETIME,
     completed_at DATETIME,
+    verified_at DATETIME,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (claimed_by) REFERENCES agents(id)
+    FOREIGN KEY (claimed_by) REFERENCES agents(id),
+    FOREIGN KEY (verified_by) REFERENCES agents(id)
   );
 
   CREATE INDEX IF NOT EXISTS idx_bounties_status ON bounties(status);
@@ -206,7 +211,7 @@ function getActiveAgents() {
 
 function getAllAgents() {
   return db.prepare(`
-    SELECT s.*, a.name, a.class
+    SELECT s.*, a.name, a.class, a.avatar_url
     FROM agent_status s
     LEFT JOIN agents a ON s.agentId = a.id
     ORDER BY s.lastSeen DESC

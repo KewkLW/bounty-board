@@ -102,7 +102,7 @@ async function loadLeaderboard() {
           </div>
           <div class="relative flex-shrink-0 ml-4 md:ml-6">
             <div class="w-24 h-24 md:w-32 md:h-32 border-4 border-black bg-zinc-800 overflow-hidden flex items-center justify-center" style="clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);">
-              <img src="${AgentAvatars.getUrl(a.id, 200)}" alt="${a.name}" class="w-full h-full object-cover"/>
+              <img src="${a.avatar_url}" alt="${a.name}" class="w-full h-full object-cover"/>
             </div>
             <div class="absolute bottom-0 left-0 right-0 bg-primary/90 text-black text-center text-xs font-bold py-1">LEGENDARY</div>
           </div>
@@ -145,7 +145,7 @@ async function loadLeaderboard() {
           <span class="text-2xl font-black text-black -rotate-45">${rank}</span>
         </div>
         <div class="flex-shrink-0 ml-4 w-16 h-16 rounded-full border-2 border-white bg-zinc-700 overflow-hidden flex items-center justify-center">
-          <img src="${AgentAvatars.getUrl(a.id, 100)}" alt="${a.name}" class="w-full h-full object-cover"/>
+          <img src="${a.avatar_url}" alt="${a.name}" class="w-full h-full object-cover"/>
         </div>
         <div class="flex-grow w-full grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
           <div class="md:col-span-4 text-center md:text-left">
@@ -170,7 +170,7 @@ async function loadLeaderboard() {
 
     return `<div class="scavenger-row relative flex flex-col md:flex-row items-center gap-4 bg-zinc-800/80 card-border rounded-md p-3 shadow-hard-sm transition-all duration-200">
       <div class="w-8 flex justify-center font-mono text-gray-500 font-bold">#${rank}</div>
-      <div class="w-10 h-10 rounded border border-black bg-zinc-700 overflow-hidden flex items-center justify-center"><img src="${AgentAvatars.getUrl(a.id, 60)}" alt="${a.name}" class="w-full h-full object-cover"/></div>
+      <div class="w-10 h-10 rounded border border-black bg-zinc-700 overflow-hidden flex items-center justify-center"><img src="${a.avatar_url}" alt="${a.name}" class="w-full h-full object-cover"/></div>
       <div class="flex-grow w-full grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
         <div class="md:col-span-4"><h3 class="text-lg font-bold text-gray-200 uppercase">${a.name}</h3><span class="text-[10px] text-gray-500 font-mono"><span class="${statusColor}">&#9679;</span> ${a.status}</span></div>
         <div class="md:col-span-3 flex items-center gap-2"><span class="text-lg font-mono text-gray-300">${a.total_loot.toLocaleString()}</span><span class="text-[10px] text-gray-600 uppercase">Loot</span></div>

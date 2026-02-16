@@ -111,6 +111,88 @@ wss.on('connection', (ws) => {
   }
 });
 
+// ========== AGENT ENDPOINTS ==========
+
+// GET /api/agents/:id - Get agent details
+app.get('/api/agents/:id', (req, res) => {
+  const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(req.params.id);
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+  res.json(agent);
+});
+
+// POST /api/agents/register - Register a new agent or update existing
+app.post('/api/agents/register', (req, res) => {
+  const { agent_id, agent_name, class: agentClass, level } = req.body;
+  if (!agent_id || !agent_name) return res.status(400).json({ error: 'agent_id and agent_name are required' });
+
+  try {
+    const upsert = db.transaction(() => {
+      // Check if agent exists
+      const existing = db.prepare('SELECT * FROM agents WHERE id = ?').get(agent_id);
+
+      if (existing) {
+        // Update existing agent
+        db.prepare(`
+          UPDATE agents SET name = ?, class = ?, level = ?, status = 'idle', updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(agent_name, agentClass || 'Unknown', level || 1, agent_id);
+      } else {
+        // Create new agent
+        db.prepare(`
+          INSERT INTO agents (id, name, class, level, status, total_loot, missions_completed, missions_failed, streak)
+          VALUES (?, ?, ?, ?, 'idle', 0, 0, 0, 0)
+        `).run(agent_id, agent_name, agentClass || 'Unknown', level || 1);
+      }
+
+      return db.prepare('SELECT * FROM agents WHERE id = ?').get(agent_id);
+    });
+
+    const agent = upsert();
+    res.status(200).json({ message: 'Agent registered', agent });
+  } catch (err) {
+    console.error('Error registering agent:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== REVIEW ENDPOINTS ==========
+
+// GET /api/bounties/review - Get bounties pending review
+app.get('/api/bounties/review', (req, res) => {
+  const pending = db.prepare(`
+    SELECT b.*, a.name as agent_name
+    FROM bounties b
+    LEFT JOIN agents a ON b.claimed_by = a.id
+    WHERE b.status = 'review_needed'
+    ORDER BY b.updated_at DESC
+  `).all();
+
+  res.json(pending);
+});
+
+// GET /api/bounties/:id/review - Get work evidence for review
+app.get('/api/bounties/:id/review', (req, res) => {
+  const bounty = db.prepare(`
+    SELECT b.*, a.name as agent_name
+    FROM bounties b
+    LEFT JOIN agents a ON b.claimed_by = a.id
+    WHERE b.id = ? AND b.status = 'review_needed'
+  `).get(req.params.id);
+
+  if (!bounty) return res.status(404).json({ error: 'Bounty not found or not pending review' });
+
+  res.json({
+    bounty_id: bounty.id,
+    ticket_id: bounty.ticket_id,
+    title: bounty.title,
+    agent: bounty.agent_name,
+    work_evidence: bounty.work_evidence,
+    work_notes: bounty.work_notes,
+    progress: bounty.progress,
+    time_to_complete: bounty.claimed_at ? Math.floor((new Date(bounty.updated_at) - new Date(bounty.claimed_at)) / 1000) + 's' : 'unknown',
+  });
+});
+
 // ========== BOUNTY ENDPOINTS ==========
 
 // GET /api/bounties - List all bounties with optional filters
@@ -233,10 +315,91 @@ app.post('/api/bounties/:id/progress', (req, res) => {
   res.json(bounty);
 });
 
-// POST /api/bounties/:id/complete - Mark bounty as done
+// POST /api/bounties/:id/submit-work - Agent submits work evidence for review
+app.post('/api/bounties/:id/submit-work', (req, res) => {
+  const { agent_id, evidence, notes } = req.body;
+  if (!evidence) return res.status(400).json({ error: 'evidence is required' });
+
+  try {
+    db.prepare(`
+      UPDATE bounties SET
+        work_evidence = ?, work_notes = ?, status = 'review_needed',
+        progress = 100, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND claimed_by = ?
+    `).run(evidence, notes || '', req.params.id, agent_id);
+
+    const bounty = db.prepare('SELECT * FROM bounties WHERE id = ?').get(req.params.id);
+    res.json({ message: 'Work submitted for review', bounty });
+  } catch (err) {
+    console.error('Error submitting work:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/bounties/:id/verify - Conductor verifies and approves work
+app.post('/api/bounties/:id/verify', (req, res) => {
+  const { verified_by, approved } = req.body;
+  if (!verified_by) return res.status(400).json({ error: 'verified_by is required' });
+
+  const verify = db.transaction(() => {
+    const bounty = db.prepare("SELECT * FROM bounties WHERE id = ? AND status = 'review_needed'").get(req.params.id);
+    if (!bounty) return null;
+
+    if (!approved) {
+      // Reject work - back to in_progress
+      db.prepare(`
+        UPDATE bounties SET status = 'in_progress', verified_by = ?, verified_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(verified_by, req.params.id);
+      return { status: 'rejected' };
+    }
+
+    // Approve work and award XP
+    let finalReward = bounty.reward;
+    const claimedAt = new Date(bounty.claimed_at);
+    const now = new Date();
+    const minutesElapsed = (now - claimedAt) / 60000;
+
+    if (minutesElapsed <= BONUSES.FIRST_BLOOD_MINUTES) {
+      finalReward = Math.floor(finalReward * BONUSES.FIRST_BLOOD_MULT);
+    }
+
+    const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(bounty.claimed_by);
+    if (agent) {
+      const streakBonus = 1 + (agent.streak * BONUSES.STREAK_MULT);
+      finalReward = Math.floor(finalReward * Math.min(streakBonus, 2.0));
+
+      db.prepare(`
+        UPDATE agents SET
+          total_loot = total_loot + ?,
+          missions_completed = missions_completed + 1,
+          streak = streak + 1,
+          status = 'idle',
+          current_directive = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(finalReward, bounty.claimed_by);
+    }
+
+    db.prepare(`
+      UPDATE bounties SET
+        status = 'done', reward = ?, verified_by = ?, verified_at = CURRENT_TIMESTAMP,
+        completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(finalReward, verified_by, req.params.id);
+
+    return { status: 'approved', reward: finalReward };
+  });
+
+  const result = verify();
+  if (!result) return res.status(404).json({ error: 'Bounty not found or not awaiting review' });
+  res.json(result);
+});
+
+// POST /api/bounties/:id/complete - Mark bounty as done (auto-verify for now)
 app.post('/api/bounties/:id/complete', (req, res) => {
   const complete = db.transaction(() => {
-    const bounty = db.prepare('SELECT * FROM bounties WHERE id = ? AND status = "in_progress"').get(req.params.id);
+    const bounty = db.prepare("SELECT * FROM bounties WHERE id = ? AND status = 'in_progress'").get(req.params.id);
     if (!bounty) return null;
 
     // Calculate bonus XP
@@ -269,13 +432,14 @@ app.post('/api/bounties/:id/complete', (req, res) => {
       `).run(finalReward, bounty.claimed_by);
     }
 
-    // Mark bounty done
+    // Mark bounty done with auto-verification
     db.prepare(`
       UPDATE bounties SET
         status = 'done', progress = 100, reward = ?,
-        completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        completed_at = CURRENT_TIMESTAMP, verified_by = ?, verified_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(finalReward, bounty.id);
+    `).run(finalReward, bounty.claimed_by, bounty.id);
 
     return db.prepare('SELECT b.*, a.name as agent_name FROM bounties b LEFT JOIN agents a ON b.claimed_by = a.id WHERE b.id = ?').get(bounty.id);
   });
@@ -552,7 +716,39 @@ setInterval(() => {
   }
 }, 10000);
 
-server.listen(PORT, () => {
+// Initialize agent_status table with all agents from agents table on startup
+function initializeAgentRegistry() {
+  try {
+    const agents = db.prepare('SELECT id, name, class FROM agents').all();
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO agent_status
+      (agentId, status, isActive, currentBountyId, lastSeen, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const now = new Date().toISOString();
+    agents.forEach(agent => {
+      stmt.run(
+        agent.id,
+        'idle',
+        1,
+        null,
+        now,
+        now,
+        now
+      );
+    });
+
+    console.log(`✓ Initialized ${agents.length} agents in status registry`);
+  } catch (err) {
+    console.error('Error initializing agent registry:', err.message);
+  }
+}
+
+// Initialize on startup
+initializeAgentRegistry();
+
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n  WASTELAND BOUNTY BOARD`);
   console.log(`  =====================`);
   console.log(`  Server online at http://localhost:${PORT}`);
