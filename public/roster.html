@@ -149,7 +149,7 @@ async function loadRoster() {
       ${statusBadge(a.status)}
       <div class="p-4 bg-gray-800 border-b-4 border-black relative overflow-hidden">
         <div class="aspect-square bg-gray-700 border-2 border-black relative overflow-hidden flex items-center justify-center">
-          <img src="${window.AgentAvatars ? AgentAvatars.getUrl(a.id, 200) : ''}" alt="${a.name}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"/>
+          <img src="${a.avatar_url || ''}" alt="${a.name}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"/>
           <div class="absolute inset-0 items-center justify-center hidden"><span class="text-6xl font-black text-white/10">${a.name.charAt(0)}</span></div>
           <div class="absolute inset-0 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]"></div>
           <div class="absolute bottom-2 left-2 text-[10px] ${a.status === 'active' ? 'text-primary' : 'text-gray-500'} font-mono bg-black/80 px-1">

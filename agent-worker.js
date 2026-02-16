@@ -1,249 +1,278 @@
 #!/usr/bin/env node
 
 /**
- * Wasteland Bounty Board - Agent Worker
+ * Wasteland Bounty Board - Worker Agent
  *
- * Runs inside a tmux session and continuously:
- * 1. Checks for available bounties
- * 2. Claims work matching its tier
- * 3. Reports progress
- * 4. Completes tasks with XP calculation
- *
- * Usage:
- *   AGENT_ID=opus-wsl-1 BOUNTY_BOARD_URL=http://localhost:3777 node agent-worker.js
- *
- * Environment:
- *   AGENT_ID            - Unique agent identifier
- *   BOUNTY_BOARD_URL    - URL to bounty board (default: http://localhost:3777)
- *   WORK_POLL_INTERVAL  - Check for work every N ms (default: 5000)
- *   WORK_TIMEOUT        - Timeout for work simulation (default: 10000)
- *   AGENT_MODEL         - Model type (opus, sonnet, haiku, codex, gemini)
+ * A self-contained agent that:
+ * - Connects to the bounty board via HTTP
+ * - Claims available bounties
+ * - Simulates work completion
+ * - Updates dashboard in real-time
  */
 
-const { BountyBoardClient } = require('./agent-sdk');
-const WebSocket = require('ws');
+const http = require('http');
+const { AgentRegistry } = require('./agent-registry');
 
-const AGENT_ID = process.env.AGENT_ID || 'agent-unknown';
-const BOUNTY_BOARD_URL = process.env.BOUNTY_BOARD_URL || 'http://localhost:3777';
-const POLL_INTERVAL = parseInt(process.env.WORK_POLL_INTERVAL || '5000');
-const WORK_TIMEOUT = parseInt(process.env.WORK_TIMEOUT || '10000');
-const MODEL = process.env.AGENT_MODEL || 'unknown';
-
-// WebSocket for status updates
-let ws = null;
-
-/**
- * Model tier preferences (which tiers this model should target)
- */
-const MODEL_PREFERENCES = {
-  opus: { tiers: ['S', 'A'], types: ['task', 'bug'] },
-  sonnet: { tiers: ['B', 'C', 'A'], types: ['task'] }, // No bugs
-  haiku: { tiers: ['C', 'B'], types: ['task'] },
-  codex: { tiers: ['S', 'A', 'B'], types: ['task', 'bug'] },
-  gemini: { tiers: ['A', 'B'], types: ['task'] },
-};
-
-/**
- * Connect to WebSocket for status updates
- */
-function connectWebSocket() {
-  return new Promise((resolve) => {
-    const wsUrl = BOUNTY_BOARD_URL.replace('http', 'ws');
-    ws = new WebSocket(wsUrl);
-
-    ws.on('open', () => {
-      console.log(`[WS] Connected to server for status updates`);
-      pushStatus('online');
-      startHeartbeat();
-      resolve();
-    });
-
-    ws.on('close', () => {
-      console.log(`[WS] Disconnected from server`);
-      setTimeout(connectWebSocket, 5000); // Reconnect after 5s
-    });
-
-    ws.on('error', (err) => {
-      console.warn(`[WS] Connection error: ${err.message}`);
-    });
-  });
-}
-
-/**
- * Push status update to server
- */
-function pushStatus(status, bountyId = null) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      type: 'agent:status:update',
-      agentId: AGENT_ID,
-      status: status,
-      bountyId: bountyId,
-      timestamp: Date.now()
-    }));
-  }
-}
-
-/**
- * Start sending heartbeats every 5 seconds
- */
-function startHeartbeat() {
-  setInterval(() => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'agent:heartbeat',
-        agentId: AGENT_ID,
-        timestamp: Date.now()
-      }));
-    }
-  }, 5000);
-}
-
-/**
- * Simulate doing work (can be replaced with actual agent code)
- */
-async function doWork(bounty) {
-  console.log(`\n⚙️  Working on ${bounty.ticket_id}: "${bounty.title}"`);
-  console.log(`   Tier: ${bounty.tier} | Reward: ${bounty.reward} XP`);
-
-  const steps = [25, 50, 75, 100];
-  for (let i = 0; i < steps.length - 1; i++) {
-    await sleep(WORK_TIMEOUT / steps.length);
-    console.log(`   Progress: ${steps[i]}%`);
+class WorkerAgent {
+  constructor(model, agentId) {
+    this.model = model;
+    this.agentId = agentId;
+    this.boardUrl = process.env.BOUNTY_BOARD_URL || 'http://localhost:3777';
+    this.isWorking = false;
+    this.currentBountyId = null;
   }
 
-  console.log(`   ✅ Work complete!`);
-}
-
-/**
- * Main agent loop
- */
-async function agentLoop() {
-  const client = new BountyBoardClient(BOUNTY_BOARD_URL, AGENT_ID, {
-    timeout: 15000,
-    retryAttempts: 5,
-    logger: createLogger(),
-  });
-
-  console.log(`\n╔═══════════════════════════════════════╗`);
-  console.log(`║   WASTELAND AGENT WORKER              ║`);
-  console.log(`║   ${AGENT_ID.padEnd(35)} ║`);
-  console.log(`╚═══════════════════════════════════════╝\n`);
-
-  // Connect to WebSocket for status updates
-  await connectWebSocket();
-
-  // Get agent info
-  try {
-    const agent = await client.getAgent();
-    console.log(`📊 Agent Stats:`);
-    console.log(`   Loot: ${agent.total_loot} XP`);
-    console.log(`   Missions: ${agent.missions_completed} completed, ${agent.missions_failed} failed`);
-    console.log(`   Streak: ${agent.streak}\n`);
-  } catch (err) {
-    console.error(`Warning: Could not fetch agent stats:`, err.message);
+  log(msg) {
+    console.log(`[${this.agentId}] ${msg}`);
   }
 
-  // Main work loop
-  let iteration = 0;
-  while (true) {
-    iteration++;
+  /**
+   * Make HTTP request to bounty board
+   */
+  makeRequest(method, path, body = null) {
+    return new Promise((resolve, reject) => {
+      const url = new URL(this.boardUrl + path);
+      const options = {
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname + url.search,
+        method: method,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Agent-ID': this.agentId,
+        },
+      };
 
+      if (body) {
+        const bodyStr = JSON.stringify(body);
+        options.headers['Content-Length'] = Buffer.byteLength(bodyStr);
+      }
+
+      const req = http.request(options, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode, data: JSON.parse(data) });
+          } catch {
+            resolve({ status: res.statusCode, data });
+          }
+        });
+      });
+
+      req.on('error', reject);
+
+      if (body) {
+        req.write(JSON.stringify(body));
+      }
+      req.end();
+    });
+  }
+
+  /**
+   * Get available bounties to claim
+   */
+  async getAvailableBounties() {
     try {
-      const prefs = MODEL_PREFERENCES[MODEL] || { tiers: ['C', 'B', 'A', 'S'], types: ['task', 'bug'] };
-
-      console.log(`\n[${new Date().toLocaleTimeString()}] Iteration ${iteration} - Looking for work...`);
-
-      // Try to claim a bounty
-      let bounty = null;
-
-      // First try: high-tier preferred work
-      if (prefs.types.includes('bug')) {
-        for (const tier of prefs.tiers) {
-          bounty = await client.claimAvailableBounty({ type: 'bug', tier });
-          if (bounty) break;
-        }
-      }
-
-      // Second try: tasks
-      if (!bounty && prefs.types.includes('task')) {
-        for (const tier of prefs.tiers) {
-          bounty = await client.claimAvailableBounty({ type: 'task', tier });
-          if (bounty) break;
-        }
-      }
-
-      if (!bounty) {
-        console.log(`ℹ️  No available bounties. Sleeping...`);
-        pushStatus('idle');
-        await sleep(POLL_INTERVAL);
-        continue;
-      }
-
-      // Push status: active with bounty ID
-      console.log(`✅ Claimed bounty #${bounty.id}!`);
-      pushStatus('active', bounty.id);
-
-      // Do the work
-      await doWork(bounty);
-
-      // Complete the bounty
-      const completed = await client.completeBounty(bounty.id);
-      console.log(`\n🎉 Completed! Earned ${completed.reward} XP (base: ${bounty.reward})`);
-
-      // Push status: idle after completion
-      pushStatus('idle');
-
-      // Check leaderboard position
-      const leaderboard = await client.getLeaderboard();
-      const position = leaderboard.findIndex(a => a.id === AGENT_ID) + 1;
-      console.log(`   Position: #${position} of ${leaderboard.length}`);
+      const result = await this.makeRequest('GET', '/api/bounties?status=pending');
+      return result.data || [];
     } catch (err) {
-      console.error(`\n❌ Error during work cycle:`, err.message);
-      pushStatus('idle');
-
-      // If we have an active bounty, mark it as failed
-      // (In a real scenario, we'd track this better)
+      this.log(`Error fetching bounties: ${err.message}`);
+      return [];
     }
+  }
 
-    // Wait before next iteration
-    await sleep(POLL_INTERVAL);
+  /**
+   * Claim a bounty
+   */
+  async claimBounty(bountyId) {
+    try {
+      const result = await this.makeRequest('POST', `/api/bounties/${bountyId}/claim`, {
+        agent_id: this.agentId,
+      });
+
+      if (result.status === 200 || result.status === 201) {
+        this.log(`✅ Claimed bounty #${bountyId}`);
+        return true;
+      } else {
+        this.log(`⚠️  Failed to claim #${bountyId}: ${result.status}`);
+        return false;
+      }
+    } catch (err) {
+      this.log(`Error claiming bounty: ${err.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Submit work evidence for review
+   */
+  async submitWork(bountyId, evidence, notes = '') {
+    try {
+      const result = await this.makeRequest('POST', `/api/bounties/${bountyId}/submit-work`, {
+        agent_id: this.agentId,
+        evidence: evidence,
+        notes: notes,
+      });
+
+      if (result.status === 200) {
+        this.log(`📋 Submitted work for review: #${bountyId}`);
+        return true;
+      } else {
+        this.log(`⚠️  Failed to submit work #${bountyId}: ${result.status}`);
+        return false;
+      }
+    } catch (err) {
+      this.log(`Error submitting work: ${err.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Complete a bounty (auto-verification)
+   */
+  async completeBounty(bountyId) {
+    try {
+      const result = await this.makeRequest('POST', `/api/bounties/${bountyId}/complete`, {
+        agent_id: this.agentId,
+      });
+
+      if (result.status === 200 || result.status === 201) {
+        this.log(`✨ Completed bounty #${bountyId} - Reward: ${result.data.reward}xp`);
+        return true;
+      } else {
+        this.log(`⚠️  Failed to complete #${bountyId}: ${result.status}`);
+        return false;
+      }
+    } catch (err) {
+      this.log(`Error completing bounty: ${err.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Simulate working on a bounty (wait then complete with evidence)
+   */
+  async workOnBounty(bounty) {
+    this.currentBountyId = bounty.id;
+    this.isWorking = true;
+
+    // Simulate work time based on tier
+    const workTimes = {
+      'S': 2000,  // 2 seconds
+      'A': 3000,  // 3 seconds
+      'B': 5000,  // 5 seconds
+      'C': 7000,  // 7 seconds
+    };
+
+    const workTime = workTimes[bounty.tier] || 5000;
+    this.log(`🔨 Working on "${bounty.title}" for ${workTime / 1000}s...`);
+
+    await new Promise(resolve => setTimeout(resolve, workTime));
+
+    // Generate work evidence
+    const evidence = `Analyzed and fixed: ${bounty.title}. Root cause identified and resolved.`;
+    const notes = `Completed by ${this.model} agent. Verification timestamp: ${new Date().toISOString()}`;
+
+    // Submit work with evidence (or auto-complete if quick)
+    // For now, just complete directly with evidence stored
+    const success = await this.completeBounty(bounty.id);
+    this.isWorking = false;
+    this.currentBountyId = null;
+
+    return success;
+  }
+
+  /**
+   * Register agent in the database (one-time on startup)
+   */
+  async registerAgent() {
+    try {
+      // Check if agent already exists
+      const checkResult = await this.makeRequest('GET', `/api/agents/${this.agentId}`);
+
+      if (checkResult.status === 200) {
+        this.log(`✅ Agent already registered in database`);
+        return true;
+      }
+
+      // Register the agent via /api/agents/register endpoint
+      this.log(`📝 Registering agent with bounty board...`);
+      const registerResult = await this.makeRequest('POST', '/api/agents/register', {
+        agent_id: this.agentId,
+        agent_name: `${this.model.charAt(0).toUpperCase() + this.model.slice(1)}-Agent`,
+        class: 'Worker',
+        level: 1,
+      });
+
+      if (registerResult.status === 200 || registerResult.status === 201) {
+        this.log(`✅ Agent registered successfully`);
+        return true;
+      } else {
+        this.log(`⚠️  Agent registration failed: ${registerResult.status}`);
+        return false;
+      }
+    } catch (err) {
+      this.log(`❌ Error registering agent: ${err.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Main agent loop
+   */
+  async run() {
+    this.log(`Agent started (${this.model})`);
+
+    // Register this agent in the database on startup
+    await this.registerAgent();
+
+    while (true) {
+      try {
+        // If not currently working, look for bounties to claim
+        if (!this.isWorking) {
+          const bounties = await this.getAvailableBounties();
+
+          if (bounties.length > 0) {
+            // Claim the first available bounty
+            const bounty = bounties[0];
+
+            if (await this.claimBounty(bounty.id)) {
+              // Work on the claimed bounty
+              await this.workOnBounty(bounty);
+            }
+          } else {
+            this.log(`⏳ Waiting for bounties... (${new Date().toLocaleTimeString()})`);
+          }
+        }
+
+        // Check back every 5 seconds
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      } catch (err) {
+        this.log(`❌ Error in main loop: ${err.message}`);
+        await new Promise(resolve => setTimeout(resolve, 10000));
+      }
+    }
   }
 }
 
 /**
- * Create a logger that prefixes with agent ID
+ * Main entry point
  */
-function createLogger() {
-  return {
-    log: (msg) => console.log(`[${AGENT_ID}] ${msg}`),
-    error: (msg) => console.error(`[${AGENT_ID}] ❌ ${msg}`),
-    warn: (msg) => console.warn(`[${AGENT_ID}] ⚠️  ${msg}`),
-  };
+async function main() {
+  const model = process.argv[2] || 'opus';
+  const registry = new AgentRegistry();
+  const agentInfo = registry.getOrCreate(model, 'wsl');
+
+  const agent = new WorkerAgent(model, agentInfo.agentId);
+  await agent.run();
 }
 
-/**
- * Sleep utility
- */
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+if (require.main === module) {
+  main().catch(err => {
+    console.error('Fatal error:', err);
+    process.exit(1);
+  });
 }
 
-/**
- * Graceful shutdown
- */
-process.on('SIGINT', () => {
-  console.log(`\n\n✋ Agent shutting down gracefully...`);
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  console.log(`\n\n✋ Agent terminated...`);
-  process.exit(0);
-});
-
-// Start the agent
-agentLoop().catch(err => {
-  console.error(`Fatal error:`, err);
-  process.exit(1);
-});
+module.exports = { WorkerAgent };
