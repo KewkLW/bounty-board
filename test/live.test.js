@@ -116,6 +116,9 @@ full_stages=("\${all_stages[@]}")
   assert.strictEqual(live.ciPlan(lists, '--full --keep-going').length, 13);
   assert.deepStrictEqual(live.ciPlan(lists, '--only chat,lfs'), ['lfs', 'chat'], 'only keeps the canonical order');
   assert.deepStrictEqual(live.ciPlan(lists, '--quick --skip=editor-build,game-build').slice(3, 5), ['stack-gate', 'automation']);
+  assert.ok(live.isCiProc('/bin/bash Scripts/ci.sh --quick'));
+  assert.ok(live.isCiProc('bash /mnt/ue/Tribulation/Scripts/ci.sh'));
+  assert.ok(!live.isCiProc("/usr/bin/bash -c source x && eval 'Scripts/ci.sh --quick > /tmp/log 2>&1'"), 'a shell that runs ci.sh is not ci.sh');
   let v = live.ciView(st, live.ciPlan(lists, '--quick'));
   assert.strictEqual(v.stage, 'editor-build');
   assert.strictEqual(v.position, 5);

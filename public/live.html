@@ -123,7 +123,7 @@ function slotCard(s, L) {
   const waits = (s.waiting || []).map(w => {
     const h = (w.lock === 'render' || w.lock === 'stack') && L.locks[w.lock] ? L.locks[w.lock].holder : null;
     const what = w.lock === 'render' ? 'UE render lock' : w.lock === 'stack' ? 'UE stack gate' : w.lock;
-    return `<div class="stripes-y p-0.5 mt-2"><div class="bg-black px-2 py-1 text-xs"><b class="text-warning">WAITING on the ${esc(what)}</b>${w.for_s != null ? ' for ' + dur(w.for_s) : ''}${w.text ? ': ' + esc(w.text) : ''}${h && !w.text ? ` <span class="text-gray-400">(held by ${esc(h.owner)}: ${esc(h.what)})</span>` : ''}</div></div>`;
+    return `<div class="stripes-y p-0.5 mt-2"><div class="bg-black px-2 py-1 text-xs"><b class="text-warning">WAITING on the ${esc(what)}</b>${w.text ? ': ' + esc(w.text) : ''}${h && !w.text ? ` <span class="text-gray-400">(held by ${esc(h.owner)}: ${esc(h.what)})</span>` : ''}</div></div>`;
   }).join('');
   const holds = s.holds && (s.holds.render || s.holds.stack) ? `<div class="text-xs mt-1"><span class="pill bg-primary text-black">holds</span> ${[s.holds.render && 'UE render lock', s.holds.stack && 'UE stack gate'].filter(Boolean).join(', ')}</div>` : '';
   const ownCi = (s.own_ci || []).map(r => `<div class="text-xs mono mt-1"><span class="text-primary">own CI</span> ci.sh ${esc(r.args)} · ${dur(r.for_s)}${r.stage ? ` · <b>${esc(r.stage)}</b>${r.position ? ` (${r.position}/${r.total})` : ''}` : ''}</div>`).join('');
