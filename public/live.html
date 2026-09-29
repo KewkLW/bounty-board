@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Live Agents</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@400;700;900&family=Permanent+Marker&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<script>
+tailwind.config = { darkMode: "class", theme: { extend: {
+  colors: { primary: "#0ddff2", "background-dark": "#102122", danger: "#ff3e3e", warning: "#fcd34d", botched: "#4a4a4a" },
+  fontFamily: { display: ["Epilogue", "sans-serif"], hand: ["Permanent Marker", "cursive"] },
+  boxShadow: { comic: '4px 4px 0px 0px #000', 'comic-sm': '2px 2px 0px 0px #000' },
+} } };
+</script>
+<style>
+body { background-color: #102122; }
+.cel { border: 3px solid #111; }
+.grunge { background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E"); pointer-events: none; }
+.stripes-y { background: repeating-linear-gradient(45deg, #000 0, #000 10px, #fcd34d 10px, #fcd34d 20px); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.clip { overflow-wrap: anywhere; word-break: break-word; }
+.pill { display: inline-block; padding: 1px 6px; border: 2px solid #000; font-weight: 900; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+@keyframes pulse2 { 50% { opacity: .45; } }
+.blink { animation: pulse2 1.6s infinite; }
+</style>
+</head>
+<body class="bg-background-dark min-h-screen text-white font-display">
+<div class="grunge fixed inset-0 z-50 mix-blend-overlay"></div>
+
+<header class="relative z-10 px-3 md:px-6 py-3 flex flex-wrap items-center gap-3 justify-between border-b-4 border-black shadow-comic">
+  <div class="flex items-center gap-3">
+    <div class="bg-primary p-1.5 cel -rotate-2"><span class="material-icons text-black text-2xl">monitor_heart</span></div>
+    <div>
+      <h1 class="text-xl md:text-3xl font-black uppercase tracking-tighter italic -skew-x-6" style="-webkit-text-stroke:1px black">Live <span class="text-primary">Agents</span></h1>
+      <div class="text-[10px] text-gray-400 mono tracking-widest uppercase">what every slot is doing right now // <span id="updated">loading</span></div>
+    </div>
+  </div>
+  <div class="flex flex-wrap gap-2 text-sm" id="hdr"></div>
+</header>
+
+<main class="relative z-10 px-3 md:px-6 py-4 pb-28 max-w-7xl mx-auto space-y-6">
+  <section><div id="locks" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div></section>
+  <section>
+    <h2 class="font-black uppercase text-primary tracking-wider mb-2">Slots</h2>
+    <div id="slots" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+  </section>
+  <section id="pipeSec">
+    <h2 class="font-black uppercase text-primary tracking-wider mb-2">Pipeline <span class="text-gray-400 text-xs normal-case font-normal">verify, review, waiting for merge</span></h2>
+    <div id="pipeline" class="space-y-2"></div>
+  </section>
+  <section>
+    <h2 class="font-black uppercase text-primary tracking-wider mb-2">Off the board <span class="text-gray-400 text-xs normal-case font-normal">tester, other CI runs</span></h2>
+    <div id="other" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+  </section>
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div><h2 class="font-black uppercase text-primary tracking-wider mb-2">Queue</h2><div id="queue" class="space-y-2"></div></div>
+    <div><h2 class="font-black uppercase text-primary tracking-wider mb-2">Finished, last 24 h</h2><div id="recent" class="space-y-1"></div></div>
+  </section>
+</main>
+
+<nav class="fixed bottom-0 left-0 w-full z-40 px-3 pb-3">
+  <div class="mx-auto max-w-md bg-gray-900 cel shadow-comic p-1.5 flex gap-2">
+    <a href="/" class="flex-1 bg-gray-800 text-gray-300 border-2 border-black p-2 text-center" title="Board"><span class="material-icons">dashboard</span></a>
+    <a href="/live" class="flex-1 bg-primary text-black border-2 border-black p-2 text-center" title="Live"><span class="material-icons">monitor_heart</span></a>
+    <a href="/roster" class="flex-1 bg-gray-800 text-gray-300 border-2 border-black p-2 text-center" title="Roster"><span class="material-icons">people_alt</span></a>
+    <a href="/leaderboard" class="flex-1 bg-gray-800 text-gray-300 border-2 border-black p-2 text-center" title="Leaderboard"><span class="material-icons">emoji_events</span></a>
+  </div>
+</nav>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function dur(s) {
+  if (s == null || isNaN(s)) return '?';
+  s = Math.max(0, Math.round(s));
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s / 60) + 'm';
+  if (s < 86400) return Math.floor(s / 3600) + 'h' + String(Math.floor((s % 3600) / 60)).padStart(2, '0') + 'm';
+  return Math.floor(s / 86400) + 'd' + Math.floor((s % 86400) / 3600) + 'h';
+}
+const age = iso => iso ? (Date.now() - Date.parse(iso)) / 1000 : null;
+const tok = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n || 0);
+const PHASE = { in_progress: ['bg-primary text-black', 'working'], verify_queued: ['bg-warning text-black', 'verify queued'], verifying: ['bg-warning text-black', 'verifying'],
+  review: ['bg-purple-400 text-black', 'in review'], approved: ['bg-green-400 text-black', 'approved'], blocked: ['bg-danger text-black', 'blocked'] };
+const phasePill = p => { const [c, t] = PHASE[p?.phase] || ['bg-gray-600 text-white', p?.phase || '?']; return `<span class="pill ${c}">${esc(t)}</span>`; };
+
+function lockCard(name, l) {
+  const h = l.holder;
+  let body, cls = 'bg-black/40';
+  if (!h && !l.held) body = '<span class="text-green-400 font-black">FREE</span>';
+  else if (l.stale) body = `<span class="text-green-400 font-black">FREE</span> <span class="text-gray-500 text-xs">(stale holder file: ${esc(h.owner)} ${esc(h.what)})</span>`;
+  else if (!h) body = '<span class="text-warning font-black">HELD</span> <span class="text-xs text-gray-400">no holder file</span>';
+  else {
+    cls = 'bg-warning/10';
+    body = `<span class="text-warning font-black">HELD</span> by <b>${esc(h.owner)}</b> <span class="text-gray-400">(${esc(h.kind)})</span>${h.state ? ` <span class="pill ${h.state === 'admitting' ? 'bg-warning text-black' : 'bg-gray-700'}">${esc(h.state)}</span>` : ''}
+      <div class="text-xs mono clip mt-1">${esc(h.what)} · ${dur(h.since_s)}</div>
+      <div class="text-[11px] mono text-gray-400 clip">${esc(h.worktree || '')}${h.pid ? ` · pid ${h.pid}${h.pid_alive === false ? ' (gone)' : ''}` : ''}</div>`;
+  }
+  return `<div class="${cls} cel shadow-comic-sm p-3"><div class="text-[10px] font-black uppercase text-gray-400">${name}</div>${body}</div>`;
+}
+
+function memCard(m) {
+  const gb = x => x == null ? '?' : (x / 1024).toFixed(1);
+  const low = m.available_mb != null && m.available_mb < 16 * 1024;
+  const pct = m.total_mb ? Math.round(100 * (m.total_mb - m.available_mb) / m.total_mb) : 0;
+  return `<div class="bg-black/40 cel shadow-comic-sm p-3"><div class="text-[10px] font-black uppercase text-gray-400">MemAvailable</div>
+    <span class="font-black ${low ? 'text-danger' : 'text-green-400'}">${gb(m.available_mb)} GB</span> <span class="text-gray-400 text-xs">of ${gb(m.total_mb)} GB · swap free ${gb(m.swap_free_mb)} GB</span>
+    <div class="h-2 bg-gray-800 border border-black mt-2"><div class="h-full ${low ? 'bg-danger' : 'bg-primary'}" style="width:${pct}%"></div></div></div>`;
+}
+
+function slotCard(s, L) {
+  const head = `<div class="flex items-center gap-2 flex-wrap"><span class="font-black uppercase">${esc(s.id)}</span><span class="text-[10px] text-gray-400 mono">${esc(s.runner)} ${esc(s.model || '')} ${esc(s.effort || '')}</span>`;
+  if (s.state !== 'working') {
+    const q = L.queue.find(x => x.slot === s.id);
+    return `<div class="bg-black/30 cel p-3 opacity-70">${head}<span class="pill bg-gray-700 ml-auto">${esc(s.state)}</span></div>
+      <div class="text-xs text-gray-400 mt-1">${q && q.next ? `next: #${q.next.id} ${esc(q.next.title)}` : 'nothing ready for this slot'}</div></div>`;
+  }
+  const b = s.bounty || {}, u = s.usage || {};
+  const cost = u.cost_usd != null ? '$' + u.cost_usd.toFixed(2) : s.cost_estimate_usd != null ? '~$' + s.cost_estimate_usd.toFixed(2) : '$ n/a';
+  const stuck = s.possibly_stuck ? `<span class="pill bg-danger text-black blink">possibly stuck: log silent ${dur(s.log_age_s)}</span>` : '';
+  const v = s.pipeline && s.pipeline.verify;
+  const waits = (s.waiting || []).map(w => {
+    const h = (w.lock === 'render' || w.lock === 'stack') && L.locks[w.lock] ? L.locks[w.lock].holder : null;
+    const what = w.lock === 'render' ? 'UE render lock' : w.lock === 'stack' ? 'UE stack gate' : w.lock;
+    return `<div class="stripes-y p-0.5 mt-2"><div class="bg-black px-2 py-1 text-xs"><b class="text-warning">WAITING on the ${esc(what)}</b>${w.for_s != null ? ' for ' + dur(w.for_s) : ''}${w.text ? ': ' + esc(w.text) : ''}${h && !w.text ? ` <span class="text-gray-400">(held by ${esc(h.owner)}: ${esc(h.what)})</span>` : ''}</div></div>`;
+  }).join('');
+  const holds = s.holds && (s.holds.render || s.holds.stack) ? `<div class="text-xs mt-1"><span class="pill bg-primary text-black">holds</span> ${[s.holds.render && 'UE render lock', s.holds.stack && 'UE stack gate'].filter(Boolean).join(', ')}</div>` : '';
+  const ownCi = (s.own_ci || []).map(r => `<div class="text-xs mono mt-1"><span class="text-primary">own CI</span> ci.sh ${esc(r.args)} · ${dur(r.for_s)}${r.stage ? ` · <b>${esc(r.stage)}</b>${r.position ? ` (${r.position}/${r.total})` : ''}` : ''}</div>`).join('');
+  const verify = v ? `<div class="text-xs mono mt-1"><span class="text-warning">verify</span> ${v.stage ? `<b>${esc(v.stage)}</b>${v.position ? ` (${v.position}/${v.total})` : ''}` : (v.finished ? 'finished' : 'starting')}${v.waiting ? ` · <span class="text-warning">${esc(v.waiting.text)}</span>` : ''}</div>` : '';
+  const acts = (s.actions || []).map(a => `<div class="mono text-[11px] clip ${a.running ? 'text-primary' : 'text-gray-300'}">${a.running ? '▶' : '·'} ${esc(a.summary)}${a.running && a.at ? ` <span class="text-gray-500">(${dur(age(a.at))})</span>` : ''}</div>`).join('');
+  const procs = (s.procs || []).length ? `<details class="mt-1"><summary class="text-[10px] text-gray-400 cursor-pointer uppercase font-bold">processes (${s.procs.length})</summary>${s.procs.map(p => `<div class="mono text-[10px] text-gray-400 clip">${p.pid} · ${dur(p.for_s)} · ${esc(p.args)}</div>`).join('')}</details>` : '';
+  return `<div class="bg-[#1a2e30] cel shadow-comic p-3 ${s.possibly_stuck ? 'border-danger' : ''}">
+    ${head}${phasePill(s.pipeline)}<span class="ml-auto text-xs mono text-gray-400">${dur(s.attempt.elapsed_s)}</span></div>
+    <div class="mt-1 font-bold clip"><a class="hover:underline" href="/#b${b.id}">#${b.id}</a> ${esc(b.title)}</div>
+    <div class="flex flex-wrap gap-1 mt-1 items-center"><span class="pill bg-gray-800">${esc(b.type)}</span><span class="pill bg-gray-800">tier ${esc(b.tier)}</span><span class="pill ${b.priority === 'critical' ? 'bg-danger text-black' : b.priority === 'high' ? 'bg-warning text-black' : 'bg-gray-800'}">${esc(b.priority)}</span>
+      <span class="pill bg-gray-800">attempt ${s.attempt.number}</span>${s.unread_notes ? `<span class="pill bg-warning text-black">${s.unread_notes} unread note${s.unread_notes > 1 ? 's' : ''}</span>` : ''}${stuck}</div>
+    <div class="text-xs text-gray-300 mt-1">${esc(s.pipeline ? s.pipeline.label : b.status)}</div>
+    <div class="text-[11px] mono text-gray-400 mt-1">${tok((u.tokens_in || 0) + (u.cache_read || 0) + (u.cache_write || 0))} in · ${u.cost_usd != null ? tok(u.tokens_out) : '~' + tok(u.tokens_out_est)} out · ${cost} · log ${dur(s.log_age_s)} ago · <a class="text-primary underline" target="_blank" href="/api/attempts/${s.attempt.id}/log">log</a></div>
+    ${s.progress ? `<div class="mt-2 bg-black/40 p-2 text-xs clip"><span class="text-[10px] font-black uppercase text-gray-400">progress · ${dur(s.progress.age_s)} ago</span><br>${esc(s.progress.note)}</div>` : '<div class="mt-2 text-xs text-gray-500">no progress note yet</div>'}
+    ${verify}${ownCi}${waits}${holds}
+    <div class="mt-2">${acts || '<div class="text-xs text-gray-500">no actions yet</div>'}</div>
+    ${s.last_text ? `<div class="mt-1 text-xs italic text-gray-300 clip">“${esc(s.last_text.text)}”</div>` : ''}
+    ${procs}
+  </div>`;
+}
+
+function render(L) {
+  $('updated').textContent = 'updated ' + new Date(L.at).toLocaleTimeString();
+  const working = L.slots.filter(s => s.state === 'working').length;
+  $('hdr').innerHTML = `
+    <div class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">WORKERS</span><span class="font-hand">${working}/${L.cap}</span></div>
+    <div class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">DISPATCH</span><span class="font-hand ${L.paused ? 'text-danger' : 'text-green-400'}">${L.paused ? 'PAUSED' : 'RUNNING'}</span></div>
+    <div class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">VERIFY</span><span class="font-hand">${L.verify.running} running · ${L.verify.queue.length} queued</span></div>`;
+  $('locks').innerHTML = lockCard('UE render lock', L.locks.render) + lockCard('UE stack gate', L.locks.stack) + memCard(L.memory);
+  $('slots').innerHTML = L.slots.slice().sort((a, b) => (b.state === 'working') - (a.state === 'working')).map(s => slotCard(s, L)).join('');
+  $('pipeSec').style.display = L.pipeline.length ? '' : 'none';
+  $('pipeline').innerHTML = L.pipeline.map(p => `<div class="bg-black/40 cel p-2 text-sm flex flex-wrap gap-2 items-center">${phasePill(p)}<b>#${p.id}</b><span class="clip">${esc(p.title)}</span>
+    <span class="text-xs text-gray-400">${esc(p.label)}${p.slot ? ' · ' + esc(p.slot) : ''}${p.live_worker ? '' : ' · no live worker'}</span></div>`).join('');
+  const t = L.tester;
+  const tester = t ? `<div class="bg-black/40 cel p-3 text-sm"><div class="text-[10px] font-black uppercase text-gray-400">Tester · ${esc(t.service)}</div>
+    <span class="pill ${t.running ? 'bg-primary text-black' : 'bg-gray-700'}">${t.running ? 'running' : esc(t.active || 'unknown')}</span>
+    ${t.timer ? `<span class="text-xs text-gray-300">timer ${esc(t.timer_active || '?')} · next ${t.next_run ? new Date(t.next_run).toLocaleTimeString() + ` (in ${dur(-age(t.next_run))})` : '?'}${t.last_run ? ' · last ' + dur(age(t.last_run)) + ' ago' : ''}</span>` : ''}
+    ${t.latest_line ? `<div class="mono text-[11px] text-gray-300 mt-1 clip">${esc(t.latest_line)}</div><div class="text-[10px] text-gray-500 mono clip">${esc(t.latest_log)} · ${dur(age(t.latest_log_mtime))} ago</div>` : ''}</div>` : '';
+  const ownPids = new Set(L.slots.flatMap(s => (s.own_ci || []).map(r => r.pid)));
+  const runs = L.ci_runs.filter(r => !ownPids.has(r.pid)).map(r => {
+    const who = r.kind === 'board-verify' ? `board verify #${r.bounty_id}` : r.kind === 'worker' ? `worker ${r.slot} #${r.bounty_id}` : 'not the board';
+    const c = r.ci || {};
+    return `<div class="bg-black/40 cel p-3 text-sm"><div class="text-[10px] font-black uppercase text-gray-400">CI · ${esc(who)}</div>
+      <div class="mono text-xs clip">ci.sh ${esc(r.args)} · ${dur(r.for_s)}</div><div class="mono text-[11px] text-gray-400 clip">${esc(r.cwd)}</div>
+      <div class="text-xs mt-1">stage <b class="text-warning">${esc(c.stage || '?')}</b>${c.position ? ` (${c.position}/${c.total})` : ''}${r.waits.length ? ` · <span class="text-warning">WAITING on ${r.waits.map(w => w.lock).join(', ')}</span>` : ''}${c.waiting ? ` · <span class="text-warning">${esc(c.waiting.text)}</span>` : ''}</div></div>`;
+  }).join('');
+  $('other').innerHTML = tester + (runs || '<div class="text-xs text-gray-500 p-2">no other ci.sh runs</div>');
+  const q = L.queue.filter(x => x.next || x.ready.length).map(x => `<div class="bg-black/40 cel p-2 text-sm"><b>${esc(x.slot)}</b>
+      <div class="text-xs clip">${x.next ? `next: #${x.next.id} ${esc(x.next.title)} <span class="text-gray-400">[${esc(x.next.tier)}/${esc(x.next.priority)}]</span>` : 'next: nothing startable'}</div>
+      ${x.ready.filter(r => !x.next || r.id !== x.next.id).map(r => `<div class="text-[11px] text-gray-400 clip">· #${r.id} ${esc(r.title)}${r.waiting_on.length ? ` (waits on ${r.waiting_on.map(i => '#' + i).join(' ')})` : ''}</div>`).join('')}</div>`).join('');
+  const un = L.unassigned_ready.length ? `<div class="bg-black/40 cel p-2 text-sm"><b>unassigned</b>${L.unassigned_ready.map(r => `<div class="text-[11px] text-gray-400 clip">· #${r.id} ${esc(r.title)}</div>`).join('')}</div>` : '';
+  $('queue').innerHTML = q + un || '<div class="text-xs text-gray-500">nothing ready</div>';
+  $('recent').innerHTML = L.recent.map(r => `<div class="text-xs flex gap-2 items-baseline"><span class="pill ${r.status === 'done' ? 'bg-green-400 text-black' : 'bg-danger text-black'}">${esc(r.status)}</span>
+    <span class="clip">#${r.id} ${esc(r.title)}</span><span class="text-gray-400 ml-auto whitespace-nowrap">${esc(r.slot || '')} · ${dur(age(r.at))} ago</span></div>`).join('') || '<div class="text-xs text-gray-500">nothing finished in the last 24 h</div>';
+}
+
+let busy = false, again = false;
+async function load() {
+  if (busy) { again = true; return; }
+  busy = true;
+  try {
+    const r = await fetch('/api/live');
+    if (r.ok) render(await r.json()); else $('updated').textContent = 'error ' + r.status;
+  } catch (e) { $('updated').textContent = 'offline: ' + e.message; }
+  busy = false;
+  if (again) { again = false; setTimeout(load, 500); }
+}
+load();
+setInterval(() => { if (!document.hidden) load(); }, 5000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+let wsTimer = null;
+(function connect() {
+  let ws;
+  try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host); } catch { return; }
+  ws.onmessage = () => { clearTimeout(wsTimer); wsTimer = setTimeout(load, 600); };
+  ws.onclose = () => setTimeout(connect, 5000);
+})();
+</script>
+</body>
+</html>

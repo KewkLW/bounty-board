@@ -3,7 +3,7 @@
 The single accountability system for every agent. Work that is not marked done on this board is a known gap.
 Workers are spawned by the board, one fresh agent per bounty, and a bounty only reaches **done** when its commits are on the project's main branch.
 
-- Dashboard: `http://<tailscale-ip>:3777/` (kanban, slots, locks, pause switch, add/edit/assign), `/roster`, `/leaderboard`
+- Dashboard: `http://<tailscale-ip>:3777/` (kanban, slots, locks, pause switch, add/edit/assign), `/live`, `/roster`, `/leaderboard`
 - CLI: `bounty help` (`~/.local/bin/bounty` -> `bin/bounty`)
 - Service: `systemctl --user status bounty-board` (unit in `systemd/`, log `logs/server.log`)
 - Tests: `npm test`
@@ -38,6 +38,17 @@ Work done off the board (an `external` bounty, e.g. one in flight before the boa
 - Retries: `retry.max_attempts`, and after `retry.escalate_after_failures` failures a bounty moves up a model (`escalate_model`, e.g. sonnet -> opus).
 - Pause switch: `bounty pause` / `resume` or the header button. Running workers finish; nothing new spawns.
 - Workers outlive a board restart (`KillMode=process`) and are re-attached when it starts.
+
+## Live: what every agent is doing right now
+
+`/live` (the pulse icon in the nav; phone-friendly), `GET /api/live` (JSON; `?format=text` for plain text) and `bounty live [--json] [--watch [SEC]]` show the same snapshot. Read-only; the page polls every 5 s and also reloads on board websocket events.
+
+- **Per slot**: idle or working; the bounty (#, title, type, tier, priority), attempt number, pipeline status (in progress / verify queued with its place in line / verifying with the current `ci.sh` stage and N/M / in review / approved, waiting for merge / blocked), elapsed time, tokens and $ (the real $ once Claude's result event lands; before that `~$` is an estimate from the tokens at a rate calibrated on that model's finished attempts), the latest `bounty progress` note and its age, unread orchestrator notes, the last actions parsed from the worker log (`Bash: ...`, `Edit: <path>`, `Todo 3/5: ...`; a `>` marks a tool call still running), the last assistant text line, how long the log has been silent (flagged "possibly stuck" past `live.stuck_minutes`, default 15), the worker's own `ci.sh` runs and their stage, notable child processes, and lock state: **waiting** on the UE render lock or the UE stack gate (a `flock` in the worker's process tree whose descriptor points at the lock, a "waiting" line in its CI log, or a stack-gate holder in `state=admitting` waiting for memory) and **holding** either lock.
+- **Machine**: both lock holders from `/run/user/$UID/tribulation/ue-render.holder` and `ue-stack.holder` (owner, kind, what, since; a holder file without the flock is shown as stale), MemAvailable.
+- **Off the board**: the tester (`tribulation-playtest.service`/`.timer`: running or not, next and last run, the last line of the newest cycle log in `/mnt/ue/testlab/daemon-logs`) and every top-level `Scripts/ci.sh` on the machine, classed as board verify (a child of the board process), a worker's own run (`BOUNTY_SLOT` in its environment) or other (e.g. the orchestrator's main-branch CI), with its path and current stage (from the log its stdout goes to, else from the `tee Saved/CI/<stage>.log` child).
+- **Queue**: each slot's next startable bounty and its other ready bounties (with unfinished dependencies), unassigned ready work, and bounties done or failed in the last 24 h.
+- **Cost**: logs are followed incrementally (a byte offset per file; only appended bytes are read after the first pass), the process table is one `ps`, and a snapshot is cached for 2 s however many viewers there are. Stage positions come from the `quick_stages`/`all_stages` arrays in the checkout's `Scripts/ci.sh` (`--quick`, `--full`, `--only`, `--skip` are honoured).
+- Config (optional) `live`: `{ "lock_dir", "stuck_minutes", "recent_hours", "tester": { "service", "timer", "log_dir" } }`. Parsers: `lib/live.js`; tests: `test/live.test.js`.
 
 ## The GPU lease = the UE render lock
 

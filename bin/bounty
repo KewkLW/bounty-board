@@ -29,6 +29,8 @@ Orchestrator
                                    refused while a board worker is live. Records commits + evidence; loot only to
                                    a slot whose board attempt submitted those commits (external work credits nobody).
   bounty pause | resume            bounty status             bounty import tribulation
+  bounty live [--json] [--watch [SEC]]  what every slot is doing now: bounty, pipeline stage, verify/CI stage,
+                                   last actions, progress note, lock waits/holders, tester, queue, last 24 h
   bounty leaderboard [--json]      the slots' loot, dones, failures, streak and $ cost (verified work only)
   bounty project list | bounty project add ID --repo PATH [--main main] [--wt-cmd CMD] [--wt-path TPL] [--verify CMD]
 Workers (BOUNTY_ID / BOUNTY_SLOT from the environment)
@@ -373,6 +375,18 @@ async function main() {
       console.log(`  bounties: backlog ${st.backlog} | ready ${st.ready} | in_progress ${st.in_progress} | review ${st.review} | approved ${st.approved} | done ${st.done} | blocked ${st.blocked} | failed ${st.failed} | spent $${st.total_cost_usd || 0}`);
       console.log(`  loot (verified dones only): $${(st.total_loot_earned || 0).toLocaleString()} over ${st.done_credited} credited done | legacy excluded: ${st.legacy_excluded} bounties`);
       return;
+    }
+    case 'live': {
+      if (opt.json) { console.log(JSON.stringify(await api('GET', '/live'), null, 2)); return; }
+      const once = async () => {
+        const res = await fetch(URL_BASE + '/api/live?format=text', { headers: { 'x-bounty-actor': ACTOR } }).catch(e => die(`cannot reach the board at ${URL_BASE} (${e.cause?.code || e.message})`));
+        const text = await res.text();
+        if (!res.ok) die(`${res.status}: ${text}`);
+        return text;
+      };
+      if (!opt.watch) { process.stdout.write(await once()); return; }
+      const every = Math.max(2, Number(opt.watch === true ? 5 : opt.watch) || 5) * 1000;
+      for (;;) { const t = await once(); process.stdout.write('\x1b[2J\x1b[H' + t); await new Promise(r => setTimeout(r, every)); }
     }
     case 'leaderboard': case 'agents': {
       const rows = await api('GET', '/agents/leaderboard');

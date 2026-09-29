@@ -46,6 +46,7 @@ function createServer(cfg, { dispatch = true, seed = true } = {}) {
   const pub = path.join(__dirname, 'public');
   app.use(express.static(pub));
   app.get('/roster', (req, res) => res.sendFile(path.join(pub, 'roster.html')));
+  app.get('/live', (req, res) => res.sendFile(path.join(pub, 'live.html')));
   app.get('/leaderboard', (req, res) => res.sendFile(path.join(pub, 'leaderboard.html')));
   app.get('/health', (req, res) => res.json({ ok: true, paused: board.paused() }));
 
