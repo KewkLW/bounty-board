@@ -1,0 +1,331 @@
+#!/usr/bin/env node
+// bounty: the Bounty Board CLI for workers and the orchestrator. Talks to the server
+// ($BOUNTY_URL, default http://127.0.0.1:3777). Workers are identified by BOUNTY_ID and
+// BOUNTY_SLOT (the dispatcher sets both).
+const fs = require('fs');
+
+const URL_BASE = (process.env.BOUNTY_URL || 'http://127.0.0.1:3777').replace(/\/$/, '');
+const SLOT = process.env.BOUNTY_SLOT || '';
+const ACTOR = SLOT || process.env.BOUNTY_ACTOR || 'orchestrator';
+const ENV_ID = process.env.BOUNTY_ID || '';
+
+const HELP = `bounty: the Bounty Board CLI  (server ${URL_BASE}, actor ${ACTOR})
+
+Orchestrator
+  bounty add "<title>" [--desc TEXT | --brief FILE.md] [--criteria "..."]... [--type task|bug|test|research|art|docs]
+             [--tier S|A|B|C] [--priority critical|high|normal|low] [--project ID] [--slot SLOT] [--depends 3,4] [--ready]
+  bounty add --file TASK.md        (# Title, optional key: value header lines, "## Acceptance criteria" with - [ ] items)
+  bounty list [--status s1,s2] [--project P] [--slot S|none] [--type T] [--all] [--json]
+  bounty show [ID] [--json]        bounty log ID [--raw]
+  bounty assign ID SLOT|none       bounty ready ID...        bounty backlog ID
+  bounty approve ID ["notes"]      bounty reject ID "notes"  bounty done ID   (only if the commits are on main)
+  bounty fail ID "reason"          bounty kill ID ["reason"]
+  bounty pause | resume            bounty status             bounty import tribulation
+  bounty project list | bounty project add ID --repo PATH [--main main] [--wt-cmd CMD] [--wt-path TPL] [--verify CMD]
+Workers (BOUNTY_ID / BOUNTY_SLOT from the environment)
+  bounty start                     bounty progress "note" [--check N]...
+  bounty block "reason"            bounty split "<title>" [--desc TEXT] [--criteria "..."]...
+  bounty submit [--branch B] [--no-wait]
+  bounty next                      bounty lease gpu [--ttl MIN] [--no-wait]    bounty release gpu
+`;
+
+function parse(argv) {
+  const pos = [], opt = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith('--')) {
+      const k = a.slice(2);
+      const nxt = argv[i + 1];
+      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help'].includes(k);
+      const v = flag || nxt === undefined || nxt.startsWith('--') ? true : (i++, nxt);
+      if (opt[k] === undefined) opt[k] = v; else opt[k] = [].concat(opt[k], v);
+    } else pos.push(a);
+  }
+  return { pos, opt };
+}
+const list = v => (v === undefined ? [] : [].concat(v));
+
+async function api(method, p, body) {
+  let res;
+  try {
+    res = await fetch(URL_BASE + '/api' + p, {
+      method, headers: { 'content-type': 'application/json', 'x-bounty-actor': ACTOR },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (e) {
+    die(`cannot reach the board at ${URL_BASE} (${e.cause?.code || e.message})`);
+  }
+  const text = await res.text();
+  let data; try { data = JSON.parse(text); } catch { data = text; }
+  if (!res.ok) die(`${res.status}: ${data && data.error ? data.error : text}`);
+  return data;
+}
+function die(msg) { console.error(`bounty: ${msg}`); process.exit(1); }
+function idOf(pos, i = 0) {
+  const id = pos[i] || ENV_ID;
+  if (!id || !/^\d+$/.test(String(id))) die('which bounty? pass an ID or set BOUNTY_ID');
+  return Number(id);
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function fmtRow(b) {
+  const slot = b.assignee_slot || '-';
+  return `#${String(b.id).padEnd(4)} ${b.status.padEnd(11)} ${b.tier} ${b.priority.padEnd(8)} ${b.type.padEnd(8)} ${(b.project_id || '-').padEnd(11)} ${slot.padEnd(13)} ${b.title}`;
+}
+
+function show(b) {
+  const L = [];
+  L.push(`#${b.id} ${b.ticket_id}  [${b.status}]  ${b.title}`);
+  L.push(`project ${b.project_id || '-'} | type ${b.type} | tier ${b.tier} (${b.tier_name}) | priority ${b.priority} | slot ${b.assignee_slot || '-'}${b.external_owner ? ' | external: ' + b.external_owner : ''}`);
+  if (b.blocked_reason) L.push(`BLOCKED: ${b.blocked_reason}`);
+  if (b.branch || b.worktree) L.push(`branch ${b.branch || '-'} | worktree ${b.worktree || '-'}`);
+  if (b.parent_id) L.push(`parent #${b.parent_id}`);
+  if ((b.depends_on || []).length) L.push(`depends on ${b.depends_on.map(d => '#' + d).join(', ')}`);
+  if ((b.children || []).length) L.push(`children: ${b.children.map(c => `#${c.id} [${c.status}] ${c.title}`).join('; ')}`);
+  L.push(`attempts ${b.attempts} | failures ${b.failures} | cost $${(b.cost_usd || 0).toFixed(4)} | tokens in ${b.tokens_in} out ${b.tokens_out} | worker ${b.worker_alive ? 'LIVE' : 'none'}`);
+  if (b.ci_status) L.push(`verify: ${b.ci_status} ${b.ci_log ? '(' + b.ci_log + ')' : ''}`);
+  if ((b.commits || []).length) L.push(`commits: ${b.commits.map(c => c.slice(0, 10)).join(' ')}`);
+  if (b.description) L.push('', b.description);
+  if ((b.criteria || []).length) {
+    L.push('', 'Acceptance criteria:');
+    b.criteria.forEach((c, i) => L.push(`  ${i + 1}. [${c.done ? 'x' : ' '}] ${c.text}${c.note ? `  (${c.note})` : ''}`));
+  }
+  if (b.review_notes) L.push('', 'Review:', b.review_notes);
+  const atts = b.attempts_detail || [];
+  if (atts.length) {
+    L.push('', 'Attempts:');
+    for (const a of atts) L.push(`  ${a.id} ${a.kind} ${a.slot} ${a.model || ''} pid ${a.pid} ${a.started_at} -> ${a.ended_at || 'running'} exit ${a.exit_code ?? '-'} $${a.cost_usd ?? 'n/a'} ${a.outcome || ''}\n     log: ${URL_BASE}/api/attempts/${a.id}/log   (${a.log_path})`);
+  }
+  L.push('', 'History:');
+  for (const e of (b.events || []).slice(-25)) L.push(`  ${e.at.slice(0, 19)} ${String(e.actor || '').padEnd(12)} ${e.kind}${e.to_status ? ` ${e.from_status || ''}->${e.to_status}` : ''} ${e.note ? String(e.note).split('\n')[0].slice(0, 220) : ''}`);
+  return L.join('\n');
+}
+
+function parseTaskFile(file) {
+  const text = fs.readFileSync(file, 'utf8');
+  const lines = text.split('\n');
+  const out = { criteria: [] };
+  let i = 0;
+  if (lines[0] && lines[0].trim() === '---') {
+    for (i = 1; i < lines.length && lines[i].trim() !== '---'; i++) {
+      const m = lines[i].match(/^(\w[\w_-]*):\s*(.*)$/);
+      if (m) out[m[1].toLowerCase()] = m[2].trim();
+    }
+    i++;
+  }
+  const desc = [];
+  let inCrit = false;
+  for (; i < lines.length; i++) {
+    const l = lines[i];
+    const h1 = l.match(/^#\s+(.+)/);
+    if (h1 && !out.title) { out.title = h1[1].trim(); continue; }
+    if (/^##+\s+acceptance criteria/i.test(l)) { inCrit = true; continue; }
+    if (inCrit && /^##?\s/.test(l)) inCrit = false;
+    if (inCrit) {
+      const m = l.match(/^\s*[-*]\s*(\[[ xX]\]\s*)?(.+)/);
+      if (m) out.criteria.push(m[2].trim());
+      continue;
+    }
+    const kv = !out.title ? null : l.match(/^(tier|priority|type|project|slot|depends|depends_on):\s*(\S.*)$/i);
+    if (kv && desc.every(d => !d.trim())) { out[kv[1].toLowerCase()] = kv[2].trim(); continue; }
+    desc.push(l);
+  }
+  out.description = desc.join('\n').trim();
+  return out;
+}
+
+async function main() {
+  const { pos, opt } = parse(process.argv.slice(2));
+  const cmd = pos.shift();
+  if (!cmd || cmd === 'help' || opt.help) { console.log(HELP); return; }
+  const worker = !!SLOT;
+  const orchOnly = ['add', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'pause', 'resume', 'import'];
+  if (worker && orchOnly.includes(cmd)) die(`'${cmd}' is an orchestrator command; you are worker ${SLOT}`);
+
+  switch (cmd) {
+    case 'add': {
+      let d = {};
+      if (opt.file) d = parseTaskFile(opt.file);
+      if (pos[0]) d.title = pos[0];
+      if (opt.brief) d.description = fs.readFileSync(opt.brief, 'utf8');
+      if (opt.desc) d.description = opt.desc;
+      if (opt.criteria) d.criteria = list(opt.criteria);
+      for (const k of ['type', 'tier', 'priority', 'project']) if (opt[k]) d[k] = opt[k];
+      if (opt.slot || d.slot) d.assignee_slot = opt.slot || d.slot;
+      const dep = opt.depends || d.depends || d.depends_on;
+      if (dep) d.depends_on = String(dep).split(',').map(s => Number(s.replace('#', '').trim())).filter(Boolean);
+      if (opt.parent) d.parent_id = Number(opt.parent);
+      delete d.slot; delete d.depends;
+      if (!d.title) die('add needs a title (or --file with a # Title)');
+      const b = await api('POST', '/bounties', d);
+      console.log(`added #${b.id} ${b.ticket_id}: ${b.title} [${b.status}]`);
+      if (opt.ready) { await api('POST', `/bounties/${b.id}/ready`, {}); console.log(`#${b.id} -> ready`); }
+      return;
+    }
+    case 'list': case 'ls': {
+      const q = new URLSearchParams();
+      if (opt.status) q.set('status', opt.status);
+      else if (!opt.all) q.set('status', 'backlog,ready,in_progress,review,approved,blocked');
+      for (const k of ['project', 'slot', 'type', 'tier', 'priority', 'q']) if (opt[k]) q.set(k, opt[k]);
+      const rows = await api('GET', `/bounties?${q}`);
+      if (opt.json) { console.log(JSON.stringify(rows, null, 2)); return; }
+      for (const b of rows) console.log(fmtRow(b));
+      console.log(`(${rows.length})`);
+      return;
+    }
+    case 'show': {
+      const b = await api('GET', `/bounties/${idOf(pos)}`);
+      if (opt.json) { console.log(JSON.stringify(b, null, 2)); return; }
+      console.log(show({ ...b, attempts_detail: b.attempts, attempts: b.attempts.filter(a => a.kind === 'worker').length }));
+      return;
+    }
+    case 'log': {
+      const b = await api('GET', `/bounties/${idOf(pos)}`);
+      const a = [...b.attempts].reverse().find(x => !opt.review || x.kind === 'review');
+      if (!a) die('no attempts yet');
+      const res = await fetch(`${URL_BASE}/api/attempts/${a.id}/log${opt.raw ? '?format=raw' : ''}`, { headers: { 'x-bounty-actor': ACTOR } });
+      process.stdout.write(await res.text());
+      return;
+    }
+    case 'assign': {
+      const id = idOf(pos); const slot = pos[1];
+      if (!slot) die('assign ID SLOT|none');
+      const b = await api('POST', `/bounties/${id}/assign`, { slot: slot === 'none' ? null : slot });
+      console.log(`#${b.id} assigned to ${b.assignee_slot || 'nobody'} [${b.status}]`);
+      return;
+    }
+    case 'ready': case 'backlog': {
+      const ids = pos.length ? pos : [ENV_ID];
+      for (const id of ids) { const b = await api('POST', `/bounties/${Number(id)}/${cmd}`, {}); console.log(`#${b.id} -> ${b.status}`); }
+      return;
+    }
+    case 'start': {
+      const b = await api('POST', `/bounties/${idOf(pos)}/start`, {});
+      console.log(`#${b.id} in_progress. Heartbeat with 'bounty progress "..."'; finish with 'bounty submit'.`);
+      return;
+    }
+    case 'progress': {
+      const note = pos.join(' ');
+      const check = list(opt.check).flatMap(c => String(c).split(',')).map(Number).filter(Boolean);
+      const id = ENV_ID ? Number(ENV_ID) : die('progress needs BOUNTY_ID');
+      const b = await api('POST', `/bounties/${id}/progress`, { note, check, percent: opt.percent ? Number(opt.percent) : null });
+      console.log(`#${b.id} progress noted${check.length ? `; checked ${check.join(',')}` : ''}`);
+      return;
+    }
+    case 'heartbeat': { await api('POST', `/bounties/${idOf(pos)}/heartbeat`, {}); console.log('ok'); return; }
+    case 'block': {
+      const id = /^\d+$/.test(pos[0] || '') && !worker ? Number(pos.shift()) : idOf([]);
+      const reason = pos.join(' ');
+      if (!reason) die('block needs a reason');
+      const b = await api('POST', `/bounties/${id}/block`, { reason });
+      console.log(`#${b.id} blocked: ${reason}${worker ? '\nYou are done with this bounty: exit now.' : ''}`);
+      return;
+    }
+    case 'split': {
+      const id = opt.parent ? Number(opt.parent) : idOf([]);
+      const title = pos.join(' ');
+      if (!title) die('split "<title>" [--desc TEXT]');
+      const b = await api('POST', `/bounties/${id}/split`, { title, description: opt.desc || '', criteria: list(opt.criteria), type: opt.type, tier: opt.tier, priority: opt.priority });
+      console.log(`split #${b.id} from #${id}: ${b.title} (backlog; the orchestrator triages it)`);
+      return;
+    }
+    case 'submit': {
+      const id = idOf(pos);
+      const r = await api('POST', `/bounties/${id}/submit`, { branch: opt.branch });
+      console.log(`submitted #${id}: branch ${r.branch}, ${r.commits.length} commit(s), ${r.files} file(s). Verifying: ${r.verify}`);
+      if (opt['no-wait']) return;
+      const waitMin = Number(opt['wait-min'] || 8);
+      const until = Date.now() + waitMin * 60000;
+      while (Date.now() < until) {
+        await sleep(5000);
+        const b = await api('GET', `/bounties/${id}`);
+        if (b.ci_status === 'running') continue;
+        if (b.status === 'in_progress' && b.ci_status === 'fail') {
+          const ev = [...b.events].reverse().find(e => e.kind === 'verify');
+          console.log(`VERIFY FAILED. Fix it and submit again.\n${ev ? ev.note : ''}\nFull log: ${b.ci_log}`);
+          process.exit(2);
+        }
+        console.log(`#${id} is now ${b.status}${b.status === 'review' ? ' (verify passed; the reviewer reads your diff next)' : ''}. You are done with this bounty: exit now.`);
+        return;
+      }
+      console.log(`verify is still running after ${waitMin} min. The board finishes it without you: if it fails, the bounty goes back to ready with the log for a fresh worker. You can exit now.`);
+      return;
+    }
+    case 'approve': { const id = idOf(pos); const b = await api('POST', `/bounties/${id}/approve`, { notes: pos.slice(1).join(' ') || null }); console.log(`#${b.id} -> ${b.status}. Merge it into main; the board marks it done when the commits are there.`); return; }
+    case 'reject': { const id = idOf(pos); const b = await api('POST', `/bounties/${id}/reject`, { notes: pos.slice(1).join(' ') }); console.log(`#${b.id} -> ${b.status}`); return; }
+    case 'fail': { const id = idOf(pos); const b = await api('POST', `/bounties/${id}/fail`, { reason: pos.slice(1).join(' ') }); console.log(`#${b.id} -> ${b.status}`); return; }
+    case 'kill': { const id = idOf(pos); const r = await api('POST', `/bounties/${id}/kill`, { reason: pos.slice(1).join(' ') || undefined }); console.log(JSON.stringify(r)); return; }
+    case 'done': {
+      const id = idOf(pos);
+      const r = await api('POST', `/bounties/${id}/done`, {});
+      console.log(`#${id} DONE (${r.how}); +$${r.reward} loot`);
+      return;
+    }
+    case 'next': {
+      const slot = pos[0] || SLOT;
+      if (!slot) die('next [SLOT] (or set BOUNTY_SLOT)');
+      const r = await api('GET', `/next?slot=${encodeURIComponent(slot)}`);
+      if (!r.next) { console.log(`no ready bounty for ${slot}: idle.${worker ? ' Exit now; the dispatcher spawns a fresh worker when there is work.' : ''}`); return; }
+      console.log(`next for ${slot}: #${r.next.id} ${r.next.title}${worker ? '\nDon\'t start it yourself: exit, and the dispatcher spawns a fresh worker for it.' : ''}`);
+      return;
+    }
+    case 'lease': {
+      const res = pos[0] || 'gpu';
+      const body = { bounty_id: ENV_ID ? Number(ENV_ID) : null, slot: SLOT || null, holder: ENV_ID ? null : (opt.holder || ACTOR), ttl_min: opt.ttl ? Number(opt.ttl) : undefined, note: opt.note };
+      const deadline = Date.now() + Number(opt['max-wait'] || 60) * 60000;
+      let said = false;
+      for (;;) {
+        const r = await api('POST', `/leases/${res}`, body);
+        if (r.granted) { console.log(`lease '${res}' ${r.renewed ? 'renewed' : 'granted'} until ${r.lease.expires_at}. Release it with: bounty release ${res}`); return; }
+        if (opt['no-wait']) { console.log(`lease '${res}' is held by ${r.lease.holder} until ${r.lease.expires_at}`); process.exit(3); }
+        if (!said) { console.log(`lease '${res}' is held by ${r.lease.holder} (until ${r.lease.expires_at}); waiting...`); said = true; }
+        if (Date.now() > deadline) die(`gave up waiting for lease '${res}'`);
+        if (ENV_ID) await api('POST', `/bounties/${ENV_ID}/heartbeat`, {});
+        await sleep(10000);
+      }
+    }
+    case 'release': {
+      const res = pos[0] || 'gpu';
+      const r = await api('DELETE', `/leases/${res}`, { bounty_id: ENV_ID ? Number(ENV_ID) : null, holder: ENV_ID ? null : (opt.holder || ACTOR), force: !!opt.force });
+      console.log(r.released ? `released '${res}'` : `'${res}' was not held`);
+      return;
+    }
+    case 'pause': case 'resume': { const r = await api('POST', `/${cmd}`, {}); console.log(`dispatcher ${r.paused ? 'PAUSED (running workers finish; nothing new spawns)' : 'running'}`); return; }
+    case 'status': case 'state': {
+      const s = await api('GET', '/state');
+      if (opt.json) { console.log(JSON.stringify(s, null, 2)); return; }
+      console.log(`dispatcher ${s.paused ? 'PAUSED' : 'running'} | ${s.running}/${s.cap} workers | stall limit ${s.stall_minutes} min`);
+      for (const sl of s.slots) {
+        const w = sl.bounty ? `#${sl.bounty.id} ${sl.bounty.title} (since ${sl.attempt?.started_at?.slice(11, 19)}, pid ${sl.attempt?.pid})` : sl.next ? `next: #${sl.next.id} ${sl.next.title}` : '';
+        console.log(`  ${sl.id.padEnd(14)} ${sl.state.padEnd(9)} ${String(sl.model || sl.runner).padEnd(7)} ${w}`);
+      }
+      for (const l of s.leases) console.log(`  lease ${l.resource}: ${l.holder} until ${l.expires_at}`);
+      if (!s.leases.length) console.log('  leases: none held');
+      const st = s.stats;
+      console.log(`  bounties: backlog ${st.backlog} | ready ${st.ready} | in_progress ${st.in_progress} | review ${st.review} | approved ${st.approved} | done ${st.done} | blocked ${st.blocked} | failed ${st.failed} | spent $${st.total_cost_usd || 0}`);
+      return;
+    }
+    case 'import': {
+      const src = pos[0] || 'tribulation';
+      const r = await api('POST', `/import/${src}`, {});
+      console.log(JSON.stringify(r, null, 2));
+      return;
+    }
+    case 'project': {
+      const sub = pos[0] || 'list';
+      if (sub === 'list') { for (const p of await api('GET', '/projects')) console.log(`${p.id.padEnd(12)} ${p.repo}  main=${p.main_branch}  wt="${p.worktree_cmd}"  verify="${p.verify_cmd || ''}"`); return; }
+      if (sub === 'add') {
+        const p = { id: pos[1], repo: opt.repo, main_branch: opt.main, worktree_cmd: opt['wt-cmd'], worktree_path: opt['wt-path'], verify_cmd: opt.verify, name: opt.name };
+        if (opt.rules) p.rules = list(opt.rules);
+        const r = await api('POST', '/projects', p);
+        console.log(`project ${r.id} saved`);
+        return;
+      }
+      die('project list | project add ID --repo PATH ...');
+      return;
+    }
+    default: die(`unknown command '${cmd}'. Try: bounty help`);
+  }
+}
+
+main().catch(e => die(e.stack || e.message));
