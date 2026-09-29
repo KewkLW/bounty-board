@@ -17,6 +17,7 @@ Orchestrator
   bounty add --file TASK.md        (# Title, optional key: value header lines, "## Acceptance criteria" with - [ ] items)
   bounty list [--status s1,s2] [--project P] [--slot S|none] [--type T] [--all] [--json]
   bounty show [ID] [--json]        bounty log ID [--raw]
+  bounty edit ID [--title T] [--desc TEXT|--brief FILE] [--criteria "..."]... [--tier] [--priority] [--type] [--depends 3,4] [--file TASK.md]
   bounty assign ID SLOT|none       bounty ready ID...        bounty backlog ID
   bounty approve ID ["notes"]      bounty reject ID "notes"  bounty done ID   (only if the commits are on main)
   bounty fail ID "reason"          bounty kill ID ["reason"]
@@ -139,7 +140,7 @@ async function main() {
   const cmd = pos.shift();
   if (!cmd || cmd === 'help' || opt.help) { console.log(HELP); return; }
   const worker = !!SLOT;
-  const orchOnly = ['add', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'pause', 'resume', 'import'];
+  const orchOnly = ['add', 'edit', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'pause', 'resume', 'import'];
   if (worker && orchOnly.includes(cmd)) die(`'${cmd}' is an orchestrator command; you are worker ${SLOT}`);
 
   switch (cmd) {
@@ -185,6 +186,20 @@ async function main() {
       if (!a) die('no attempts yet');
       const res = await fetch(`${URL_BASE}/api/attempts/${a.id}/log${opt.raw ? '?format=raw' : ''}`, { headers: { 'x-bounty-actor': ACTOR } });
       process.stdout.write(await res.text());
+      return;
+    }
+    case 'edit': {
+      const id = idOf(pos);
+      const d = {};
+      if (opt.file) Object.assign(d, parseTaskFile(opt.file));
+      for (const k of ['title', 'type', 'tier', 'priority', 'project']) if (opt[k]) d[k] = opt[k];
+      if (opt.desc) d.description = opt.desc;
+      if (opt.brief) d.description = fs.readFileSync(opt.brief, 'utf8');
+      if (opt.criteria) d.criteria = list(opt.criteria);
+      if (opt.depends) d.depends_on = String(opt.depends).split(',').map(s => Number(s.replace('#', ''))).filter(Boolean);
+      delete d.slot; delete d.depends;
+      const b = await api('PATCH', `/bounties/${id}`, d);
+      console.log(`#${b.id} updated: ${b.title} (${(b.criteria || []).length} criteria)`);
       return;
     }
     case 'assign': {

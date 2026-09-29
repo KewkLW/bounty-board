@@ -39,7 +39,7 @@ test('status machine: legal edges, illegal edges, guarded edges', async () => {
     assert.throws(() => transition(board.db, b.id, 'done', { actor: 'orchestrator' }), /merge-check/);
     assert.deepStrictEqual(TRANSITIONS.done, []);
     // blocked requires a reason
-    const c = board.create({ title: 'y', project: 'scratch' });
+    const c = board.create({ criteria: CRIT, title: 'y', project: 'scratch' });
     assert.throws(() => transition(board.db, c.id, 'blocked', {}), /reason/);
     // timestamps per status
     const row = board.raw(b.id);
@@ -51,7 +51,7 @@ test('API: workers cannot approve, assign, ready or mark done', async () => {
   const t = await startBoard('actor', { dispatch: false });
   try {
     const { call } = t;
-    const b = (await call('POST', '/bounties', { title: 'x', project: 'scratch' })).data;
+    const b = (await call('POST', '/bounties', { title: 'x', project: 'scratch', criteria: CRIT })).data;
     assert.strictEqual((await call('POST', `/bounties/${b.id}/ready`, {}, 'fake-1')).status, 403);
     assert.strictEqual((await call('POST', `/bounties/${b.id}/assign`, { slot: 'fake-1' }, 'fake-1')).status, 403);
     assert.strictEqual((await call('POST', `/bounties/${b.id}/done`, {}, 'fake-1')).status, 403);
@@ -82,7 +82,7 @@ test('gates: no branch, empty diff, docs-only diff on a code bounty are refused'
     assert.strictEqual(r.status, 422); assert.match(r.data.error, /only touches notes\/logs/);
     assert.strictEqual(board.raw(b.id).status, 'in_progress');
     // a research bounty may be docs-only
-    const d = board.create({ title: 'research', project: 'scratch', type: 'research' });
+    const d = board.create({ criteria: CRIT, title: 'research', project: 'scratch', type: 'research' });
     board.ready(d.id); board.start(d.id, 'fake-1');
     r = await call('POST', `/bounties/${d.id}/submit`, { branch: 'notes-br' }, 'fake-1');
     assert.strictEqual(r.status, 200, JSON.stringify(r.data));
@@ -156,8 +156,8 @@ test('leases: exclusive, renewable, released on TTL expiry and when the holder b
   const t = await startBoard('lease', { dispatch: false });
   try {
     const { board, call } = t;
-    const a = board.create({ title: 'a', project: 'scratch' }); board.ready(a.id); board.start(a.id, 'fake-1');
-    const b = board.create({ title: 'b', project: 'scratch' }); board.ready(b.id); board.start(b.id, 'fake-2');
+    const a = board.create({ criteria: CRIT, title: 'a', project: 'scratch' }); board.ready(a.id); board.start(a.id, 'fake-1');
+    const b = board.create({ criteria: CRIT, title: 'b', project: 'scratch' }); board.ready(b.id); board.start(b.id, 'fake-2');
     let r = await call('POST', '/leases/gpu', { bounty_id: a.id, slot: 'fake-1' }, 'fake-1');
     assert.strictEqual(r.data.granted, true);
     r = await call('POST', '/leases/gpu', { bounty_id: b.id, slot: 'fake-2' }, 'fake-2');
@@ -187,11 +187,11 @@ test('watchdog: a worker that dies without submitting is blocked; a silent worke
   const t = await startBoard('watchdog', { over: { watchdog: { stall_minutes: 0.05, check_seconds: 1, kill_grace_seconds: 1 } } });
   try {
     const { board } = t;
-    const crash = board.create({ title: 'crash', project: 'scratch', description: 'mode:crash', assignee_slot: 'fake-1' });
+    const crash = board.create({ criteria: CRIT, title: 'crash', project: 'scratch', description: 'mode:crash', assignee_slot: 'fake-1' });
     board.ready(crash.id);
     await waitFor(() => board.raw(crash.id).status === 'blocked');
     assert.match(board.raw(crash.id).blocked_reason, /exited with code 3 without running 'bounty start'/);
-    const stall = board.create({ title: 'stall', project: 'scratch', description: 'mode:stall', assignee_slot: 'fake-2' });
+    const stall = board.create({ criteria: CRIT, title: 'stall', project: 'scratch', description: 'mode:stall', assignee_slot: 'fake-2' });
     board.ready(stall.id);
     await waitFor(() => board.raw(stall.id).status === 'in_progress');
     await waitFor(() => board.raw(stall.id).status === 'blocked', 30000);
@@ -319,10 +319,48 @@ test('external gpu lease mirrors the UE render flock and its holder file; the pr
     process.kill(-holder.pid, 'SIGKILL');
     await waitFor(() => !board.externalStatus('gpu').held);
     assert.strictEqual(board.externalStatus('gpu').holder_stale, true);
-    const b = board.create({ title: 'x', project: 'scratch' });
+    const b = board.create({ criteria: CRIT, title: 'x', project: 'scratch' });
     const { workerPrompt } = require('../lib/prompt');
     const prompt = workerPrompt(board, board.need(b.id), board.slot('fake-1'), { worktree: t.repo, branch: 'x' });
     assert.match(prompt, /ue-render-lock\.sh/);
     assert.match(prompt, /machine-wide UE render lock/);
   } finally { try { process.kill(-holder.pid, 'SIGKILL'); } catch {} await t.s.close(); }
+});
+
+test('ready needs acceptance criteria', async () => {
+  const t = await startBoard('crit', { dispatch: false });
+  try {
+    const b = t.board.create({ title: 'no criteria', project: 'scratch' });
+    const r = await t.call('POST', `/bounties/${b.id}/ready`, {});
+    assert.strictEqual(r.status, 400); assert.match(r.data.error, /acceptance criteria/);
+    await t.call('PATCH', `/bounties/${b.id}`, { criteria: ['it works'] });
+    assert.strictEqual((await t.call('POST', `/bounties/${b.id}/ready`, {})).status, 200);
+  } finally { await t.s.close(); }
+});
+
+test('Tribulation import: backlog + in-flight + tests, deduped, re-runnable', async (tt) => {
+  const im = require('../lib/importer');
+  if (!fs.existsSync(im.DEFAULTS.taskList)) { tt.skip('vault not mounted'); return; }
+  const t = await startBoard('import', { dispatch: false, over: { slots: [{ id: 'sonnet-tester', runner: 'command', cmd: ['true'] }] } });
+  try {
+    const { board } = t;
+    board.upsertProject({ id: 'tribulation', repo: '/mnt/ue/Tribulation', main_branch: 'main' });
+    const r1 = im.importTribulation(board);
+    assert.ok(r1.created_count > 60, `created ${r1.created_count}`);
+    const r2 = im.importTribulation(board);
+    assert.strictEqual(r2.created_count, 0);
+    assert.strictEqual(r2.existing, r1.created_count);
+    const flight = board.list({ status: 'in_progress', project: 'tribulation' });
+    assert.deepStrictEqual(flight.map(b => b.branch || b.worktree).sort(),
+      ['/mnt/ue/ArtSource/titan-darkknight', '/mnt/ue/ArtSource/titan-darkknight-sol', 'p0-game-bugs', 'portal-real-test'].sort());
+    assert.strictEqual(board.list({ status: 'ready', project: 'tribulation' }).length, 0);
+    const tests = board.list({ type: 'test', project: 'tribulation' });
+    assert.ok(tests.length >= 40 && tests.every(b => b.assignee_slot === 'sonnet-tester' && b.status === 'backlog'));
+    const others = board.list({ status: 'backlog', project: 'tribulation' }).filter(b => b.type !== 'test');
+    assert.ok(others.every(b => !b.assignee_slot));
+    // the Task List portal item is folded into the in-flight portal bounty, not duplicated
+    assert.strictEqual(board.list({ project: 'tribulation', q: 'portal-real-test' }).length, 1);
+    const titles = board.list({ project: 'tribulation' }).map(b => b.title.toLowerCase());
+    assert.strictEqual(new Set(titles).size, titles.length, 'no duplicate titles');
+  } finally { await t.s.close(); }
 });
