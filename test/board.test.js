@@ -227,6 +227,16 @@ test('dispatcher e2e with the fake worker: ready -> spawn -> start -> submit -> 
     board.ready(n.id);
     await waitFor(() => board.raw(n.id).status === 'blocked', 20000);
     assert.ok(board.db.prepare("SELECT 1 FROM events WHERE bounty_id=? AND note LIKE '%only touches notes/logs%'").get(n.id));
+    // the ledger: the merged bounty credits the slot whose real attempt did it; the notes-only one is a failure
+    await waitFor(() => board.db.prepare("SELECT 1 FROM attempts WHERE bounty_id = ? AND ended_at IS NOT NULL").get(n.id));
+    const led = Object.fromEntries(board.ledger().slots.map(s => [s.id, s]));
+    assert.strictEqual(board.raw(b.id).credited_slot, 'fake-1');
+    assert.ok(board.raw(b.id).credited_attempt, 'credited to a real attempt row');
+    assert.strictEqual(led['fake-1'].missions_completed, 1);
+    assert.ok(led['fake-1'].total_loot > 0);
+    assert.strictEqual(led['fake-2'].missions_completed, 0);
+    assert.strictEqual(led['fake-2'].missions_failed, 1);
+    assert.strictEqual(led['fake-2'].total_loot, 0);
   } finally { await t.s.close(); }
 });
 
@@ -501,8 +511,8 @@ test('close-merged: an external bounty is done once its commit is on main; refus
     t.s.dispatcher.live.delete(b.id);
     try { process.kill(-child.pid, 'SIGKILL'); } catch {}
 
-    // success: done, commits + evidence + actor in the history, loot paid to the owner
-    const before = board.db.prepare("SELECT total_loot FROM agents WHERE id='fake-1'").get().total_loot;
+    // success: done, commits + evidence + actor in the history. The work was done off the board
+    // (no slot attempt submitted it), so no slot is credited even though claimed_by names one.
     board.db.prepare('UPDATE bounties SET claimed_by = ? WHERE id = ?').run('fake-1', b.id);
     r = await call('POST', `/bounties/${b.id}/close-merged`, { commits: [sha.slice(0, 7)], evidence: 'ci PASS, see log.md' });
     assert.strictEqual(r.status, 200, JSON.stringify(r.data));
@@ -511,16 +521,195 @@ test('close-merged: an external bounty is done once its commit is on main; refus
     assert.strictEqual(row.status, 'done');
     assert.deepStrictEqual(row.commits, [sha]);
     assert.strictEqual(row.work_evidence, 'ci PASS, see log.md');
-    assert.ok(row.reward > 0);
+    assert.strictEqual(row.credited_slot, null);
+    assert.strictEqual(r.data.credited, null);
+    assert.strictEqual(r.data.reward, 0);
     const ev = board.db.prepare("SELECT * FROM events WHERE bounty_id = ? AND kind = 'status' AND to_status = 'done'").get(b.id);
     assert.strictEqual(ev.from_status, 'in_progress');
     assert.strictEqual(ev.actor, 'orchestrator');
     assert.match(ev.note, new RegExp(`close-merged by orchestrator: ${sha.slice(0, 10)} on main`));
     assert.match(ev.note, /evidence: ci PASS, see log\.md/);
-    const after = board.db.prepare("SELECT total_loot FROM agents WHERE id='fake-1'").get().total_loot;
-    assert.strictEqual(after - before, row.reward, 'loot granted like a normal done');
+    assert.match(ev.note, /no slot credited/);
+    for (const a of (await call('GET', '/agents/leaderboard')).data) {
+      assert.strictEqual(a.total_loot, 0, `${a.id} got loot for external work`);
+      assert.strictEqual(a.missions_completed, 0);
+    }
+    assert.strictEqual(board.db.prepare("SELECT total_loot FROM agents WHERE id='fake-1'").get().total_loot, 0);
+    assert.strictEqual(board.stats().total_loot_earned, 0);
     // done is final
     r = await call('POST', `/bounties/${b.id}/close-merged`, { commits: [sha] });
     assert.strictEqual(r.status, 409);
+  } finally { await t.s.close(); }
+});
+
+// ---------- real agents only: slots, derived loot ----------
+
+test('agents: the Feb-2026 and mock agents are purged; bounties keep the names as text; the migration re-runs as a no-op', async () => {
+  const legacy = path.join(ROOT, 'test', 'fixtures', 'legacy-board.db');
+  const dir = tmpdir('purge');
+  const dbPath = path.join(dir, 'x.db');
+  fs.copyFileSync(legacy, dbPath);
+  {
+    const raw = dbm.open(dbPath);
+    raw.prepare("INSERT INTO agent_events (agentId, status, reason, timestamp) VALUES ('agent-gpt-4', 'active', 'mock', 1)").run();
+    assert.ok(raw.prepare("SELECT COUNT(*) c FROM agent_status").get().c > 0);
+    raw.close();
+  }
+  const { writeConfig } = require('./helpers');
+  const { load } = require('../lib/config');
+  const { Board } = require('../lib/board');
+  const cfgPath = writeConfig(dir, { db_path: dbPath });
+  const slotIds = ['fake-1', 'fake-2'];
+  const check = board => {
+    assert.deepStrictEqual(board.db.prepare('SELECT id FROM agents ORDER BY id').all().map(r => r.id), slotIds);
+    assert.strictEqual(board.db.prepare(`SELECT COUNT(*) c FROM agent_status WHERE agentId NOT IN ('fake-1','fake-2')`).get().c, 0);
+    assert.strictEqual(board.db.prepare(`SELECT COUNT(*) c FROM agent_events WHERE agentId NOT IN ('fake-1','fake-2')`).get().c, 0);
+    // history kept: 57 legacy bounties, old agent names as plain text
+    assert.strictEqual(board.db.prepare("SELECT COUNT(*) c FROM bounties WHERE project_id='legacy'").get().c, 57);
+    const withName = board.db.prepare("SELECT id FROM bounties WHERE claimed_by = 'opus-wsl-1' LIMIT 1").get();
+    assert.ok(withName, 'legacy bounty still names its old agent');
+    // nothing crashes on the missing agent; legacy never counts
+    assert.strictEqual(board.get(withName.id).claimed_by, 'opus-wsl-1');
+    assert.ok(board.list({ project: 'legacy' }).length === 57);
+    const st = board.stats();
+    assert.strictEqual(st.total_loot_earned, 0);
+    assert.strictEqual(st.done, 0, 'legacy dones are not in the header counts');
+    assert.strictEqual(st.legacy_excluded, 57);
+    for (const s of board.ledger().slots) assert.strictEqual(s.total_loot, 0);
+  };
+  const b1 = new Board(load(cfgPath));
+  check(b1);
+  assert.ok(JSON.parse(dbm.getMeta(b1.db, 'agents_purged')).agents >= 12);
+  const again = b1.migrateAgents();
+  assert.deepStrictEqual(again, { purged: { agents: 0, agent_status: 0, agent_events: 0 }, credited: 0 });
+  b1.db.close();
+  const b2 = new Board(load(cfgPath)); // a restart re-runs it
+  check(b2);
+  b2.db.close();
+});
+
+test('leaderboard: loot, dones, streaks come only from verified dones; failures and $ cost from attempts; counters rebuilt to match', async () => {
+  const t = await startBoard('ledger', { dispatch: false });
+  try {
+    const { board, repo, call } = t;
+    const { rewardFor, lootFor, BONUSES } = require('../lib/board');
+    const attempt = (bid, slot, cost, ended = true) => Number(board.db.prepare(`INSERT INTO attempts (bounty_id, slot, runner, model, started_at, ended_at, cost_usd, kind, outcome)
+      VALUES (?, ?, 'command', 'x', ?, ?, ?, 'worker', 'test')`).run(bid, slot, new Date(Date.now() - 60000).toISOString(), ended ? new Date().toISOString() : null, cost).lastInsertRowid);
+    const work = (title, slot, branch, file, extra = {}) => {
+      const b = board.create({ title, project: 'scratch', criteria: CRIT, assignee_slot: slot, tier: 'B', ...extra });
+      board.ready(b.id);
+      const aid = attempt(b.id, slot, 1.5, false);
+      board.start(b.id, slot);
+      commitOnBranch(repo, branch, { [file]: `// ${branch}\nmodule.exports = 1;\n` });
+      board.submit(b.id, { branch, actor: slot });
+      return { id: b.id, aid };
+    };
+    // 1) fake-1: a real done (submit -> verify -> approve -> merged to main)
+    const A = work('real work', 'fake-1', 'real-a', 'ra.js');
+    await waitFor(() => board.raw(A.id).status === 'review');
+    board.db.prepare('UPDATE attempts SET ended_at = ? WHERE id = ?').run(new Date().toISOString(), A.aid);
+    board.approve(A.id);
+    sh(repo, 'git merge -q --no-ff real-a -m "merge real-a"');
+    assert.strictEqual(board.checkMerged(A.id).done, true);
+    // 2) fake-2: an attempt that got rejected (failure, costs $2)
+    const B = work('rejected work', 'fake-2', 'rej-b', 'rb.js');
+    await waitFor(() => board.raw(B.id).status === 'review');
+    board.db.prepare('UPDATE attempts SET ended_at = ?, cost_usd = 2 WHERE id = ?').run(new Date().toISOString(), B.aid);
+    board.reject(B.id, 'wrong');
+    // 3) fake-2: approved but never merged: pending, earns nothing, not a failure yet
+    const C = work('approved not merged', 'fake-2', 'nm-c', 'nc.js');
+    await waitFor(() => board.raw(C.id).status === 'review');
+    board.db.prepare('UPDATE attempts SET ended_at = ?, cost_usd = 0.25 WHERE id = ?').run(new Date().toISOString(), C.aid);
+    board.approve(C.id);
+    // 4) faked: a bounty forced to done by SQL (no verified path) and a legacy "done" naming fake-2
+    const F = board.create({ title: 'faked', project: 'scratch', criteria: CRIT, tier: 'S' });
+    board.db.prepare("UPDATE bounties SET status='done', done_at=?, claimed_by='fake-2', work_evidence='trust me, long evidence string that used to pass the old reviewer' WHERE id=?").run(new Date().toISOString(), F.id);
+    board.db.prepare(`INSERT OR IGNORE INTO projects (id, name, repo) VALUES ('legacy', 'Legacy', '')`).run();
+    board.db.prepare(`INSERT INTO bounties (project_id, title, type, tier, status, done_at, claimed_by, verified_by, commits, credited_slot, reward)
+      VALUES ('legacy', 'old', 'task', 'S', 'done', ?, 'fake-2', 'merge-check', '["abc"]', 'fake-2', 5000)`).run(new Date().toISOString());
+    // stored counters are not trusted
+    board.db.prepare("UPDATE agents SET total_loot = 999999, missions_completed = 99 WHERE id = 'fake-2'").run();
+
+    const lb = Object.fromEntries((await call('GET', '/agents/leaderboard')).data.map(a => [a.id, a]));
+    assert.deepStrictEqual(Object.keys(lb).sort(), ['fake-1', 'fake-2']);
+    const expA = lootFor(rewardFor('task', 'B'), true, 0);
+    assert.strictEqual(expA, Math.floor(750 * BONUSES.FIRST_TRY_MULT));
+    assert.strictEqual(lb['fake-1'].total_loot, expA);
+    assert.strictEqual(lb['fake-1'].missions_completed, 1);
+    assert.strictEqual(lb['fake-1'].missions_failed, 0);
+    assert.strictEqual(lb['fake-1'].streak, 1);
+    assert.strictEqual(lb['fake-1'].cost_usd, 1.5);
+    assert.strictEqual(board.raw(A.id).credited_slot, 'fake-1');
+    assert.strictEqual(board.raw(A.id).credited_attempt, A.aid);
+    assert.strictEqual(lb['fake-2'].total_loot, 0, 'no loot from rejected, unmerged, faked or legacy work');
+    assert.strictEqual(lb['fake-2'].missions_completed, 0);
+    assert.strictEqual(lb['fake-2'].missions_failed, 1, 'the rejected attempt is a failure; the approved-unmerged one is pending');
+    assert.strictEqual(lb['fake-2'].cost_usd, 2.25);
+    const st = (await call('GET', '/state')).data;
+    assert.strictEqual(st.stats.total_loot_earned, expA);
+    assert.strictEqual(st.slots.find(s => s.id === 'fake-1').record.total_loot, expA);
+    assert.strictEqual(st.slots.find(s => s.id === 'fake-2').record.cost_usd, 2.25);
+
+    // the agents table's counters are rebuilt from history and match the derived ledger
+    board.rebuildAgents();
+    const led = board.ledger().slots;
+    for (const s of led) {
+      const row = board.db.prepare('SELECT * FROM agents WHERE id = ?').get(s.id);
+      for (const k of ['total_loot', 'level', 'missions_completed', 'missions_failed', 'streak']) assert.strictEqual(row[k], s[k], `${s.id}.${k}`);
+      assert.ok(Math.abs(row.cost_usd - s.cost_usd) < 1e-9);
+    }
+    // a failure resets the streak and costs half the base reward; a second done on a streak pays the bonus
+    const D = work('second real', 'fake-1', 'real-d', 'rd.js', { tier: 'C' });
+    await waitFor(() => board.raw(D.id).status === 'review');
+    board.db.prepare('UPDATE attempts SET ended_at = ? WHERE id = ?').run(new Date().toISOString(), D.aid);
+    board.approve(D.id);
+    sh(repo, 'git merge -q --no-ff real-d -m "merge real-d"');
+    const r = board.checkMerged(D.id);
+    assert.strictEqual(r.reward, lootFor(rewardFor('task', 'C'), true, 1));
+    assert.strictEqual(board.slotStats('fake-1').total_loot, expA + r.reward);
+    assert.strictEqual(board.db.prepare("SELECT total_loot FROM agents WHERE id='fake-1'").get().total_loot, expA + r.reward);
+  } finally { await t.s.close(); }
+});
+
+test('agents API: only configured slots exist; any other id is refused', async () => {
+  const t = await startBoard('agentsapi', { dispatch: false });
+  try {
+    const { call, board } = t;
+    assert.deepStrictEqual((await call('GET', '/agents')).data.map(a => a.id).sort(), ['fake-1', 'fake-2']);
+    for (const id of ['agent-gpt-4', 'opus-wsl-1', 'Opus-Conductor', 'made-up']) {
+      const r = await call('POST', '/agents', { id });
+      assert.strictEqual(r.status, 403, id); assert.match(r.data.error, /not a configured slot/);
+      assert.strictEqual((await call('GET', `/agents/${id}`)).status, 404);
+      assert.throws(() => board.registerAgent(id), /not a configured slot/);
+    }
+    assert.strictEqual((await call('POST', '/agents', {})).status, 400);
+    const ok = await call('POST', '/agents', { id: 'fake-1' });
+    assert.strictEqual(ok.status, 200); assert.strictEqual(ok.data.id, 'fake-1'); assert.strictEqual(ok.data.total_loot, 0);
+    const one = await call('GET', '/agents/fake-2');
+    assert.strictEqual(one.status, 200); assert.strictEqual(one.data.total_loot, 0); assert.strictEqual(one.data.cost_usd, 0);
+    assert.strictEqual(board.db.prepare('SELECT COUNT(*) c FROM agents').get().c, 2);
+    // a worker actor that is not a slot gets no agent row by starting work either
+    const b = board.create({ title: 'x', project: 'scratch', criteria: CRIT });
+    board.ready(b.id); board.start(b.id, 'rogue-agent');
+    assert.strictEqual(board.db.prepare('SELECT COUNT(*) c FROM agents').get().c, 2);
+  } finally { await t.s.close(); }
+});
+
+test('close-merged: commits a slot submitted and the orchestrator merged credit that slot', async () => {
+  const t = await startBoard('closemerged-slot', { dispatch: false });
+  try {
+    const { board, repo } = t;
+    const b = board.create({ title: 'slot work', project: 'scratch', criteria: CRIT, assignee_slot: 'fake-2' });
+    board.ready(b.id); board.start(b.id, 'fake-2');
+    commitOnBranch(repo, 'slot-br', { 'sb.js': 'module.exports = 3;\n' });
+    board.submit(b.id, { branch: 'slot-br', actor: 'fake-2' });
+    await waitFor(() => board.raw(b.id).ci_status !== 'running');
+    sh(repo, 'git merge -q --no-ff slot-br -m "merge slot-br"');
+    const sha = sh(repo, 'git rev-parse slot-br').trim();
+    const r = board.closeMerged(b.id, { commits: [sha], evidence: 'merged by hand' });
+    assert.strictEqual(r.credited, 'fake-2');
+    assert.ok(r.reward > 0);
+    assert.strictEqual(board.slotStats('fake-2').total_loot, r.reward);
+    assert.strictEqual(board.slotStats('fake-1').total_loot, 0);
   } finally { await t.s.close(); }
 });

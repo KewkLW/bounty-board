@@ -160,17 +160,18 @@ async function loadRoster() {
       <div class="p-4 space-y-4">
         <div>
           <h3 class="text-2xl font-black uppercase text-white tracking-tight">${a.name} <span class="text-primary text-sm font-mono ml-1">Lv.${a.level}</span></h3>
-          <span class="text-xs text-gray-500 font-mono">Class: ${a.class} // ${a.total_loot.toLocaleString()} XP</span>
+          <span class="text-xs text-gray-500 font-mono">Class: ${a.class} // ${a.total_loot.toLocaleString()} loot (verified work)</span>
           <div class="h-1 w-full bg-gray-700 mt-2"><div class="h-full ${accent}" style="width:${rate}%"></div></div>
         </div>
         <div class="bg-black/40 border border-white/10 p-3">
           <p class="text-xs text-gray-400 uppercase font-bold mb-1">Current Directive:</p>
           <p class="text-sm font-bold ${a.status === 'repairing' ? 'text-orange-400' : 'text-white'} leading-tight">${directive}</p>
         </div>
-        <div class="grid grid-cols-3 gap-2 text-center">
+        <div class="grid grid-cols-4 gap-2 text-center">
           <div class="bg-black/30 p-1 rounded"><span class="text-[10px] text-gray-500 block">Done</span><span class="text-sm font-bold text-green-400">${a.missions_completed}</span></div>
           <div class="bg-black/30 p-1 rounded"><span class="text-[10px] text-gray-500 block">Failed</span><span class="text-sm font-bold text-red-400">${a.missions_failed}</span></div>
           <div class="bg-black/30 p-1 rounded"><span class="text-[10px] text-gray-500 block">Streak</span><span class="text-sm font-bold text-primary">${a.streak}x</span></div>
+          <div class="bg-black/30 p-1 rounded"><span class="text-[10px] text-gray-500 block">Cost</span><span class="text-sm font-bold text-white">$${Number(a.cost_usd || 0).toFixed(2)}</span></div>
         </div>
         ${actionButton(a)}
       </div>

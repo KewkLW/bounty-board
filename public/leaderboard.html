@@ -84,6 +84,7 @@ tailwind.config = {
 </div>
 
 <script>
+const money = v => '$' + Number(v || 0).toFixed(2);
 async function loadLeaderboard() {
   const agents = await fetch('/api/agents/leaderboard').then(r => r.json());
   const container = document.getElementById('leaderboard');
@@ -112,7 +113,7 @@ async function loadLeaderboard() {
               <span class="bg-zinc-800 text-primary px-2 py-0.5 text-xs font-mono border border-primary/30 rounded">Class: ${a.class}</span>
               <span class="${statusColor} text-xs font-bold uppercase">&#9679; ${a.status}</span>
             </div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
               <div class="bg-black/40 p-3 rounded border border-zinc-700">
                 <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Total Loot</span>
                 <div class="flex items-center gap-2"><span class="material-icons text-primary animate-bounce">diamond</span><span class="text-2xl font-mono text-white font-bold">${a.total_loot.toLocaleString()}</span></div>
@@ -125,8 +126,12 @@ async function loadLeaderboard() {
                 </div>
               </div>
               <div class="bg-black/40 p-3 rounded border border-zinc-700">
-                <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Missions</span>
-                <span class="text-xl font-mono text-white font-bold">${a.missions_completed}</span>
+                <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Done / Failed</span>
+                <span class="text-xl font-mono text-white font-bold">${a.missions_completed}</span><span class="text-xl font-mono text-red-400 font-bold"> / ${a.missions_failed}</span>
+              </div>
+              <div class="bg-black/40 p-3 rounded border border-zinc-700">
+                <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Cost</span>
+                <span class="text-xl font-mono text-white font-bold">${money(a.cost_usd)}</span>
               </div>
               <div class="bg-black/40 p-3 rounded border border-zinc-700">
                 <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Streak</span>
@@ -151,6 +156,7 @@ async function loadLeaderboard() {
           <div class="md:col-span-4 text-center md:text-left">
             <h3 class="text-2xl font-bold text-white uppercase italic">${a.name}</h3>
             <span class="text-xs text-gray-400 font-mono">Class: ${a.class} // Level ${a.level} // <span class="${statusColor}">${a.status}</span></span>
+            <span class="block text-xs text-gray-400 font-mono">${a.missions_completed} done · ${a.missions_failed} failed · ${money(a.cost_usd)} spent</span>
           </div>
           <div class="md:col-span-3 flex items-center justify-center md:justify-start gap-2 bg-black/20 p-2 rounded">
             <span class="material-icons text-yellow-400 text-sm">savings</span>
@@ -172,7 +178,7 @@ async function loadLeaderboard() {
       <div class="w-8 flex justify-center font-mono text-gray-500 font-bold">#${rank}</div>
       <div class="w-10 h-10 rounded border border-black bg-zinc-700 overflow-hidden flex items-center justify-center"><img src="${a.avatar_url}" alt="${a.name}" class="w-full h-full object-cover"/></div>
       <div class="flex-grow w-full grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-        <div class="md:col-span-4"><h3 class="text-lg font-bold text-gray-200 uppercase">${a.name}</h3><span class="text-[10px] text-gray-500 font-mono"><span class="${statusColor}">&#9679;</span> ${a.status}</span></div>
+        <div class="md:col-span-4"><h3 class="text-lg font-bold text-gray-200 uppercase">${a.name}</h3><span class="text-[10px] text-gray-500 font-mono"><span class="${statusColor}">&#9679;</span> ${a.status} · ${a.missions_completed} done · ${a.missions_failed} failed · ${money(a.cost_usd)} spent</span></div>
         <div class="md:col-span-3 flex items-center gap-2"><span class="text-lg font-mono text-gray-300">${a.total_loot.toLocaleString()}</span><span class="text-[10px] text-gray-600 uppercase">Loot</span></div>
         <div class="md:col-span-4"><div class="flex items-center gap-2 w-full"><span class="text-xs font-bold text-gray-500 w-8 text-right">${a.success_rate}%</span><div class="flex-grow bg-zinc-900 h-2 rounded-full border border-zinc-700"><div class="h-full bg-zinc-500" style="width:${a.success_rate}%"></div></div></div></div>
         <div class="md:col-span-1 text-center font-mono text-gray-500 text-sm">${a.streak}x</div>

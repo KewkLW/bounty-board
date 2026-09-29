@@ -43,7 +43,7 @@ pre { white-space: pre-wrap; word-break: break-word; }
   </div>
   <div class="flex flex-wrap gap-2 md:gap-4 text-sm">
     <div class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">WORKERS</span><span id="st-workers" class="font-hand">--</span></div>
-    <a href="/leaderboard" class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">LOOT</span><span id="st-loot" class="font-hand text-warning">--</span></a>
+    <a href="/leaderboard" title="Loot the slots earned from verified dones (merged to main); legacy excluded" class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">LOOT</span><span id="st-loot" class="font-hand text-warning">--</span></a>
     <div class="bg-danger/10 px-3 py-1 cel border-danger"><span class="text-danger text-[10px] block font-bold">OPEN BUGS</span><span id="st-bugs" class="font-hand text-danger hazard">--</span></div>
     <div class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">SPENT</span><span id="st-cost" class="font-hand">--</span></div>
   </div>
@@ -239,6 +239,7 @@ function renderSlots() {
         <div class="text-[10px] text-gray-400 font-mono mt-1">${ago(s.attempt && s.attempt.started_at)} · hb ${ago(s.bounty.heartbeat_at) || '-'} · tok ${((u.tokens_in || 0) + (u.cache_read || 0) + (u.tokens_out || 0)).toLocaleString()}${u.cost_usd != null ? ' · $' + u.cost_usd.toFixed(2) : ''}</div>
         ${s.attempt ? `<a class="text-[10px] text-primary underline" target="_blank" href="/api/attempts/${s.attempt.id}/log">live log</a>` : ''}`
       : `<div class="text-[11px] text-gray-500 mt-1">${s.queued ? `${s.queued} ready queued${s.next ? `: next #${s.next.id}` : ''}` : 'idle (nothing ready)'}</div>`}
+      ${s.record ? `<div class="text-[10px] font-mono mt-1 text-gray-400"><span class="text-warning">$${s.record.total_loot.toLocaleString()}</span> loot · ${s.record.missions_completed} done · ${s.record.missions_failed} failed · $${Number(s.record.cost_usd || 0).toFixed(2)} spent</div>` : ''}
     </div>`;
   }).join('');
   const leases = st.leases.map(l => l.external

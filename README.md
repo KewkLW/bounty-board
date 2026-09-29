@@ -25,7 +25,7 @@ backlog -> ready -> in_progress -> review -> approved -> done
 | review -> approved / ready | the reviewer (Codex, `codex exec -s read-only`) | reads the real diff and the acceptance criteria; returns approve/reject with per-criterion evidence; an approval that does not show every criterion met is overruled to reject. Reject sends the bounty back to ready with the notes for a fresh worker |
 | approved -> done | the merge check (every 60 s, or `bounty done`) | every recorded commit is reachable from main (or main holds the same patch: rebase, cherry-pick or squash merges count) |
 
-Work done off the board (an `external` bounty, e.g. one in flight before the board existed) never goes through submit, so it can't reach approved. When the orchestrator has merged it, `bounty close-merged ID --commit SHA [--commit SHA]... ["evidence"]` (API `POST /api/bounties/:id/close-merged {commits, evidence}`) takes it to done from any open status: every commit must exist in the project repo and be an ancestor of main (it is refused otherwise, and refused while the bounty has a live board worker or a verify running). The full SHAs join the bounty's commits, the evidence goes to `work_evidence`, and the done event records `close-merged by <actor>: <shas> on main` plus the evidence. Loot is paid as for any done. Orchestrator only.
+Work done off the board (an `external` bounty, e.g. one in flight before the board existed) never goes through submit, so it can't reach approved. When the orchestrator has merged it, `bounty close-merged ID --commit SHA [--commit SHA]... ["evidence"]` (API `POST /api/bounties/:id/close-merged {commits, evidence}`) takes it to done from any open status: every commit must exist in the project repo and be an ancestor of main (it is refused otherwise, and refused while the bounty has a live board worker or a verify running). The full SHAs join the bounty's commits, the evidence goes to `work_evidence`, and the done event records `close-merged by <actor>: <shas> on main` plus the evidence. Loot goes to a slot only if that slot's board attempt submitted commits that are on main; otherwise no one is credited. Orchestrator only.
 
 `review`, `approved` and `done` are guarded edges: no request can set them directly. Workers (requests carrying a slot id) can't ready, assign, approve, reject, fail, pause or mark done.
 
@@ -81,10 +81,24 @@ Without `--project`, `bounty add` uses `default_project` from `config/board.json
 
 Projects are generic (`bounty project add ID --repo PATH --main main --wt-cmd CMD --wt-path TPL --verify CMD`); `tribulation` is seeded.
 
-## Loot, levels, streaks
+## Agents = the configured slots
 
-Kept from the original board. Reward by type and tier (bug S/A/B/C = 5000/2500/1000/250, other types 5000/2000/750/150), x1.25 when done on the first try, x(1 + 0.1 per streak) capped at x2. A failed attempt (reject, verify failure, watchdog block) resets the streak and costs half the reward. Loot is paid when the bounty is done (merged), to the slot that did the work. Tier names: bug = Kill Order / Wanted: Dead / Bounty Posted / Pest Control; task = Black Ops / Merc Contract / Salvage Run / Scrap Work.
+The only agents are the dispatcher slots in `config/board.json` (`opus-1..4`, `sonnet-tester`, `codex-1..2`). At every start the board runs a re-runnable migration that deletes every other agent row (the Feb-2026 crew such as `opus-wsl-1` or `agent-codex-1`, and the seed/mock agents) together with its `agent_status` / `agent_events` rows; old bounties keep those names as plain text in `claimed_by`. An agent row can only be created for a configured slot: `POST /api/agents {id}` and `board.registerAgent` refuse any other id (403), and `GET /api/agents/<non-slot>` is a 404.
+
+## Loot, levels, streaks: derived from verified work
+
+Nothing on the leaderboard is a stored counter. `board.ledger()` replays history:
+
+- **Done**: a slot earns a bounty's reward only when the bounty reached done through the merge check or `close-merged` (commits on the project's main). The credit goes to the slot whose attempt produced the work: the slot that last submitted the branch, and the attempt running at that submit (`bounties.credited_slot` / `credited_attempt`, set when it goes done). `close-merged` credits a slot only if the commits that slot submitted are on main; work done off the board (an external bounty with no slot submit) credits nobody.
+- **Failure**: every other finished worker attempt of a slot (rejected, verify failed, blocked by the watchdog, exited without submit) resets the streak and costs half the base reward. The latest attempt of a bounty still in the gates, review or approved is pending, not a failure.
+- **Reward**: by type and tier (bug S/A/B/C = 5000/2500/1000/250, other types 5000/2000/750/150), x1.25 when done on the first try, x(1 + 0.1 per streak) capped at x2.
+- **Cost**: the real $ from the slot's attempts (Claude's result event; Codex reports tokens only).
+- The `legacy` project never counts. Header stats (`/api/state` stats, `bounty status`) leave legacy out: status counts, loot = the slots' derived loot, spent.
+
+The `agents` table's counters are only a cache, rebuilt from the ledger on every bounty change and at start (a test checks they match). `/api/agents`, `/api/agents/leaderboard`, the roster, the leaderboard and the dashboard slot cards show the slots only, with loot, done, failed, streak and cost; a slot with no verified work shows zero. CLI: `bounty leaderboard`.
+
+Tier names: bug = Kill Order / Wanted: Dead / Bounty Posted / Pest Control; task = Black Ops / Merc Contract / Salvage Run / Scrap Work.
 
 ## History
 
-The February 2026 board broke because agents faked work (appending to WORK_LOG.md) and the old reviewer approved any evidence string longer than 50 characters. Its 57 bounties and the agents' loot are kept under the `legacy` project (tick "legacy" on the dashboard). The gates above exist so that cannot happen again.
+The February 2026 board broke because agents faked work (appending to WORK_LOG.md) and the old reviewer approved any evidence string longer than 50 characters. Its 57 bounties are kept under the `legacy` project (tick "legacy" on the dashboard) with their old agent names as text; its agents and their inflated loot were deleted (September 2026), and legacy work never counts toward loot. The gates above exist so that cannot happen again.
