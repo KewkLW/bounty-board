@@ -1,0 +1,77 @@
+# Wasteland Bounty Board
+
+The single accountability system for every agent. Work that is not marked done on this board is a known gap.
+Workers are spawned by the board, one fresh agent per bounty, and a bounty only reaches **done** when its commits are on the project's main branch.
+
+- Dashboard: `http://<tailscale-ip>:3777/` (kanban, slots, locks, pause switch, add/edit/assign), `/roster`, `/leaderboard`
+- CLI: `bounty help` (`~/.local/bin/bounty` -> `bin/bounty`)
+- Service: `systemctl --user status bounty-board` (unit in `systemd/`, log `logs/server.log`)
+- Tests: `npm test`
+
+Only loopback and Tailscale addresses (100.64.0.0/10) may connect (`allow_cidrs` in `config/board.json`).
+
+## Lifecycle
+
+```
+backlog -> ready -> in_progress -> review -> approved -> done
+             plus blocked (with a reason) and failed
+```
+
+| Step | Who | What the board checks |
+|---|---|---|
+| backlog -> ready | orchestrator (`bounty ready`, UI) | a project, and at least one acceptance criterion |
+| ready -> in_progress | the worker (`bounty start`) | the dispatcher spawned it for the assigned slot |
+| in_progress -> review | `bounty submit`, then the gates | the branch exists; its diff against main is not empty; the diff is not only notes/logs/WORK_LOG (docs and research bounties may be docs-only); the project verify command passes on the branch tip (result and log stored) |
+| review -> approved / ready | the reviewer (Codex, `codex exec -s read-only`) | reads the real diff and the acceptance criteria; returns approve/reject with per-criterion evidence; an approval that does not show every criterion met is overruled to reject. Reject sends the bounty back to ready with the notes for a fresh worker |
+| approved -> done | the merge check (every 60 s, or `bounty done`) | every recorded commit is reachable from main (or main holds the same patch: rebase, cherry-pick or squash merges count) |
+
+`review`, `approved` and `done` are guarded edges: no request can set them directly. Workers (requests carrying a slot id) can't ready, assign, approve, reject, fail, pause or mark done.
+
+## Dispatcher
+
+- Slots in `config/board.json`: `opus-1..4` (claude, opus), `sonnet-tester` (claude, sonnet, effort low), `codex-1..2` (`codex exec`), each with model and effort, plus a global `concurrency_cap`.
+- When a slot has no live worker and a `ready` bounty is assigned to it (dependencies done), the board creates the worktree with the project's command (Tribulation: `Scripts/wt.sh <task>`, which sets up the code/content split) and spawns one fresh worker. When the worker exits, the slot takes its next ready bounty; with none, it idles.
+- Claude workers run `claude -p --output-format stream-json --verbose --model ... --effort ... --allowedTools ...`; Codex workers `codex exec --json`. The prompt (saved next to the log) holds the bounty, criteria, notes from earlier attempts, the project rule docs and the CLI protocol. Every attempt's log, exit code, tokens and cost ($ from Claude's result event; Codex reports tokens only) are stored and linked from the bounty.
+- Watchdog: a worker silent for `watchdog.stall_minutes` (log output, heartbeats and `bounty progress` all count) is killed and the bounty blocked with the reason; a worker that exits without submitting is blocked too. The log stays attached.
+- Retries: `retry.max_attempts`, and after `retry.escalate_after_failures` failures a bounty moves up a model (`escalate_model`, e.g. sonnet -> opus).
+- Pause switch: `bounty pause` / `resume` or the header button. Running workers finish; nothing new spawns.
+- Workers outlive a board restart (`KillMode=process`) and are re-attached when it starts.
+
+## The GPU lease = the UE render lock
+
+For Tribulation, `gpu` is not a board lock: it mirrors the machine-wide UE render flock (`/run/user/$UID/tribulation/ue-render.lock` and its holder file, from `Scripts/lib/ue-render-lock.sh`). One rendered UE instance at a time; workers take it with that script; `bounty lease gpu` and the dashboard show who holds it. Other resources (and projects without an external lock) use the board's own TTL lease table: exclusive, renewable, released on expiry or when the holder's worker dies or its bounty leaves in_progress.
+
+## Worker protocol (the prompt repeats it)
+
+```
+bounty start                       # first
+bounty progress "note" [--check N] # heartbeat, at least every 15 min
+bounty split "title" --desc "..."  # gaps found go to backlog as children
+bounty block "reason"              # stuck: block and exit
+bounty submit                      # commit on the branch first; gates + review follow
+```
+
+## Orchestrator day to day
+
+```
+bounty status                          # slots, locks, counts
+bounty list [--project tribulation] [--status ready,blocked]
+bounty add "Title" --desc "..." --criteria "..." --criteria "..." --type bug --tier B --project tribulation --slot opus-1 [--ready]
+bounty add --file task.md              # "# Title", "## Acceptance criteria" with - [ ] lines
+bounty edit 12 --criteria "..."        # criteria are required before ready
+bounty assign 12 opus-2 && bounty ready 12
+bounty show 12 / bounty log 12         # history, attempts, logs, review notes
+bounty approve 12 | bounty reject 12 "what to fix"
+# merge the approved branch into main yourself; the board marks it done
+bounty import tribulation              # re-runnable; only adds what's new
+```
+
+Projects are generic (`bounty project add ID --repo PATH --main main --wt-cmd CMD --wt-path TPL --verify CMD`); `tribulation` is seeded.
+
+## Loot, levels, streaks
+
+Kept from the original board. Reward by type and tier (bug S/A/B/C = 5000/2500/1000/250, other types 5000/2000/750/150), x1.25 when done on the first try, x(1 + 0.1 per streak) capped at x2. A failed attempt (reject, verify failure, watchdog block) resets the streak and costs half the reward. Loot is paid when the bounty is done (merged), to the slot that did the work. Tier names: bug = Kill Order / Wanted: Dead / Bounty Posted / Pest Control; task = Black Ops / Merc Contract / Salvage Run / Scrap Work.
+
+## History
+
+The February 2026 board broke because agents faked work (appending to WORK_LOG.md) and the old reviewer approved any evidence string longer than 50 characters. Its 57 bounties and the agents' loot are kept under the `legacy` project (tick "legacy" on the dashboard). The gates above exist so that cannot happen again.
