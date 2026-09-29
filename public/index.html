@@ -3,418 +3,358 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Wasteland Command</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com" rel="preconnect"/>
-<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-<link href="https://fonts.googleapis.com/css2?family=Epilogue:ital,wght@0,100..900;1,100..900&family=Permanent+Marker&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@400;700;900&family=Permanent+Marker&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
-<script src="/avatars.js"></script>
 <script>
-tailwind.config = {
-  darkMode: "class",
-  theme: {
-    extend: {
-      colors: {
-        "primary": "#0ddff2",
-        "background-dark": "#102122",
-        "danger": "#ff3e3e",
-        "warning": "#fcd34d",
-        "botched": "#4a4a4a",
-      },
-      fontFamily: {
-        "display": ["Epilogue", "sans-serif"],
-        "hand": ["Permanent Marker", "cursive"],
-      },
-      boxShadow: {
-        'comic': '4px 4px 0px 0px #000000',
-        'comic-hover': '6px 6px 0px 0px #000000',
-        'comic-sm': '2px 2px 0px 0px #000000',
-      },
-    },
-  },
-}
+tailwind.config = { darkMode: "class", theme: { extend: {
+  colors: { primary: "#0ddff2", "background-dark": "#102122", danger: "#ff3e3e", warning: "#fcd34d", botched: "#4a4a4a" },
+  fontFamily: { display: ["Epilogue", "sans-serif"], hand: ["Permanent Marker", "cursive"] },
+  boxShadow: { comic: '4px 4px 0px 0px #000', 'comic-hover': '6px 6px 0px 0px #000', 'comic-sm': '2px 2px 0px 0px #000' },
+} } };
 </script>
 <style>
 body { background-color: #102122; }
-.cel-border { border: 3px solid #111; }
-.cel-border-thick { border: 4px solid #000; }
-.grunge-overlay {
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
-  pointer-events: none;
-}
-@keyframes flicker {
-  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; text-shadow: 0 0 5px #ff3e3e; }
-  20%, 24%, 55% { opacity: 0.5; text-shadow: none; }
-}
-.animate-hazard { animation: flicker 4s infinite; }
-.tilt-1 { transform: rotate(-1deg); }
-.tilt-2 { transform: rotate(1deg); }
-::-webkit-scrollbar { width: 12px; height: 12px; }
-::-webkit-scrollbar-track { background: #102122; border-left: 3px solid #000; }
-::-webkit-scrollbar-thumb { background: #333; border: 2px solid #000; }
-::-webkit-scrollbar-thumb:hover { background: #0ddff2; }
-.clip-tech { clip-path: polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%); }
-.bg-stripes { background: repeating-linear-gradient(45deg, #000 0, #000 10px, #ff3e3e 10px, #ff3e3e 20px); }
+.cel { border: 3px solid #111; }
+.grunge { background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E"); pointer-events: none; }
+@keyframes flicker { 0%,19%,21%,23%,25%,54%,56%,100% { opacity: 1; } 20%,24%,55% { opacity: .5; } }
+.hazard { animation: flicker 4s infinite; }
+.stripes { background: repeating-linear-gradient(45deg, #000 0, #000 10px, #ff3e3e 10px, #ff3e3e 20px); }
+.stripes-y { background: repeating-linear-gradient(45deg, #000 0, #000 10px, #fcd34d 10px, #fcd34d 20px); }
+.clip-tech { clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%); }
+::-webkit-scrollbar { width: 10px; height: 10px; } ::-webkit-scrollbar-track { background: #102122; } ::-webkit-scrollbar-thumb { background: #333; border: 2px solid #000; }
+.col { min-width: 270px; width: 270px; }
+@media (max-width: 767px) { .col { min-width: 100%; width: 100%; } .col:not(.active-col) { display: none; } }
+.card { cursor: pointer; }
+input, select, textarea { background: #000 !important; color: #fff !important; border: 2px solid #333 !important; }
+pre { white-space: pre-wrap; word-break: break-word; }
 </style>
 </head>
-<body class="bg-background-dark min-h-screen text-white font-display overflow-hidden flex flex-col relative selection:bg-primary selection:text-black">
-<div class="grunge-overlay absolute inset-0 z-50 mix-blend-overlay"></div>
+<body class="bg-background-dark min-h-screen text-white font-display flex flex-col">
+<div class="grunge fixed inset-0 z-50 mix-blend-overlay"></div>
 
-<!-- Header -->
-<header class="relative z-10 w-full px-6 py-4 flex items-center justify-between bg-background-dark border-b-4 border-black shadow-comic h-20">
-  <div class="flex items-center gap-4">
-    <div class="bg-primary p-2 cel-border transform -rotate-2">
-      <span class="material-icons text-black text-3xl font-bold">terminal</span>
-    </div>
+<header class="relative z-10 px-3 md:px-6 py-3 flex flex-wrap items-center gap-3 justify-between border-b-4 border-black shadow-comic">
+  <div class="flex items-center gap-3">
+    <div class="bg-primary p-1.5 cel -rotate-2"><span class="material-icons text-black text-2xl">terminal</span></div>
     <div>
-      <h1 class="text-3xl font-black uppercase tracking-tighter text-white italic transform skew-x-[-10deg]" style="-webkit-text-stroke: 1px black;">
-        Wasteland <span class="text-primary">Command</span>
-      </h1>
-      <div class="text-xs text-gray-400 font-mono tracking-widest uppercase">System v9.2 // Sector 7</div>
+      <h1 class="text-xl md:text-3xl font-black uppercase tracking-tighter italic -skew-x-6" style="-webkit-text-stroke:1px black">Wasteland <span class="text-primary">Command</span></h1>
+      <div class="text-[10px] text-gray-400 font-mono tracking-widest uppercase">Bounty Board // every agent answers here</div>
     </div>
   </div>
-  <div class="hidden md:flex gap-6">
-    <div class="flex items-center gap-3 bg-black/40 px-4 py-2 cel-border rounded skew-x-[-10deg]">
-      <div class="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_10px_#0ddff2]"></div>
-      <div class="transform skew-x-[10deg]">
-        <span class="text-gray-400 text-xs block font-bold">ACTIVE AGENTS</span>
-        <span id="stat-agents" class="text-xl font-hand text-white">--/--</span>
-      </div>
-    </div>
-    <a href="/leaderboard" class="flex items-center gap-3 bg-black/40 px-4 py-2 cel-border rounded skew-x-[-10deg] hover:bg-primary/10 transition-colors cursor-pointer">
-      <span class="material-icons text-warning text-sm">emoji_events</span>
-      <div class="transform skew-x-[10deg]">
-        <span class="text-gray-400 text-xs block font-bold">TOTAL LOOT</span>
-        <span id="stat-loot" class="text-xl font-hand text-warning">$--</span>
-      </div>
-    </a>
-    <div class="flex items-center gap-3 bg-danger/10 px-4 py-2 cel-border border-danger rounded skew-x-[-10deg]">
-      <span class="material-icons text-danger animate-hazard text-sm">warning</span>
-      <div class="transform skew-x-[10deg]">
-        <span class="text-danger text-xs block font-bold">CRITICAL BUGS</span>
-        <span id="stat-bugs" class="text-xl font-hand text-danger animate-hazard">--</span>
-      </div>
-    </div>
+  <div class="flex flex-wrap gap-2 md:gap-4 text-sm">
+    <div class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">WORKERS</span><span id="st-workers" class="font-hand">--</span></div>
+    <a href="/leaderboard" class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">LOOT</span><span id="st-loot" class="font-hand text-warning">--</span></a>
+    <div class="bg-danger/10 px-3 py-1 cel border-danger"><span class="text-danger text-[10px] block font-bold">OPEN BUGS</span><span id="st-bugs" class="font-hand text-danger hazard">--</span></div>
+    <div class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">SPENT</span><span id="st-cost" class="font-hand">--</span></div>
   </div>
-  <div class="flex items-center gap-4">
-    <button onclick="showNewBountyModal()" class="bg-primary hover:bg-white text-black font-bold py-2 px-6 cel-border shadow-comic hover:shadow-comic-hover transition-all transform hover:-translate-y-1 uppercase tracking-wider text-sm clip-tech">
-      New Bounty
-    </button>
+  <div class="flex gap-2">
+    <button id="pauseBtn" onclick="togglePause()" class="font-bold py-2 px-3 cel shadow-comic uppercase text-xs">...</button>
+    <button onclick="openNew()" class="bg-primary hover:bg-white text-black font-bold py-2 px-4 cel shadow-comic uppercase text-xs clip-tech">+ New Bounty</button>
   </div>
 </header>
+<div id="pausedBanner" class="hidden stripes-y h-2"></div>
 
-<!-- Filter Bar -->
-<div class="relative z-10 px-6 py-3 flex gap-3 border-b-2 border-black/50 bg-background-dark/80">
-  <button onclick="setFilter('all')" class="filter-btn active text-xs font-bold uppercase px-3 py-1 cel-border bg-primary text-black" data-filter="all">All Bounties</button>
-  <button onclick="setFilter('bug')" class="filter-btn text-xs font-bold uppercase px-3 py-1 cel-border bg-gray-800 text-danger hover:bg-danger/20" data-filter="bug">Bug Hunts</button>
-  <button onclick="setFilter('task')" class="filter-btn text-xs font-bold uppercase px-3 py-1 cel-border bg-gray-800 text-primary hover:bg-primary/20" data-filter="task">Contracts</button>
+<!-- Slots -->
+<section class="relative z-10 px-3 md:px-6 pt-3">
+  <div id="slots" class="flex gap-3 overflow-x-auto pb-2"></div>
+</section>
+
+<!-- Filters -->
+<div class="relative z-10 px-3 md:px-6 py-2 flex flex-wrap gap-2 items-center border-b-2 border-black/50">
+  <select id="f-project" class="text-xs p-1 cel" onchange="render()"></select>
+  <select id="f-slot" class="text-xs p-1 cel" onchange="render()"></select>
+  <select id="f-type" class="text-xs p-1 cel" onchange="render()">
+    <option value="">all types</option><option>task</option><option>bug</option><option>test</option><option>research</option><option>art</option><option>docs</option>
+  </select>
+  <input id="f-q" placeholder="search..." class="text-xs p-1 cel w-40" oninput="render()"/>
+  <label class="text-xs text-gray-400 flex items-center gap-1"><input type="checkbox" id="f-legacy" onchange="render()"/> legacy</label>
+  <div id="tabs" class="flex md:hidden gap-1 overflow-x-auto w-full pt-1"></div>
 </div>
 
-<!-- Main Kanban -->
-<main class="relative z-10 flex-1 overflow-x-auto overflow-y-hidden p-6">
-  <div class="flex h-full gap-6 min-w-[1200px]">
-    <!-- WANTED (Pending) -->
-    <div class="flex-1 flex flex-col min-w-[280px] h-full">
-      <div class="mb-4 relative">
-        <div class="absolute -top-3 -left-2 bg-primary text-black font-bold px-2 py-0.5 text-xs cel-border transform -rotate-3 z-20 shadow-sm">DEV_QUEUE</div>
-        <div class="bg-[#1a2e30] p-4 cel-border shadow-comic border-t-[6px] border-t-primary">
-          <h2 class="text-xl font-black text-primary tracking-wide uppercase flex justify-between items-center">
-            Wanted <span id="count-pending" class="bg-primary/20 text-primary text-xs px-2 py-1 rounded font-mono">0</span>
-          </h2>
-        </div>
-      </div>
-      <div id="col-pending" class="flex-1 overflow-y-auto pr-2 space-y-4 pb-4"></div>
-    </div>
-
-    <!-- BUG TRACKER (Pending Bugs) -->
-    <div class="flex-1 flex flex-col min-w-[280px] h-full relative">
-      <div class="mb-4 relative z-10">
-        <div class="bg-stripes h-2 w-full border-x-4 border-t-4 border-black"></div>
-        <div class="bg-[#2a1515] p-4 border-x-4 border-b-4 border-black shadow-comic">
-          <h2 class="text-xl font-black text-danger tracking-wide uppercase flex justify-between items-center animate-hazard">
-            <span class="flex items-center gap-2"><span class="material-icons">bug_report</span> Bug Tracker</span>
-            <span id="count-bugs" class="bg-danger/20 text-danger border border-danger text-xs px-2 py-1 font-mono">0</span>
-          </h2>
-        </div>
-      </div>
-      <div id="col-bugs" class="flex-1 overflow-y-auto pr-2 space-y-4 pb-4 z-10"></div>
-    </div>
-
-    <!-- IN PROGRESS -->
-    <div class="flex-1 flex flex-col min-w-[280px] h-full">
-      <div class="mb-4 relative">
-        <div class="bg-[#262626] p-4 cel-border shadow-comic border-b-4 border-b-gray-400">
-          <h2 class="text-xl font-black text-gray-200 tracking-wide uppercase flex justify-between items-center">
-            Hunting <span class="material-icons text-gray-500 animate-spin" style="animation-duration: 3s;">settings</span>
-          </h2>
-        </div>
-      </div>
-      <div id="col-progress" class="flex-1 overflow-y-auto pr-2 space-y-4 pb-4"></div>
-    </div>
-
-    <!-- FRAGGED (Done) -->
-    <div class="flex-1 flex flex-col min-w-[280px] h-full">
-      <div class="mb-4 relative">
-        <div class="bg-[#1a2e1a] p-4 cel-border shadow-comic border-t-[6px] border-t-green-600">
-          <h2 class="text-xl font-black text-green-400 tracking-wide uppercase flex justify-between items-center">
-            Fragged <span id="count-done" class="bg-green-400/20 text-green-400 text-xs px-2 py-1 rounded font-mono">0</span>
-          </h2>
-        </div>
-      </div>
-      <div id="col-done" class="flex-1 overflow-y-auto pr-2 space-y-4 pb-4 opacity-80 hover:opacity-100 transition-opacity"></div>
-    </div>
-
-    <!-- BOTCHED (Failed) -->
-    <div class="flex-1 flex flex-col min-w-[280px] h-full">
-      <div class="mb-4 relative">
-        <div class="bg-botched p-4 cel-border shadow-comic relative overflow-hidden">
-          <div class="absolute inset-0 bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,#000_5px,#000_10px)] opacity-10"></div>
-          <h2 class="text-xl font-black text-gray-400 tracking-wide uppercase flex justify-between items-center line-through decoration-4 decoration-black">
-            Botched <span class="material-icons text-gray-600">block</span>
-          </h2>
-        </div>
-      </div>
-      <div id="col-failed" class="flex-1 overflow-y-auto pr-2 space-y-4 pb-4"></div>
-    </div>
-  </div>
+<main class="relative z-10 flex-1 overflow-x-auto p-3 md:p-6 pb-28">
+  <div id="board" class="flex gap-4 items-start"></div>
 </main>
 
-<!-- Bottom Nav -->
-<div class="fixed bottom-0 left-0 w-full z-50 px-4 pb-4">
-  <div class="container mx-auto max-w-4xl">
-    <div class="bg-gray-900 cel-border shadow-comic p-2 flex items-center justify-center gap-2 md:gap-4 relative">
-      <a href="/" class="flex-1 bg-primary text-black border-2 border-black p-3 md:p-4 shadow-[inset_0_0_20px_rgba(255,255,255,0.4)] relative -mt-4 transform scale-110 z-10">
-        <div class="flex flex-col items-center justify-center">
-          <span class="material-icons text-3xl">dashboard</span>
-          <span class="text-xs uppercase font-black mt-1 tracking-widest hidden md:block">Board</span>
-        </div>
-      </a>
-      <a href="/roster" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 border-2 border-black p-3 md:p-4 transition-all group">
-        <div class="flex flex-col items-center justify-center">
-          <span class="material-icons text-2xl group-hover:text-white">people_alt</span>
-          <span class="text-[10px] uppercase font-bold mt-1 tracking-widest hidden md:block">Roster</span>
-        </div>
-      </a>
-      <a href="/leaderboard" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 border-2 border-black p-3 md:p-4 transition-all group">
-        <div class="flex flex-col items-center justify-center">
-          <span class="material-icons text-2xl group-hover:text-white">emoji_events</span>
-          <span class="text-[10px] uppercase font-bold mt-1 tracking-widest hidden md:block">Leaderboard</span>
-        </div>
-      </a>
-    </div>
+<!-- Bottom nav -->
+<nav class="fixed bottom-0 left-0 w-full z-40 px-3 pb-3">
+  <div class="mx-auto max-w-md bg-gray-900 cel shadow-comic p-1.5 flex gap-2">
+    <a href="/" class="flex-1 bg-primary text-black border-2 border-black p-2 text-center"><span class="material-icons">dashboard</span></a>
+    <a href="/roster" class="flex-1 bg-gray-800 text-gray-300 border-2 border-black p-2 text-center"><span class="material-icons">people_alt</span></a>
+    <a href="/leaderboard" class="flex-1 bg-gray-800 text-gray-300 border-2 border-black p-2 text-center"><span class="material-icons">emoji_events</span></a>
   </div>
+</nav>
+
+<!-- Detail / edit drawer -->
+<div id="drawer" class="fixed inset-0 z-[100] hidden bg-black/80 overflow-y-auto">
+  <div class="bg-[#1a2e30] cel shadow-comic w-full max-w-3xl mx-auto md:my-8 min-h-full md:min-h-0 p-4 md:p-6" id="drawerBody"></div>
 </div>
 
-<!-- New Bounty Modal -->
-<div id="modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/80">
-  <div class="bg-[#1a2e30] cel-border-thick shadow-comic p-6 w-full max-w-md">
-    <h2 class="text-2xl font-black text-primary uppercase mb-4">Post New Bounty</h2>
-    <form id="bountyForm" class="space-y-4">
-      <div>
-        <label class="text-xs text-gray-400 uppercase font-bold">Title</label>
-        <input id="f-title" class="w-full bg-black text-white p-2 cel-border font-mono" placeholder="Bounty title..." required>
+<!-- New bounty -->
+<div id="newModal" class="fixed inset-0 z-[100] hidden bg-black/80 overflow-y-auto">
+  <div class="bg-[#1a2e30] cel shadow-comic w-full max-w-xl mx-auto md:my-8 p-4 md:p-6">
+    <h2 class="text-2xl font-black text-primary uppercase mb-3">Post New Bounty</h2>
+    <form id="newForm" class="space-y-3" onsubmit="submitNew(event)">
+      <div><label class="text-xs text-gray-400 uppercase font-bold">Title</label><input id="n-title" required class="w-full p-2 cel font-mono"/></div>
+      <div><label class="text-xs text-gray-400 uppercase font-bold">Description / brief (markdown)</label><textarea id="n-desc" class="w-full p-2 cel font-mono h-28"></textarea></div>
+      <div><label class="text-xs text-gray-400 uppercase font-bold">Acceptance criteria (one per line)</label><textarea id="n-crit" class="w-full p-2 cel font-mono h-24" placeholder="The reviewer checks each line against the diff"></textarea></div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div><label class="text-xs text-gray-400 uppercase font-bold">Type</label><select id="n-type" class="w-full p-2 cel"><option>task</option><option>bug</option><option>test</option><option>research</option><option>art</option><option>docs</option></select></div>
+        <div><label class="text-xs text-gray-400 uppercase font-bold">Tier</label><select id="n-tier" class="w-full p-2 cel"><option value="C">C - scrap</option><option value="B" selected>B - salvage</option><option value="A">A - merc</option><option value="S">S - black ops</option></select></div>
+        <div><label class="text-xs text-gray-400 uppercase font-bold">Priority</label><select id="n-pri" class="w-full p-2 cel"><option>normal</option><option>low</option><option>high</option><option>critical</option></select></div>
+        <div><label class="text-xs text-gray-400 uppercase font-bold">Project</label><select id="n-project" class="w-full p-2 cel"></select></div>
+        <div><label class="text-xs text-gray-400 uppercase font-bold">Assignee</label><select id="n-slot" class="w-full p-2 cel"></select></div>
+        <div><label class="text-xs text-gray-400 uppercase font-bold">Depends on</label><input id="n-deps" placeholder="ids: 12,14" class="w-full p-2 cel font-mono"/></div>
       </div>
-      <div>
-        <label class="text-xs text-gray-400 uppercase font-bold">Description</label>
-        <textarea id="f-desc" class="w-full bg-black text-white p-2 cel-border font-mono h-20" placeholder="Details..."></textarea>
-      </div>
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="text-xs text-gray-400 uppercase font-bold">Type</label>
-          <select id="f-type" class="w-full bg-black text-white p-2 cel-border">
-            <option value="task">CONTRACT (Task)</option>
-            <option value="bug">BUG HUNT (Bug)</option>
-          </select>
-        </div>
-        <div>
-          <label class="text-xs text-gray-400 uppercase font-bold">Tier</label>
-          <select id="f-tier" class="w-full bg-black text-white p-2 cel-border">
-            <option value="C">C - Scrap Work ($150)</option>
-            <option value="B">B - Salvage Run ($750)</option>
-            <option value="A">A - Merc Contract ($2,000)</option>
-            <option value="S">S - Black Ops ($5,000)</option>
-          </select>
-        </div>
-      </div>
-      <div>
-        <label class="text-xs text-gray-400 uppercase font-bold">Priority</label>
-        <select id="f-priority" class="w-full bg-black text-white p-2 cel-border">
-          <option value="normal">Normal</option>
-          <option value="low">Low</option>
-          <option value="high">High</option>
-          <option value="critical">Critical</option>
-        </select>
-      </div>
-      <div class="flex gap-4 pt-2">
-        <button type="submit" class="flex-1 bg-primary text-black font-bold py-2 cel-border shadow-comic hover:shadow-comic-hover uppercase">Post Bounty</button>
-        <button type="button" onclick="hideModal()" class="flex-1 bg-gray-700 text-white font-bold py-2 cel-border uppercase">Cancel</button>
+      <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="n-ready"/> Ready now (the dispatcher spawns the assignee's worker)</label>
+      <div id="n-err" class="text-danger text-sm font-mono"></div>
+      <div class="flex gap-3 pt-1">
+        <button type="submit" class="flex-1 bg-primary text-black font-bold py-2 cel shadow-comic uppercase">Post Bounty</button>
+        <button type="button" onclick="closeModal('newModal')" class="flex-1 bg-gray-700 font-bold py-2 cel uppercase">Cancel</button>
       </div>
     </form>
   </div>
 </div>
 
 <script>
-const API = '';
-let currentFilter = 'all';
+const STATUSES = [
+  ['backlog', 'Backlog', 'text-gray-300', 'border-t-gray-500'],
+  ['ready', 'Wanted', 'text-primary', 'border-t-primary'],
+  ['in_progress', 'Hunting', 'text-warning', 'border-t-warning'],
+  ['review', 'Under Review', 'text-purple-300', 'border-t-purple-400'],
+  ['approved', 'Awaiting Merge', 'text-sky-300', 'border-t-sky-400'],
+  ['done', 'Fragged', 'text-green-400', 'border-t-green-600'],
+  ['blocked', 'Pinned Down', 'text-danger', 'border-t-danger'],
+  ['failed', 'Botched', 'text-gray-500', 'border-t-gray-700'],
+];
+let S = { bounties: [], state: null, projects: [], activeTab: localGet('tab') || 'ready' };
+function localGet(k) { try { return localStorage.getItem('bb.' + k); } catch { return null; } }
+function localSet(k, v) { try { localStorage.setItem('bb.' + k, v); } catch {} }
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ago = t => { if (!t) return ''; const s = Math.max(0, (Date.now() - Date.parse(t)) / 1000); return s < 60 ? `${s | 0}s` : s < 3600 ? `${(s / 60) | 0}m` : s < 86400 ? `${(s / 3600).toFixed(1)}h` : `${(s / 86400).toFixed(1)}d`; };
+const tierCls = t => ({ S: 'text-yellow-400 border-yellow-400', A: 'text-orange-400 border-orange-400', B: 'text-blue-400 border-blue-400', C: 'text-gray-400 border-gray-400' }[t]);
+const priCls = p => ({ critical: 'bg-danger/20 text-danger border-danger', high: 'bg-orange-500/20 text-orange-400 border-orange-500/50', normal: 'bg-gray-700 text-gray-300 border-gray-600', low: 'bg-gray-800 text-gray-500 border-gray-700' }[p]);
+const badge = (txt, cls) => `<span class="text-[10px] px-1.5 py-0.5 border ${cls} uppercase font-bold whitespace-nowrap">${esc(txt)}</span>`;
 
-function setFilter(f) {
-  currentFilter = f;
-  document.querySelectorAll('.filter-btn').forEach(b => {
-    b.classList.remove('bg-primary', 'text-black');
-    b.classList.add('bg-gray-800');
-  });
-  const btn = document.querySelector(`[data-filter="${f}"]`);
-  btn.classList.add('bg-primary', 'text-black');
-  btn.classList.remove('bg-gray-800');
-  loadBoard();
+async function api(method, path, body) {
+  const r = await fetch('/api' + path, { method, headers: { 'content-type': 'application/json', 'x-bounty-actor': 'orchestrator' }, body: body ? JSON.stringify(body) : undefined });
+  const text = await r.text(); let d; try { d = JSON.parse(text); } catch { d = text; }
+  if (!r.ok) throw new Error(d && d.error ? d.error : text);
+  return d;
 }
 
-function showNewBountyModal() { document.getElementById('modal').classList.remove('hidden'); document.getElementById('modal').classList.add('flex'); }
-function hideModal() { document.getElementById('modal').classList.add('hidden'); document.getElementById('modal').classList.remove('flex'); }
-
-function tierColor(tier) {
-  return { S: 'text-yellow-400 border-yellow-400', A: 'text-orange-400 border-orange-400', B: 'text-blue-400 border-blue-400', C: 'text-gray-400 border-gray-400' }[tier] || '';
+async function load() {
+  try {
+    const [bounties, state, projects] = await Promise.all([api('GET', '/bounties'), api('GET', '/state'), api('GET', '/projects')]);
+    S.bounties = bounties; S.state = state; S.projects = projects;
+    fillSelects(); render();
+  } catch (e) { console.error(e); }
 }
 
-function priorityBadge(p) {
-  const colors = { critical: 'bg-danger/20 text-danger border-danger', high: 'bg-orange-500/20 text-orange-400 border-orange-500/50', normal: 'bg-gray-700 text-gray-300 border-gray-600', low: 'bg-gray-800 text-gray-500 border-gray-700' };
-  return `<span class="text-[10px] px-1.5 py-0.5 border ${colors[p] || colors.normal} uppercase font-bold">${p}</span>`;
+function fillSelects() {
+  const fp = document.getElementById('f-project'), fs = document.getElementById('f-slot');
+  const keepP = fp.value || localGet('project') || 'tribulation', keepS = fs.value;
+  fp.innerHTML = '<option value="">all projects</option>' + S.projects.map(p => `<option value="${esc(p.id)}">${esc(p.id)}</option>`).join('');
+  fp.value = S.projects.some(p => p.id === keepP) ? keepP : '';
+  fs.innerHTML = '<option value="">all slots</option><option value="none">unassigned</option>' + S.state.slots.map(s => `<option>${esc(s.id)}</option>`).join('');
+  fs.value = keepS;
+  const np = document.getElementById('n-project');
+  if (!np.options.length) np.innerHTML = S.projects.filter(p => p.id !== 'legacy').map(p => `<option>${esc(p.id)}</option>`).join('');
+  const ns = document.getElementById('n-slot');
+  if (!ns.options.length) ns.innerHTML = '<option value="">unassigned</option>' + S.state.slots.map(s => `<option>${esc(s.id)}</option>`).join('');
 }
 
-function makeCard(b, variant) {
+function filtered() {
+  const p = document.getElementById('f-project').value, sl = document.getElementById('f-slot').value;
+  const ty = document.getElementById('f-type').value, q = document.getElementById('f-q').value.toLowerCase();
+  const legacy = document.getElementById('f-legacy').checked;
+  localSet('project', p);
+  return S.bounties.filter(b => (!p || b.project_id === p) && (legacy || p === 'legacy' || b.project_id !== 'legacy')
+    && (!sl || (sl === 'none' ? !b.assignee_slot : b.assignee_slot === sl)) && (!ty || b.type === ty)
+    && (!q || (b.title + ' ' + b.description + ' ' + b.ticket_id + ' #' + b.id).toLowerCase().includes(q)));
+}
+
+function render() {
+  const st = S.state; if (!st) return;
+  const s = st.stats;
+  document.getElementById('st-workers').textContent = `${st.running}/${st.cap}`;
+  document.getElementById('st-loot').textContent = '$' + (s.total_loot_earned || 0).toLocaleString();
+  document.getElementById('st-bugs').textContent = String(s.critical_bugs || 0).padStart(2, '0');
+  document.getElementById('st-cost').textContent = '$' + (s.total_cost_usd || 0).toFixed(2);
+  const pb = document.getElementById('pauseBtn');
+  pb.textContent = st.paused ? '▶ Resume dispatch' : '❚❚ Pause dispatch';
+  pb.className = `font-bold py-2 px-3 cel shadow-comic uppercase text-xs ${st.paused ? 'bg-warning text-black hazard' : 'bg-gray-800 text-gray-200'}`;
+  document.getElementById('pausedBanner').classList.toggle('hidden', !st.paused);
+  renderSlots();
+  const rows = filtered();
+  const tabs = document.getElementById('tabs');
+  tabs.innerHTML = STATUSES.map(([k, label]) => `<button onclick="setTab('${k}')" class="text-[10px] font-bold uppercase px-2 py-1 cel whitespace-nowrap ${S.activeTab === k ? 'bg-primary text-black' : 'bg-gray-800'}">${label} ${rows.filter(b => b.status === k).length}</button>`).join('');
+  document.getElementById('board').innerHTML = STATUSES.map(([k, label, color, border]) => {
+    let list = rows.filter(b => b.status === k);
+    const total = list.length;
+    if (k === 'done' || k === 'failed') list = list.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))).slice(0, 40);
+    return `<div class="col ${S.activeTab === k ? 'active-col' : ''} flex flex-col">
+      <div class="bg-[#1a2e30] p-3 cel shadow-comic border-t-[6px] ${border} mb-3 flex justify-between items-center">
+        <h2 class="font-black uppercase tracking-wide ${color}">${label}</h2><span class="text-xs font-mono bg-black/40 px-2">${total}</span>
+      </div>
+      <div class="space-y-3">${list.map(card).join('') || '<div class="text-gray-600 text-center font-mono text-xs p-3">empty</div>'}${total > list.length ? `<div class="text-gray-500 text-xs text-center">+${total - list.length} older</div>` : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function setTab(k) { S.activeTab = k; localSet('tab', k); render(); }
+
+function card(b) {
   const isBug = b.type === 'bug';
-  const borderColor = isBug ? 'border-l-danger' : 'border-l-primary';
-  const tierBadge = `<span class="text-[10px] px-1.5 py-0.5 border ${tierColor(b.tier)} font-bold">${b.tier} - ${b.tier_name || ''}</span>`;
-  const reward = `<span class="font-hand text-sm ${isBug ? 'text-danger' : 'text-primary'}">$${b.reward.toLocaleString()} XP</span>`;
-
-  if (variant === 'pending') {
-    return `<div class="group bg-[#162628] p-4 cel-border relative shadow-comic hover:shadow-comic-hover transition-all duration-200 hover:-translate-y-1 border-l-[6px] ${borderColor} clip-tech">
-      ${isBug ? '<div class="absolute -right-2 -top-3 rotate-6 bg-danger text-black font-black px-2 py-1 text-xs border-2 border-black">BUG</div>' : ''}
-      <div class="flex justify-between items-start mb-2">
-        <span class="${isBug ? 'text-danger/70' : 'text-primary/70'} font-mono text-xs">${b.ticket_id}</span>
-        ${reward}
-      </div>
-      <h3 class="text-white font-bold text-lg mb-2 leading-tight group-hover:${isBug ? 'text-danger' : 'text-primary'} transition-colors">${b.title}</h3>
-      <p class="text-xs text-gray-500 mb-3 font-mono leading-snug line-clamp-2">${b.description || ''}</p>
-      <div class="flex items-center justify-between border-t-2 border-black/30 pt-3 border-dashed">
-        <div class="flex gap-2">${tierBadge} ${priorityBadge(b.priority)}</div>
-      </div>
-    </div>`;
-  }
-
-  if (variant === 'progress') {
-    return `<div class="bg-[#222] p-4 cel-border relative shadow-comic hover:shadow-comic-hover transition-all duration-200">
-      <div class="flex justify-between items-center mb-2">
-        ${isBug ? '<span class="bg-danger text-black text-[10px] font-bold px-1.5 py-0.5 border border-black">BUG HUNT</span>' : '<span class="bg-primary text-black text-[10px] font-bold px-1.5 py-0.5 border border-black">CONTRACT</span>'}
-        <span class="${isBug ? 'text-danger' : 'text-primary'} font-mono text-xs">${b.progress}%</span>
-      </div>
-      <h3 class="text-white font-bold text-lg mb-3 leading-tight">${b.title}</h3>
-      <div class="relative w-full h-3 bg-black border-2 border-gray-600 mb-3 skew-x-[-10deg]">
-        <div class="absolute top-0 left-0 h-full ${isBug ? 'bg-danger' : 'bg-primary'}" style="width:${b.progress}%"></div>
-      </div>
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <div class="w-6 h-6 bg-gray-700 cel-border overflow-hidden flex items-center justify-center">${b.claimed_by && window.AgentAvatars ? '<img src="'+AgentAvatars.getUrl(b.claimed_by, 30)+'" class="w-full h-full object-cover"/>' : '<span class="text-[10px] font-bold text-primary">'+(b.agent_name || '?')[0]+'</span>'}</div>
-          <span class="text-gray-400 font-hand text-sm">${b.agent_name || 'Unknown'}</span>
-        </div>
-        ${reward}
-      </div>
-    </div>`;
-  }
-
-  if (variant === 'done') {
-    return `<div class="bg-[#1a2a1a] p-4 cel-border relative shadow-comic opacity-70 hover:opacity-100 transition-opacity">
-      <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-30 z-10">
-        <div class="border-4 border-green-600 p-2 transform -rotate-12 rounded-lg">
-          <span class="text-3xl font-black text-green-600 uppercase tracking-widest">DONE</span>
-        </div>
-      </div>
-      <div class="flex justify-between items-start mb-2">
-        <span class="text-gray-500 font-mono text-xs">${b.ticket_id}</span>
-        <span class="text-gray-500 font-hand text-sm line-through">$${b.reward.toLocaleString()} XP</span>
-      </div>
-      <h3 class="text-gray-400 font-bold text-lg mb-2 line-through decoration-2 decoration-green-700">${b.title}</h3>
-      <div class="flex items-center justify-between pt-2">
-        <div class="flex items-center gap-1">${b.claimed_by && window.AgentAvatars ? '<img src="'+AgentAvatars.getUrl(b.claimed_by, 20)+'" class="w-5 h-5 border border-gray-600"/>' : ''}<span class="text-xs text-gray-500">${b.agent_name || ''}</span></div>
-        <span class="material-icons text-green-600">check_circle</span>
-      </div>
-    </div>`;
-  }
-
-  if (variant === 'failed') {
-    return `<div class="bg-[#1a1a1a] p-4 cel-border relative shadow-comic opacity-70 hover:opacity-100 transition-opacity grayscale hover:grayscale-0 group">
-      <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-6 bg-gray-400/80 transform rotate-2 z-10 shadow-sm border border-white/20"></div>
-      <div class="flex justify-between items-start mb-2">
-        <span class="text-xs font-bold text-red-500 border border-red-500 px-1 rounded-sm">BOTCHED</span>
-        <span class="text-gray-600 font-mono text-xs">${b.ticket_id}</span>
-      </div>
-      <h3 class="text-gray-400 font-bold text-lg mb-2 line-through decoration-2 decoration-red-900">${b.title}</h3>
-      ${b.error_log ? `<div class="bg-black p-2 font-mono text-[10px] text-red-400 border border-gray-700 mb-3 overflow-hidden whitespace-pre-line">${b.error_log}</div>` : ''}
-      <div class="flex justify-between items-center">
-        <div class="flex items-center gap-1">${b.claimed_by && window.AgentAvatars ? '<img src="'+AgentAvatars.getUrl(b.claimed_by, 20)+'" class="w-5 h-5 border border-gray-600"/>' : ''}<span class="font-hand text-gray-600 text-sm">${b.agent_name || ''}</span></div>
-        <button onclick="retryBounty(${b.id})" class="text-xs bg-gray-700 hover:bg-white hover:text-black px-2 py-1 border border-black transition-colors">RETRY</button>
-      </div>
-    </div>`;
-  }
+  const crit = b.criteria || [];
+  const done = crit.filter(c => c.done).length;
+  const dim = ['done', 'failed'].includes(b.status) ? 'opacity-70' : '';
+  return `<div class="card group bg-[#162628] p-3 cel shadow-comic hover:shadow-comic-hover hover:-translate-y-0.5 transition-all border-l-[6px] ${isBug ? 'border-l-danger' : 'border-l-primary'} ${dim}" onclick="openBounty(${b.id})">
+    <div class="flex justify-between items-start gap-2 mb-1">
+      <span class="${isBug ? 'text-danger/80' : 'text-primary/70'} font-mono text-[11px]">#${b.id} ${esc(b.ticket_id || '')}</span>
+      <span class="font-hand text-xs ${isBug ? 'text-danger' : 'text-primary'}">$${(b.reward || 0).toLocaleString()}</span>
+    </div>
+    <h3 class="font-bold leading-tight mb-2 ${b.status === 'done' ? 'line-through text-gray-400' : ''}">${esc(b.title)}</h3>
+    ${b.blocked_reason && b.status === 'blocked' ? `<div class="bg-black p-1.5 font-mono text-[10px] text-red-400 border border-gray-700 mb-2 line-clamp-3">${esc(b.blocked_reason)}</div>` : ''}
+    <div class="flex flex-wrap gap-1 mb-1">${badge(b.tier + ' ' + (b.tier_name || ''), tierCls(b.tier))} ${badge(b.priority, priCls(b.priority))} ${badge(b.type, 'border-gray-600 text-gray-400')}</div>
+    <div class="flex justify-between items-center text-[11px] text-gray-400 mt-1">
+      <span>${b.assignee_slot ? `<span class="material-icons text-[12px] align-middle">smart_toy</span> ${esc(b.assignee_slot)}` : b.external_owner ? `<span class="text-gray-500">ext: ${esc(b.external_owner.slice(0, 26))}</span>` : '<span class="text-gray-600">unassigned</span>'}</span>
+      <span>${crit.length ? `${done}/${crit.length} ✓` : '<span class="text-warning">no criteria</span>'}${b.cost_usd ? ` · $${b.cost_usd.toFixed(2)}` : ''}</span>
+    </div>
+    ${b.ci_status || b.review_state ? `<div class="flex gap-1 mt-1">${b.ci_status ? badge('verify ' + b.ci_status, b.ci_status === 'pass' ? 'text-green-400 border-green-700' : b.ci_status === 'fail' ? 'text-danger border-danger' : 'text-warning border-warning') : ''}${b.review_state && b.status === 'review' ? badge('review ' + b.review_state, 'text-purple-300 border-purple-500') : ''}</div>` : ''}
+  </div>`;
 }
 
-async function loadBoard() {
-  const [bounties, stats] = await Promise.all([
-    fetch(`${API}/api/bounties`).then(r => r.json()),
-    fetch(`${API}/api/bounties/stats`).then(r => r.json())
-  ]);
-
-  // Update stats
-  document.getElementById('stat-agents').textContent = `${stats.active_agents}/${stats.total_agents}`;
-  document.getElementById('stat-loot').textContent = `$${(stats.total_loot_earned || 0).toLocaleString()}`;
-  document.getElementById('stat-bugs').textContent = String(stats.critical_bugs || 0).padStart(2, '0');
-
-  // Filter
-  const filtered = currentFilter === 'all' ? bounties : bounties.filter(b => b.type === currentFilter);
-
-  // Split into columns
-  const pendingTasks = filtered.filter(b => b.status === 'pending' && b.type === 'task');
-  const pendingBugs = filtered.filter(b => b.status === 'pending' && b.type === 'bug');
-  const inProgress = filtered.filter(b => b.status === 'in_progress');
-  const done = filtered.filter(b => b.status === 'done');
-  const failed = filtered.filter(b => b.status === 'failed');
-
-  document.getElementById('count-pending').textContent = String(pendingTasks.length).padStart(2, '0');
-  document.getElementById('count-bugs').textContent = String(pendingBugs.length).padStart(2, '0');
-  document.getElementById('count-done').textContent = String(done.length).padStart(2, '0');
-
-  document.getElementById('col-pending').innerHTML = pendingTasks.map(b => makeCard(b, 'pending')).join('') || '<div class="text-gray-600 text-center font-mono text-sm p-4">No contracts posted</div>';
-  document.getElementById('col-bugs').innerHTML = pendingBugs.map(b => makeCard(b, 'pending')).join('') || '<div class="text-gray-600 text-center font-mono text-sm p-4">No bugs reported</div>';
-  document.getElementById('col-progress').innerHTML = inProgress.map(b => makeCard(b, 'progress')).join('') || '<div class="text-gray-600 text-center font-mono text-sm p-4">All agents idle</div>';
-  document.getElementById('col-done').innerHTML = done.map(b => makeCard(b, 'done')).join('') || '<div class="text-gray-600 text-center font-mono text-sm p-4">Nothing fragged yet</div>';
-  document.getElementById('col-failed').innerHTML = failed.map(b => makeCard(b, 'failed')).join('') || '<div class="text-gray-600 text-center font-mono text-sm p-4">Clean record</div>';
+function renderSlots() {
+  const st = S.state;
+  const slots = st.slots.map(s => {
+    const w = s.state === 'working' && s.bounty;
+    const u = s.usage || {};
+    return `<div class="min-w-[210px] max-w-[240px] bg-[#162628] p-2 cel shadow-comic-sm ${w ? 'border-warning' : ''}">
+      <div class="flex items-center gap-2">
+        <img src="${esc((S.avatars || {})[s.id] || '')}" class="w-8 h-8 border-2 border-black bg-gray-800 object-cover" onerror="this.style.visibility='hidden'"/>
+        <div class="min-w-0"><div class="font-black text-sm uppercase">${esc(s.id)}</div><div class="text-[10px] text-gray-400 font-mono">${esc(s.runner)}${s.model ? ' · ' + esc(s.model) : ''}${s.effort ? ' · ' + esc(s.effort) : ''}</div></div>
+        <span class="ml-auto text-[10px] font-bold uppercase px-1 ${w ? 'bg-warning text-black' : s.state === 'spawning' ? 'bg-primary text-black' : 'bg-gray-700 text-gray-300'}">${esc(s.state)}</span>
+      </div>
+      ${w ? `<div class="mt-1 text-xs leading-tight cursor-pointer hover:text-primary" onclick="openBounty(${s.bounty.id})">#${s.bounty.id} ${esc(s.bounty.title)}</div>
+        <div class="text-[10px] text-gray-400 font-mono mt-1">${ago(s.attempt && s.attempt.started_at)} · hb ${ago(s.bounty.heartbeat_at) || '-'} · tok ${((u.tokens_in || 0) + (u.cache_read || 0) + (u.tokens_out || 0)).toLocaleString()}${u.cost_usd != null ? ' · $' + u.cost_usd.toFixed(2) : ''}</div>
+        ${s.attempt ? `<a class="text-[10px] text-primary underline" target="_blank" href="/api/attempts/${s.attempt.id}/log">live log</a>` : ''}`
+      : `<div class="text-[11px] text-gray-500 mt-1">${s.queued ? `${s.queued} ready queued${s.next ? `: next #${s.next.id}` : ''}` : 'idle (nothing ready)'}</div>`}
+    </div>`;
+  }).join('');
+  const leases = st.leases.map(l => l.external
+    ? `<div class="min-w-[200px] bg-[#1a1a10] p-2 cel shadow-comic-sm"><div class="font-black text-sm uppercase flex items-center gap-1"><span class="material-icons text-sm ${l.held ? 'text-danger hazard' : 'text-green-400'}">memory</span> ${esc(l.resource)} lock</div>
+       <div class="text-[11px] ${l.held ? 'text-danger' : 'text-green-400'} font-bold">${l.held ? 'HELD' : 'FREE'}</div>
+       <div class="text-[10px] text-gray-400 font-mono break-all">${l.holder ? esc(Object.entries(l.holder).filter(([k]) => !['file'].includes(k)).map(([k, v]) => k + '=' + v).join(' ')) : 'one rendered UE at a time'}${l.holder_stale ? ' (stale)' : ''}</div></div>`
+    : `<div class="min-w-[200px] bg-[#1a1a10] p-2 cel shadow-comic-sm"><div class="font-black text-sm uppercase">${esc(l.resource)} lease</div><div class="text-[10px] text-gray-400 font-mono">${esc(l.holder)} until ${esc((l.expires_at || '').slice(11, 16))}</div></div>`).join('');
+  document.getElementById('slots').innerHTML = slots + leases;
 }
 
-async function retryBounty(id) {
-  await fetch(`${API}/api/bounties/${id}/retry`, { method: 'POST' });
-  loadBoard();
+async function togglePause() {
+  try { await api('POST', S.state.paused ? '/resume' : '/pause'); load(); } catch (e) { alert(e.message); }
 }
 
-document.getElementById('bountyForm').addEventListener('submit', async (e) => {
+function openNew() { document.getElementById('n-err').textContent = ''; document.getElementById('newModal').classList.remove('hidden'); document.getElementById('n-title').focus(); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal('newModal'); closeModal('drawer'); } });
+
+async function submitNew(e) {
   e.preventDefault();
-  await fetch(`${API}/api/bounties`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      title: document.getElementById('f-title').value,
-      description: document.getElementById('f-desc').value,
-      type: document.getElementById('f-type').value,
-      tier: document.getElementById('f-tier').value,
-      priority: document.getElementById('f-priority').value,
-    })
-  });
-  hideModal();
-  document.getElementById('bountyForm').reset();
-  loadBoard();
-});
+  const v = id => document.getElementById(id).value;
+  const body = {
+    title: v('n-title'), description: v('n-desc'), criteria: v('n-crit').split('\n').map(s => s.replace(/^\s*[-*]\s*(\[[ xX]\]\s*)?/, '').trim()).filter(Boolean),
+    type: v('n-type'), tier: v('n-tier'), priority: v('n-pri'), project: v('n-project'), assignee_slot: v('n-slot') || null,
+    depends_on: v('n-deps').split(/[ ,]+/).map(s => Number(s.replace('#', ''))).filter(Boolean),
+  };
+  try {
+    const b = await api('POST', '/bounties', body);
+    if (document.getElementById('n-ready').checked) await api('POST', `/bounties/${b.id}/ready`);
+    document.getElementById('newForm').reset(); closeModal('newModal'); load();
+  } catch (err) { document.getElementById('n-err').textContent = err.message; }
+}
 
-// Initial load + auto-refresh every 5s
-loadBoard();
-setInterval(loadBoard, 5000);
+async function openBounty(id) {
+  const b = await api('GET', `/bounties/${id}`);
+  S.open = b;
+  const slots = S.state.slots;
+  const crit = b.criteria || [];
+  const act = (label, fn, cls = 'bg-gray-700') => `<button onclick="${fn}" class="${cls} font-bold text-xs uppercase py-1.5 px-3 cel shadow-comic-sm">${label}</button>`;
+  const actions = [];
+  if (['backlog', 'blocked', 'failed', 'in_progress'].includes(b.status)) actions.push(act('Ready → dispatch', `doReady(${id}, ${b.external_owner ? 1 : 0})`, 'bg-primary text-black'));
+  if (['ready', 'blocked', 'failed', 'in_progress'].includes(b.status)) actions.push(act('Back to backlog', `doAct(${id},'backlog')`));
+  if (b.status === 'review') actions.push(act('Approve', `doAct(${id},'approve')`, 'bg-green-600 text-black'));
+  if (['review', 'approved'].includes(b.status)) actions.push(act('Reject', `doReject(${id})`, 'bg-danger text-black'));
+  if (b.status === 'approved') actions.push(act('Check merged → done', `doAct(${id},'done')`, 'bg-sky-400 text-black'));
+  if (b.worker_alive) actions.push(act('Kill worker', `doAct(${id},'kill')`, 'bg-danger text-black'));
+  if (!['done', 'failed'].includes(b.status)) actions.push(act('Fail', `doFail(${id})`, 'bg-gray-800 text-gray-400'));
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="flex justify-between items-start gap-3">
+      <div><div class="font-mono text-xs text-primary/70">#${b.id} ${esc(b.ticket_id)} · ${esc(b.project_id || '-')} · <b class="uppercase">${esc(b.status)}</b>${b.worker_alive ? ' · <span class="text-warning">worker live</span>' : ''}</div>
+      <h2 class="text-2xl font-black leading-tight mt-1">${esc(b.title)}</h2></div>
+      <button onclick="closeModal('drawer')" class="material-icons text-3xl text-gray-400 hover:text-white">close</button>
+    </div>
+    ${b.blocked_reason ? `<div class="mt-2 bg-black p-2 font-mono text-xs text-red-400 border border-danger">${esc(b.blocked_reason)}</div>` : ''}
+    <div class="flex flex-wrap gap-2 mt-3">${actions.join('')}</div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4 text-xs">
+      <label>Assignee<select id="e-slot" class="w-full p-1 cel"><option value="">unassigned</option>${slots.map(s => `<option ${s.id === b.assignee_slot ? 'selected' : ''}>${esc(s.id)}</option>`).join('')}</select></label>
+      <label>Type<select id="e-type" class="w-full p-1 cel">${['task', 'bug', 'test', 'research', 'art', 'docs'].map(t => `<option ${t === b.type ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <label>Tier<select id="e-tier" class="w-full p-1 cel">${['S', 'A', 'B', 'C'].map(t => `<option ${t === b.tier ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <label>Priority<select id="e-pri" class="w-full p-1 cel">${['critical', 'high', 'normal', 'low'].map(t => `<option ${t === b.priority ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+    </div>
+    <label class="block text-xs mt-3">Title<input id="e-title" class="w-full p-2 cel font-mono" value="${esc(b.title)}"/></label>
+    <label class="block text-xs mt-2">Description / brief<textarea id="e-desc" class="w-full p-2 cel font-mono h-40">${esc(b.description)}</textarea></label>
+    <label class="block text-xs mt-2">Acceptance criteria (one per line; ✓ = met)<textarea id="e-crit" class="w-full p-2 cel font-mono h-28">${esc(crit.map(c => (c.done ? '[x] ' : '') + c.text).join('\n'))}</textarea></label>
+    <label class="block text-xs mt-2">Depends on (ids)<input id="e-deps" class="w-full p-2 cel font-mono" value="${esc((b.depends_on || []).join(', '))}"/></label>
+    <div class="flex gap-2 mt-3"><button onclick="saveEdit(${id})" class="bg-primary text-black font-bold py-2 px-4 cel shadow-comic uppercase text-sm">Save</button><span id="e-err" class="text-danger text-xs font-mono self-center"></span></div>
+    <div class="mt-5 grid md:grid-cols-2 gap-3 text-xs font-mono text-gray-300">
+      <div>branch: ${esc(b.branch || '-')}<br>worktree: ${esc(b.worktree || '-')}<br>${b.external_owner ? 'external: ' + esc(b.external_owner) + '<br>' : ''}parent: ${b.parent_id ? `<a class="text-primary underline" href="#" onclick="openBounty(${b.parent_id});return false">#${b.parent_id}</a>` : '-'}${b.children.length ? '<br>children: ' + b.children.map(c => `<a class="text-primary underline" href="#" onclick="openBounty(${c.id});return false">#${c.id}</a> [${esc(c.status)}]`).join(', ') : ''}</div>
+      <div>attempts ${b.attempts.filter(a => a.kind === 'worker').length} · failures ${b.failures}<br>cost $${(b.cost_usd || 0).toFixed(4)} · tokens in ${b.tokens_in} out ${b.tokens_out}<br>verify: ${esc(b.ci_status || '-')} ${b.ci_log ? `<a class="text-primary underline" target="_blank" href="/api/bounties/${b.id}/verify-log">log</a>` : ''}<br>commits: ${esc((b.commits || []).map(c => c.slice(0, 8)).join(' ') || '-')}</div>
+    </div>
+    ${b.review_notes ? `<h3 class="font-black uppercase text-purple-300 mt-4">Review</h3><pre class="bg-black p-2 text-xs border border-gray-700">${esc(b.review_notes)}</pre>` : ''}
+    ${b.attempts.length ? `<h3 class="font-black uppercase text-warning mt-4">Attempts</h3><div class="text-xs font-mono space-y-1">${b.attempts.map(a => `<div class="bg-black/40 p-1.5">#${a.id} ${esc(a.kind)} ${esc(a.slot)} ${esc(a.model || '')} · ${esc((a.started_at || '').slice(5, 16))} → ${a.ended_at ? esc(a.ended_at.slice(11, 16)) : '<span class="text-warning">running</span>'} · exit ${a.exit_code ?? '-'} · ${a.cost_usd != null ? '$' + a.cost_usd.toFixed(4) : 'n/a'} · ${esc(a.outcome || '')} · <a class="text-primary underline" target="_blank" href="/api/attempts/${a.id}/log">log</a> <a class="text-gray-400 underline" target="_blank" href="/api/attempts/${a.id}/log?format=raw">raw</a> <a class="text-gray-400 underline" target="_blank" href="/api/attempts/${a.id}/prompt">prompt</a></div>`).join('')}</div>` : ''}
+    <h3 class="font-black uppercase text-gray-300 mt-4">History</h3>
+    <div class="text-[11px] font-mono space-y-1 max-h-80 overflow-y-auto">${b.events.slice().reverse().map(e => `<div class="border-b border-black/40 pb-1"><span class="text-gray-500">${esc(e.at.slice(5, 19).replace('T', ' '))}</span> <span class="text-primary">${esc(e.actor || '')}</span> ${esc(e.kind)}${e.to_status ? ` <b>${esc(e.from_status || '')}→${esc(e.to_status)}</b>` : ''}<pre class="text-gray-300">${esc(e.note || '')}</pre></div>`).join('')}</div>`;
+  document.getElementById('drawer').classList.remove('hidden');
+}
+
+async function saveEdit(id) {
+  const v = x => document.getElementById(x).value;
+  const b = S.open;
+  try {
+    const criteria = v('e-crit').split('\n').map(s => s.trim()).filter(Boolean).map(s => { const m = s.match(/^\[([ xX])\]\s*(.*)$/); return m ? { text: m[2], done: m[1] !== ' ' } : { text: s.replace(/^[-*]\s*/, ''), done: false }; });
+    await api('PATCH', `/bounties/${id}`, { title: v('e-title'), description: v('e-desc'), criteria, type: v('e-type'), tier: v('e-tier'), priority: v('e-pri'),
+      depends_on: v('e-deps').split(/[ ,]+/).map(s => Number(s.replace('#', ''))).filter(Boolean) });
+    if ((v('e-slot') || null) !== (b.assignee_slot || null)) await api('POST', `/bounties/${id}/assign`, { slot: v('e-slot') || null });
+    await openBounty(id); load();
+  } catch (e) { document.getElementById('e-err').textContent = e.message; }
+}
+
+async function doAct(id, what) {
+  try {
+    if (what === 'kill' && !confirm('Kill the worker? The bounty is blocked with the log attached.')) return;
+    await api('POST', `/bounties/${id}/${what}`, {});
+    await openBounty(id); load();
+  } catch (e) { alert(e.message); }
+}
+async function doReady(id, external) {
+  const b = S.open;
+  const msg = external ? `This bounty is run outside the board (${b.external_owner}). Make it ready anyway? If it has an assignee, the dispatcher spawns a board worker in ${b.worktree || 'a new worktree'}.`
+    : b.assignee_slot ? `Ready: the dispatcher spawns a fresh ${b.assignee_slot} worker for #${id}.` : `Ready, unassigned: nothing spawns until you assign a slot.`;
+  if (!confirm(msg)) return;
+  doAct(id, 'ready');
+}
+async function doReject(id) { const notes = prompt('What must the next worker fix?'); if (!notes) return; try { await api('POST', `/bounties/${id}/reject`, { notes }); await openBounty(id); load(); } catch (e) { alert(e.message); } }
+async function doFail(id) { const reason = prompt('Why fail it?'); if (!reason) return; try { await api('POST', `/bounties/${id}/fail`, { reason }); await openBounty(id); load(); } catch (e) { alert(e.message); } }
+
+async function loadAvatars() { try { const a = await api('GET', '/agents'); S.avatars = Object.fromEntries(a.map(x => [x.id, x.avatar_url])); } catch {} }
+
+let ws, reloadT;
+function connect() {
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+  ws.onmessage = () => { clearTimeout(reloadT); reloadT = setTimeout(load, 300); };
+  ws.onclose = () => setTimeout(connect, 3000);
+}
+loadAvatars().then(load); connect();
+setInterval(load, 15000);
+setInterval(() => { if (S.state) renderSlots(); }, 5000);
 </script>
 </body></html>

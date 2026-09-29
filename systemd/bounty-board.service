@@ -1,0 +1,20 @@
+[Unit]
+Description=Wasteland Bounty Board (task board, dispatcher, reviewer) on :3777
+After=network-online.target
+RequiresMountsFor=/mnt/f /mnt/ue
+
+[Service]
+Type=simple
+WorkingDirectory=/mnt/f/bounty-board
+ExecStart=/home/kewk/.local/share/mise/installs/node/26.8.1/bin/node /mnt/f/bounty-board/server.js
+Environment=PATH=/mnt/f/bounty-board/bin:/home/kewk/.local/bin:/home/kewk/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+Restart=on-failure
+RestartSec=5
+# Workers are spawned detached; a board restart must not kill them (they are re-attached on start).
+KillMode=process
+StandardOutput=append:/mnt/f/bounty-board/logs/server.log
+StandardError=append:/mnt/f/bounty-board/logs/server.log
+
+[Install]
+WantedBy=default.target
