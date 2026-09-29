@@ -465,3 +465,62 @@ test('default project: the only non-legacy project, or config default_project; n
     assert.strictEqual(board.raw(id).project_id, 'scratch');
   } finally { await t.s.close(); }
 });
+
+test('close-merged: an external bounty is done once its commit is on main; refused off main and with a live worker', async () => {
+  const t = await startBoard('closemerged', { dispatch: false });
+  try {
+    const { board, repo, call } = t;
+    const { spawn } = require('child_process');
+    // an external bounty: in_progress, no board worker, no branch recorded
+    const b = board.create({ title: 'external fix', project: 'scratch', type: 'bug', tier: 'B', criteria: CRIT, status: 'in_progress', external_owner: 'opus-1' });
+    assert.strictEqual(board.raw(b.id).status, 'in_progress');
+    commitOnBranch(repo, 'ext-br', { 'mul.js': 'module.exports = (a, b) => a * b;\n' });
+    const sha = sh(repo, 'git rev-parse ext-br').trim();
+
+    // refusal 1: the commit is not on main
+    let r = await call('POST', `/bounties/${b.id}/close-merged`, { commits: [sha.slice(0, 7)], evidence: 'x' });
+    assert.strictEqual(r.status, 409, JSON.stringify(r.data)); assert.match(r.data.error, /not on main/);
+    r = await call('POST', `/bounties/${b.id}/close-merged`, { commits: ['deadbeef'] });
+    assert.strictEqual(r.status, 422); assert.match(r.data.error, /does not exist/);
+    r = await call('POST', `/bounties/${b.id}/close-merged`, {});
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(board.raw(b.id).status, 'in_progress');
+
+    sh(repo, 'git merge -q --no-ff ext-br -m "merge ext-br"');
+
+    // workers can't use it
+    r = await call('POST', `/bounties/${b.id}/close-merged`, { commits: [sha] }, 'fake-1');
+    assert.strictEqual(r.status, 403);
+
+    // refusal 2: a live board worker on the bounty
+    const child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
+    t.s.dispatcher.live.set(b.id, { pid: child.pid, slot: 'fake-1' });
+    r = await call('POST', `/bounties/${b.id}/close-merged`, { commits: [sha] });
+    assert.strictEqual(r.status, 409); assert.match(r.data.error, /live board worker/);
+    assert.strictEqual(board.raw(b.id).status, 'in_progress');
+    t.s.dispatcher.live.delete(b.id);
+    try { process.kill(-child.pid, 'SIGKILL'); } catch {}
+
+    // success: done, commits + evidence + actor in the history, loot paid to the owner
+    const before = board.db.prepare("SELECT total_loot FROM agents WHERE id='fake-1'").get().total_loot;
+    board.db.prepare('UPDATE bounties SET claimed_by = ? WHERE id = ?').run('fake-1', b.id);
+    r = await call('POST', `/bounties/${b.id}/close-merged`, { commits: [sha.slice(0, 7)], evidence: 'ci PASS, see log.md' });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.data));
+    assert.deepStrictEqual(r.data.commits, [sha]);
+    const row = board.need(b.id);
+    assert.strictEqual(row.status, 'done');
+    assert.deepStrictEqual(row.commits, [sha]);
+    assert.strictEqual(row.work_evidence, 'ci PASS, see log.md');
+    assert.ok(row.reward > 0);
+    const ev = board.db.prepare("SELECT * FROM events WHERE bounty_id = ? AND kind = 'status' AND to_status = 'done'").get(b.id);
+    assert.strictEqual(ev.from_status, 'in_progress');
+    assert.strictEqual(ev.actor, 'orchestrator');
+    assert.match(ev.note, new RegExp(`close-merged by orchestrator: ${sha.slice(0, 10)} on main`));
+    assert.match(ev.note, /evidence: ci PASS, see log\.md/);
+    const after = board.db.prepare("SELECT total_loot FROM agents WHERE id='fake-1'").get().total_loot;
+    assert.strictEqual(after - before, row.reward, 'loot granted like a normal done');
+    // done is final
+    r = await call('POST', `/bounties/${b.id}/close-merged`, { commits: [sha] });
+    assert.strictEqual(r.status, 409);
+  } finally { await t.s.close(); }
+});

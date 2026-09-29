@@ -24,6 +24,9 @@ Orchestrator
   bounty assign ID SLOT|none       bounty ready ID...        bounty backlog ID
   bounty approve ID ["notes"]      bounty reject ID "notes"  bounty done ID   (only if the commits are on main)
   bounty fail ID "reason"          bounty kill ID ["reason"]
+  bounty close-merged ID --commit SHA [--commit SHA]... ["evidence"]
+                                   done for work merged outside the board (external): each commit must be on main;
+                                   refused while a board worker is live. Records commits + evidence, pays loot.
   bounty pause | resume            bounty status             bounty import tribulation
   bounty project list | bounty project add ID --repo PATH [--main main] [--wt-cmd CMD] [--wt-path TPL] [--verify CMD]
 Workers (BOUNTY_ID / BOUNTY_SLOT from the environment)
@@ -151,7 +154,7 @@ async function main() {
   const cmd = pos.shift();
   if (!cmd || cmd === 'help' || opt.help) { console.log(HELP); return; }
   const worker = !!SLOT;
-  const orchOnly = ['add', 'edit', 'note', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'pause', 'resume', 'import'];
+  const orchOnly = ['add', 'edit', 'note', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'close-merged', 'pause', 'resume', 'import'];
   if (worker && orchOnly.includes(cmd)) die(`'${cmd}' is an orchestrator command; you are worker ${SLOT}`);
 
   switch (cmd) {
@@ -306,6 +309,14 @@ async function main() {
       const id = idOf(pos);
       const r = await api('POST', `/bounties/${id}/done`, {});
       console.log(`#${id} DONE (${r.how}); +$${r.reward} loot`);
+      return;
+    }
+    case 'close-merged': {
+      const id = idOf(pos);
+      const commits = list(opt.commit).flatMap(c => String(c).split(',')).map(s => s.trim()).filter(Boolean);
+      if (!commits.length || commits.includes('true')) die('close-merged ID --commit SHA [--commit SHA]... ["evidence"]');
+      const r = await api('POST', `/bounties/${id}/close-merged`, { commits, evidence: pos.slice(1).join(' ') });
+      console.log(`#${id} DONE (close-merged: ${r.commits.map(c => c.slice(0, 10)).join(' ')} on main); +$${r.reward} loot`);
       return;
     }
     case 'next': {

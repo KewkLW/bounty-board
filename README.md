@@ -25,6 +25,8 @@ backlog -> ready -> in_progress -> review -> approved -> done
 | review -> approved / ready | the reviewer (Codex, `codex exec -s read-only`) | reads the real diff and the acceptance criteria; returns approve/reject with per-criterion evidence; an approval that does not show every criterion met is overruled to reject. Reject sends the bounty back to ready with the notes for a fresh worker |
 | approved -> done | the merge check (every 60 s, or `bounty done`) | every recorded commit is reachable from main (or main holds the same patch: rebase, cherry-pick or squash merges count) |
 
+Work done off the board (an `external` bounty, e.g. one in flight before the board existed) never goes through submit, so it can't reach approved. When the orchestrator has merged it, `bounty close-merged ID --commit SHA [--commit SHA]... ["evidence"]` (API `POST /api/bounties/:id/close-merged {commits, evidence}`) takes it to done from any open status: every commit must exist in the project repo and be an ancestor of main (it is refused otherwise, and refused while the bounty has a live board worker or a verify running). The full SHAs join the bounty's commits, the evidence goes to `work_evidence`, and the done event records `close-merged by <actor>: <shas> on main` plus the evidence. Loot is paid as for any done. Orchestrator only.
+
 `review`, `approved` and `done` are guarded edges: no request can set them directly. Workers (requests carrying a slot id) can't ready, assign, approve, reject, fail, pause or mark done.
 
 ## Dispatcher
@@ -71,6 +73,7 @@ bounty assign 12 opus-2 && bounty ready 12
 bounty show 12 / bounty log 12         # history, attempts, logs, review notes
 bounty approve 12 | bounty reject 12 "what to fix"
 # merge the approved branch into main yourself; the board marks it done
+bounty close-merged 59 --commit 8ae0fb5 "evidence"   # external work you merged yourself (no submit/review)
 bounty import tribulation              # re-runnable; only adds what's new
 ```
 
