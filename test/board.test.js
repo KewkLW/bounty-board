@@ -291,3 +291,38 @@ test('migration: the Feb-2026 DB keeps its history', () => {
   assert.strictEqual(db2.prepare('SELECT COUNT(*) n FROM bounties').get().n, 57);
   db2.close();
 });
+
+test('external gpu lease mirrors the UE render flock and its holder file; the prompt points at the script', async () => {
+  const dir = tmpdir('ext');
+  const lock = path.join(dir, 'ue-render.lock');
+  const holderFile = path.join(dir, 'ue-render.holder');
+  const t = await startBoard('ext', { dispatch: false, over: { external_leases: { gpu: {
+    what: 'the machine-wide UE render lock', lock_file: lock, holder_file: holderFile, script: '/x/Scripts/lib/ue-render-lock.sh',
+    projects: ['scratch'], how: 'Take it with the script.' } } } });
+  const { spawn } = require('child_process');
+  let holder;
+  try {
+    const { board, call } = t;
+    let st = board.externalStatus('gpu');
+    assert.strictEqual(st.held, false);
+    fs.writeFileSync(lock, '');
+    holder = spawn('flock', [lock, 'sleep', '30'], { stdio: 'ignore', detached: true });
+    fs.writeFileSync(holderFile, `pid=${holder.pid}\nowner=portal-real-test\nwhat=T40 rendered client\n`);
+    await waitFor(() => board.externalStatus('gpu').held);
+    st = board.externalStatus('gpu');
+    assert.strictEqual(st.holder.owner, 'portal-real-test');
+    assert.strictEqual(st.holder.pid_alive, true);
+    const r = await call('POST', '/leases/gpu', { bounty_id: null, slot: 'fake-1' }, 'fake-1');
+    assert.strictEqual(r.data.external, true); assert.strictEqual(r.data.granted, false); assert.strictEqual(r.data.held, true);
+    const state = (await call('GET', '/state')).data;
+    assert.ok(state.leases.find(l => l.resource === 'gpu' && l.external && l.held));
+    process.kill(-holder.pid, 'SIGKILL');
+    await waitFor(() => !board.externalStatus('gpu').held);
+    assert.strictEqual(board.externalStatus('gpu').holder_stale, true);
+    const b = board.create({ title: 'x', project: 'scratch' });
+    const { workerPrompt } = require('../lib/prompt');
+    const prompt = workerPrompt(board, board.need(b.id), board.slot('fake-1'), { worktree: t.repo, branch: 'x' });
+    assert.match(prompt, /ue-render-lock\.sh/);
+    assert.match(prompt, /machine-wide UE render lock/);
+  } finally { try { process.kill(-holder.pid, 'SIGKILL'); } catch {} await t.s.close(); }
+});

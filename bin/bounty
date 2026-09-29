@@ -276,6 +276,11 @@ async function main() {
       let said = false;
       for (;;) {
         const r = await api('POST', `/leases/${res}`, body);
+        if (r.external) {
+          const h = r.holder ? Object.entries(r.holder).filter(([k]) => k !== 'file').map(([k, v]) => `${k}=${v}`).join(' ') : '';
+          console.log(`'${res}' is ${r.what}.\nIt is ${r.held ? `HELD${h ? ' by ' + h : ''}` : 'FREE'} right now.${r.holder_stale ? ' (stale holder file: ' + h + ')' : ''}\n${r.how}\nScript: ${r.script}\nThe board does not hold this lock for you; take it with the script.`);
+          return;
+        }
         if (r.granted) { console.log(`lease '${res}' ${r.renewed ? 'renewed' : 'granted'} until ${r.lease.expires_at}. Release it with: bounty release ${res}`); return; }
         if (opt['no-wait']) { console.log(`lease '${res}' is held by ${r.lease.holder} until ${r.lease.expires_at}`); process.exit(3); }
         if (!said) { console.log(`lease '${res}' is held by ${r.lease.holder} (until ${r.lease.expires_at}); waiting...`); said = true; }
@@ -287,6 +292,7 @@ async function main() {
     case 'release': {
       const res = pos[0] || 'gpu';
       const r = await api('DELETE', `/leases/${res}`, { bounty_id: ENV_ID ? Number(ENV_ID) : null, holder: ENV_ID ? null : (opt.holder || ACTOR), force: !!opt.force });
+      if (r.external) { console.log(`'${res}' is an external lock (${r.script}); release it with the script (or it is released when the locked command exits).`); return; }
       console.log(r.released ? `released '${res}'` : `'${res}' was not held`);
       return;
     }
@@ -299,8 +305,10 @@ async function main() {
         const w = sl.bounty ? `#${sl.bounty.id} ${sl.bounty.title} (since ${sl.attempt?.started_at?.slice(11, 19)}, pid ${sl.attempt?.pid})` : sl.next ? `next: #${sl.next.id} ${sl.next.title}` : '';
         console.log(`  ${sl.id.padEnd(14)} ${sl.state.padEnd(9)} ${String(sl.model || sl.runner).padEnd(7)} ${w}`);
       }
-      for (const l of s.leases) console.log(`  lease ${l.resource}: ${l.holder} until ${l.expires_at}`);
-      if (!s.leases.length) console.log('  leases: none held');
+      for (const l of s.leases) {
+        if (l.external) console.log(`  lease ${l.resource} (external UE render lock): ${l.held ? 'HELD' + (l.holder ? ' by ' + JSON.stringify(l.holder) : '') : 'free'}`);
+        else console.log(`  lease ${l.resource}: ${l.holder} until ${l.expires_at}`);
+      }
       const st = s.stats;
       console.log(`  bounties: backlog ${st.backlog} | ready ${st.ready} | in_progress ${st.in_progress} | review ${st.review} | approved ${st.approved} | done ${st.done} | blocked ${st.blocked} | failed ${st.failed} | spent $${st.total_cost_usd || 0}`);
       return;
