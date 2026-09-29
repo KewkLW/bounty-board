@@ -9,6 +9,7 @@
   ],
   "db_path": "data/bounty-board.db",
   "logs_dir": "logs",
+  "default_project": "tribulation",
   "concurrency_cap": 3,
   "tick_seconds": 5,
   "watchdog": {
@@ -103,5 +104,11 @@
       ],
       "how": "Take it with the project script before any rendered UE run and release it right after: source Scripts/lib/ue-render-lock.sh and use its acquire/release (acquire blocks and prints who you are waiting on). The launch scripts (play.sh, playtest.sh, test-*.sh, editor.sh...) take it themselves once the one-ue-client branch is merged. Headless runs (-nullrhi), dedicated servers, commandlets and builds don't need it. Kewky's play.sh preempts agents: if your rendered run is preempted, retry later."
     }
-  }
+  },
+  "machine_rules": [
+    "At most ONE rendered UE instance machine-wide (editor GUI, rendered or -RenderOffscreen game client). Take the render lock (Scripts/lib/ue-render-lock.sh, see the GPU rule in the protocol) before any rendered run; if the script is not on main yet, check `ps -eo pid,args | grep -E 'UnrealEditor|Tribulation'` for a rendered instance and wait until it is gone.",
+    "One heavy job at a time: before an editor, cook, build or test stack, run `free -g`; wait (and send progress while you wait) if 'available' is under 16 GB or two editors are already running.",
+    "Test servers and clients listen on ports below 32768 (the ephemeral range above it collides with outgoing connections).",
+    "Never kill, restart or pause processes you did not start (other workers, Kewky's game or editor, the board itself)."
+  ]
 }

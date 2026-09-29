@@ -44,12 +44,19 @@ For Tribulation, `gpu` is not a board lock: it mirrors the machine-wide UE rende
 ## Worker protocol (the prompt repeats it)
 
 ```
-bounty start                       # first
-bounty progress "note" [--check N] # heartbeat, at least every 15 min
+bounty start                       # first (prints any waiting orchestrator notes)
+bounty inbox                       # unread orchestrator notes, marked read; after start, each major step, every ~15 min
+bounty progress "note" [--check N] # heartbeat, at least every 15 min (also prints unread notes)
 bounty split "title" --desc "..."  # gaps found go to backlog as children
 bounty block "reason"              # stuck: block and exit
 bounty submit                      # commit on the branch first; gates + review follow
 ```
+
+The prompt also carries `machine_rules` from `config/board.json` (one rendered UE instance, `free -g` before heavy jobs, test ports below 32768, don't kill what you didn't start) and every orchestrator note on the bounty.
+
+## Notes to live workers
+
+`bounty note ID "text"` (API `POST /api/bounties/:id/notes {text}`, or the note box in the dashboard drawer) tells a running worker something new: a changed requirement, a machine rule. Notes are `message` events in the bounty history with a read mark. The worker gets unread ones from `bounty inbox`, and in the output of `bounty start` and `bounty progress`; each gets marked read by whoever received it. Every later attempt gets all notes in its prompt. `bounty inbox ID --peek` (`GET /api/bounties/:id/inbox`) shows what a worker hasn't read yet without marking it; `bounty inbox ID --all` lists all notes with read state.
 
 ## Orchestrator day to day
 
@@ -58,13 +65,16 @@ bounty status                          # slots, locks, counts
 bounty list [--project tribulation] [--status ready,blocked]
 bounty add "Title" --desc "..." --criteria "..." --criteria "..." --type bug --tier B --project tribulation --slot opus-1 [--ready]
 bounty add --file task.md              # "# Title", "## Acceptance criteria" with - [ ] lines
-bounty edit 12 --criteria "..."        # criteria are required before ready
+bounty edit 12 --criteria "..."        # criteria are required before ready; --project P moves it
+bounty note 12 "new requirement"       # reaches the live worker (inbox/progress) and later attempts
 bounty assign 12 opus-2 && bounty ready 12
 bounty show 12 / bounty log 12         # history, attempts, logs, review notes
 bounty approve 12 | bounty reject 12 "what to fix"
 # merge the approved branch into main yourself; the board marks it done
 bounty import tribulation              # re-runnable; only adds what's new
 ```
+
+Without `--project`, `bounty add` uses `default_project` from `config/board.json` (`tribulation`), or the only non-legacy project if there is exactly one; otherwise it is refused at creation with the list of projects.
 
 Projects are generic (`bounty project add ID --repo PATH --main main --wt-cmd CMD --wt-path TPL --verify CMD`); `tribulation` is seeded.
 

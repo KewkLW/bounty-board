@@ -14,17 +14,21 @@ const HELP = `bounty: the Bounty Board CLI  (server ${URL_BASE}, actor ${ACTOR})
 Orchestrator
   bounty add "<title>" [--desc TEXT | --brief FILE.md] [--criteria "..."]... [--type task|bug|test|research|art|docs]
              [--tier S|A|B|C] [--priority critical|high|normal|low] [--project ID] [--slot SLOT] [--depends 3,4] [--ready]
+                                   (no --project: the configured default_project, or the only non-legacy project)
   bounty add --file TASK.md        (# Title, optional key: value header lines, "## Acceptance criteria" with - [ ] items)
   bounty list [--status s1,s2] [--project P] [--slot S|none] [--type T] [--all] [--json]
   bounty show [ID] [--json]        bounty log ID [--raw]
-  bounty edit ID [--title T] [--desc TEXT|--brief FILE] [--criteria "..."]... [--tier] [--priority] [--type] [--depends 3,4] [--file TASK.md]
+  bounty edit ID [--title T] [--desc TEXT|--brief FILE] [--criteria "..."]... [--tier] [--priority] [--type] [--project P] [--depends 3,4] [--file TASK.md]
+  bounty note ID "text"            tell the live worker (and every later attempt) something new
+  bounty inbox ID --peek           the notes that worker has not read yet (without marking them read)
   bounty assign ID SLOT|none       bounty ready ID...        bounty backlog ID
   bounty approve ID ["notes"]      bounty reject ID "notes"  bounty done ID   (only if the commits are on main)
   bounty fail ID "reason"          bounty kill ID ["reason"]
   bounty pause | resume            bounty status             bounty import tribulation
   bounty project list | bounty project add ID --repo PATH [--main main] [--wt-cmd CMD] [--wt-path TPL] [--verify CMD]
 Workers (BOUNTY_ID / BOUNTY_SLOT from the environment)
-  bounty start                     bounty progress "note" [--check N]...
+  bounty start                     bounty progress "note" [--check N]...     (both print unread notes)
+  bounty inbox                     unread orchestrator notes; marks them read. Check it often.
   bounty block "reason"            bounty split "<title>" [--desc TEXT] [--criteria "..."]...
   bounty submit [--branch B] [--no-wait]
   bounty next                      bounty lease gpu [--ttl MIN] [--no-wait]    bounty release gpu
@@ -37,7 +41,7 @@ function parse(argv) {
     if (a.startsWith('--')) {
       const k = a.slice(2);
       const nxt = argv[i + 1];
-      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help'].includes(k);
+      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help', 'peek'].includes(k);
       const v = flag || nxt === undefined || nxt.startsWith('--') ? true : (i++, nxt);
       if (opt[k] === undefined) opt[k] = v; else opt[k] = [].concat(opt[k], v);
     } else pos.push(a);
@@ -66,6 +70,13 @@ function idOf(pos, i = 0) {
   const id = pos[i] || ENV_ID;
   if (!id || !/^\d+$/.test(String(id))) die('which bounty? pass an ID or set BOUNTY_ID');
   return Number(id);
+}
+function printNotes(notes, { header = true } = {}) {
+  if (!notes || !notes.length) return false;
+  if (header) console.log(`\n=== ${notes.length} NEW NOTE${notes.length > 1 ? 'S' : ''} FROM THE ORCHESTRATOR (act on ${notes.length > 1 ? 'these' : 'this'} before you continue; ${notes.length > 1 ? 'they win' : 'it wins'} over the brief) ===`);
+  for (const n of notes) console.log(`[${String(n.at).slice(0, 16).replace('T', ' ')} ${n.actor || 'orchestrator'}] ${n.note}`);
+  if (header) console.log('=== end of notes ===');
+  return true;
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -140,7 +151,7 @@ async function main() {
   const cmd = pos.shift();
   if (!cmd || cmd === 'help' || opt.help) { console.log(HELP); return; }
   const worker = !!SLOT;
-  const orchOnly = ['add', 'edit', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'pause', 'resume', 'import'];
+  const orchOnly = ['add', 'edit', 'note', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'pause', 'resume', 'import'];
   if (worker && orchOnly.includes(cmd)) die(`'${cmd}' is an orchestrator command; you are worker ${SLOT}`);
 
   switch (cmd) {
@@ -159,7 +170,7 @@ async function main() {
       delete d.slot; delete d.depends;
       if (!d.title) die('add needs a title (or --file with a # Title)');
       const b = await api('POST', '/bounties', d);
-      console.log(`added #${b.id} ${b.ticket_id}: ${b.title} [${b.status}]`);
+      console.log(`added #${b.id} ${b.ticket_id}: ${b.title} [${b.status}] project ${b.project_id}`);
       if (opt.ready) { await api('POST', `/bounties/${b.id}/ready`, {}); console.log(`#${b.id} -> ready`); }
       return;
     }
@@ -216,7 +227,8 @@ async function main() {
     }
     case 'start': {
       const b = await api('POST', `/bounties/${idOf(pos)}/start`, {});
-      console.log(`#${b.id} in_progress. Heartbeat with 'bounty progress "..."'; finish with 'bounty submit'.`);
+      console.log(`#${b.id} in_progress. Heartbeat with 'bounty progress "..."', check 'bounty inbox' often; finish with 'bounty submit'.`);
+      printNotes(b.unread_notes);
       return;
     }
     case 'progress': {
@@ -225,6 +237,26 @@ async function main() {
       const id = ENV_ID ? Number(ENV_ID) : die('progress needs BOUNTY_ID');
       const b = await api('POST', `/bounties/${id}/progress`, { note, check, percent: opt.percent ? Number(opt.percent) : null });
       console.log(`#${b.id} progress noted${check.length ? `; checked ${check.join(',')}` : ''}`);
+      printNotes(b.unread_notes);
+      return;
+    }
+    case 'note': {
+      const id = /^\d+$/.test(pos[0] || '') ? Number(pos.shift()) : idOf([]);
+      const text = pos.join(' ');
+      if (!text) die('note ID "text"');
+      const e = await api('POST', `/bounties/${id}/notes`, { text });
+      console.log(`note #${e.id} on bounty #${id}: the worker sees it on its next 'bounty inbox' / progress, and every later attempt gets it in its prompt`);
+      return;
+    }
+    case 'inbox': {
+      const id = idOf(pos);
+      const peek = opt.peek || (!worker && opt.all);
+      const notes = opt.all ? await api('GET', `/bounties/${id}/notes`) : peek ? await api('GET', `/bounties/${id}/inbox`) : await api('POST', `/bounties/${id}/inbox`, {});
+      if (opt.json) { console.log(JSON.stringify(notes, null, 2)); return; }
+      if (!notes.length) { console.log(`#${id}: no ${opt.all ? '' : 'unread '}notes.`); return; }
+      if (opt.all) { for (const n of notes) console.log(`[${n.at.slice(0, 16).replace('T', ' ')} ${n.actor}] ${n.read_at ? `(read ${n.read_at.slice(0, 16).replace('T', ' ')} by ${n.read_by})` : '(UNREAD)'} ${n.note}`); return; }
+      if (peek) { console.log(`#${id}: ${notes.length} unread note(s) (peek; still unread):`); printNotes(notes, { header: false }); return; }
+      printNotes(notes);
       return;
     }
     case 'heartbeat': { await api('POST', `/bounties/${idOf(pos)}/heartbeat`, {}); console.log('ok'); return; }

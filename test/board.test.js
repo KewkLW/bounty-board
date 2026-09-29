@@ -364,3 +364,103 @@ test('Tribulation import: backlog + in-flight + tests, deduped, re-runnable', as
     assert.strictEqual(new Set(titles).size, titles.length, 'no duplicate titles');
   } finally { await t.s.close(); }
 });
+
+// Run the real CLI against a test board (async: the board runs in this process).
+function cli(url, args, env = {}) {
+  const { execFile } = require('child_process');
+  return new Promise(resolve => execFile(process.execPath, [path.join(ROOT, 'bin', 'bounty'), ...args], {
+    encoding: 'utf8', env: { ...process.env, BOUNTY_SLOT: '', BOUNTY_ID: '', BOUNTY_ACTOR: '', BOUNTY_URL: url, ...env },
+  }, (err, out, stderr) => resolve({ code: err ? (err.code ?? 1) : 0, out, err: stderr })));
+}
+
+test('notes: orchestrator -> live worker via inbox, start and progress; later attempts get them in the prompt', async () => {
+  const t = await startBoard('notes', { dispatch: false, over: { machine_rules: ['One heavy job at a time: check free -g first.'] } });
+  try {
+    const { board, call, url } = t;
+    const b = board.create({ title: 'x', project: 'scratch', criteria: CRIT });
+    board.ready(b.id);
+    // workers can't send notes; empty notes are refused
+    assert.strictEqual((await call('POST', `/bounties/${b.id}/notes`, { text: 'hi' }, 'fake-1')).status, 403);
+    assert.strictEqual((await call('POST', `/bounties/${b.id}/notes`, { text: '  ' })).status, 400);
+    assert.strictEqual((await call('POST', '/bounties/9999/notes', { text: 'x' })).status, 404);
+    // a note sent before start is printed by `bounty start`
+    let r = await cli(url, ['note', String(b.id), 'use port 7777, not 45000']);
+    assert.strictEqual(r.code, 0, r.err);
+    const w = { BOUNTY_ID: String(b.id), BOUNTY_SLOT: 'fake-1' };
+    r = await cli(url, ['start'], w);
+    assert.strictEqual(r.code, 0, r.err);
+    assert.match(r.out, /NEW NOTE FROM THE ORCHESTRATOR[\s\S]*use port 7777, not 45000/);
+    assert.strictEqual(board.notes(b.id, { unread: true }).length, 0);
+    assert.strictEqual(board.notes(b.id)[0].read_by, 'fake-1');
+    // inbox: nothing unread now
+    r = await cli(url, ['inbox'], w);
+    assert.match(r.out, /no unread notes/);
+    // peek leaves it unread; inbox prints it and marks it read
+    await cli(url, ['note', String(b.id), 'MACHINE RULES: one rendered UE instance']);
+    r = await cli(url, ['inbox', String(b.id), '--peek']);
+    assert.match(r.out, /1 unread note\(s\)[\s\S]*one rendered UE instance/);
+    assert.strictEqual(board.notes(b.id, { unread: true }).length, 1);
+    assert.strictEqual((await call('GET', `/bounties/${b.id}/inbox`)).data.length, 1);
+    r = await cli(url, ['inbox'], w);
+    assert.match(r.out, /NEW NOTE[\s\S]*one rendered UE instance/);
+    assert.strictEqual(board.notes(b.id, { unread: true }).length, 0);
+    // progress prints unread notes too, once
+    await cli(url, ['note', String(b.id), 'criterion 2 is dropped']);
+    r = await cli(url, ['progress', 'did a thing'], w);
+    assert.match(r.out, /progress noted[\s\S]*criterion 2 is dropped/);
+    r = await cli(url, ['progress', 'did another thing'], w);
+    assert.doesNotMatch(r.out, /NOTE/);
+    // workers can't use `bounty note`
+    r = await cli(url, ['note', String(b.id), 'x'], w);
+    assert.notStrictEqual(r.code, 0);
+    // notes are in the history, and every later attempt gets all of them in its prompt
+    const hist = board.get(b.id).events.filter(e => e.kind === 'message').map(e => e.note);
+    assert.deepStrictEqual(hist, ['use port 7777, not 45000', 'MACHINE RULES: one rendered UE instance', 'criterion 2 is dropped']);
+    const { workerPrompt } = require('../lib/prompt');
+    const prompt = workerPrompt(board, { ...board.need(b.id), attempts: 2 }, board.slot('fake-2'), { worktree: t.repo, branch: 'x' });
+    assert.match(prompt, /## Orchestrator notes[\s\S]*use port 7777[\s\S]*one rendered UE instance[\s\S]*criterion 2 is dropped/);
+    assert.match(prompt, /`bounty inbox` right after start/);
+    assert.match(prompt, /# Machine rules[\s\S]*check free -g first/);
+    // a bounty with no notes has no notes section
+    const c = board.create({ title: 'y', project: 'scratch', criteria: CRIT });
+    assert.doesNotMatch(workerPrompt(board, board.need(c.id), board.slot('fake-1'), { worktree: t.repo, branch: 'y' }), /## Orchestrator notes/);
+  } finally { await t.s.close(); }
+});
+
+test('default project: the only non-legacy project, or config default_project; no project is refused at creation', async () => {
+  const t = await startBoard('defproj', { dispatch: false });
+  try {
+    const { board, call, url, repo } = t;
+    board.db.prepare("INSERT INTO projects (id, name, repo) VALUES ('legacy', 'Legacy', '')").run();
+    // one non-legacy project: it is the default
+    let r = await cli(url, ['add', 'no project given']);
+    assert.strictEqual(r.code, 0, r.err);
+    assert.match(r.out, /project scratch/);
+    // two projects and no default: refused at creation, not at ready
+    board.upsertProject({ id: 'other', repo, main_branch: 'main' });
+    r = await call('POST', '/bounties', { title: 'ambiguous' });
+    assert.strictEqual(r.status, 400);
+    assert.match(r.data.error, /needs a project.*scratch/);
+    r = await cli(url, ['add', 'ambiguous']);
+    assert.notStrictEqual(r.code, 0);
+    assert.match(r.err, /needs a project/);
+    assert.strictEqual(board.list({ q: 'ambiguous' }).length, 0);
+    // a configured default wins
+    board.cfg.default_project = 'other';
+    assert.strictEqual((await call('POST', '/bounties', { title: 'defaulted' })).data.project_id, 'other');
+    assert.strictEqual((await call('GET', '/state')).data.default_project, 'other');
+    // an explicit --project still wins; an unknown one is refused
+    assert.strictEqual((await call('POST', '/bounties', { title: 'explicit', project: 'scratch' })).data.project_id, 'scratch');
+    assert.strictEqual((await call('POST', '/bounties', { title: 'bad', project: 'nope' })).status, 400);
+    board.cfg.default_project = 'gone';
+    assert.match((await call('POST', '/bounties', { title: 'bad default' })).data.error, /unknown project 'gone'/);
+    // bounty edit --project
+    const id = board.list({ q: 'defaulted' })[0].id;
+    r = await cli(url, ['edit', String(id), '--project', 'scratch']);
+    assert.strictEqual(r.code, 0, r.err);
+    assert.strictEqual(board.raw(id).project_id, 'scratch');
+    r = await cli(url, ['edit', String(id), '--project', 'nope']);
+    assert.notStrictEqual(r.code, 0);
+    assert.strictEqual(board.raw(id).project_id, 'scratch');
+  } finally { await t.s.close(); }
+});

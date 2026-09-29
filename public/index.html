@@ -158,7 +158,7 @@ function fillSelects() {
   fs.innerHTML = '<option value="">all slots</option><option value="none">unassigned</option>' + S.state.slots.map(s => `<option>${esc(s.id)}</option>`).join('');
   fs.value = keepS;
   const np = document.getElementById('n-project');
-  if (!np.options.length) np.innerHTML = S.projects.filter(p => p.id !== 'legacy').map(p => `<option>${esc(p.id)}</option>`).join('');
+  if (!np.options.length) { np.innerHTML = S.projects.filter(p => p.id !== 'legacy').map(p => `<option>${esc(p.id)}</option>`).join(''); if (S.state.default_project) np.value = S.state.default_project; }
   const ns = document.getElementById('n-slot');
   if (!ns.options.length) ns.innerHTML = '<option value="">unassigned</option>' + S.state.slots.map(s => `<option>${esc(s.id)}</option>`).join('');
 }
@@ -277,6 +277,7 @@ async function openBounty(id) {
   S.open = b;
   const slots = S.state.slots;
   const crit = b.criteria || [];
+  const notes = b.events.filter(e => e.kind === 'message');
   const act = (label, fn, cls = 'bg-gray-700') => `<button onclick="${fn}" class="${cls} font-bold text-xs uppercase py-1.5 px-3 cel shadow-comic-sm">${label}</button>`;
   const actions = [];
   if (['backlog', 'blocked', 'failed', 'in_progress'].includes(b.status)) actions.push(act('Ready → dispatch', `doReady(${id}, ${b.external_owner ? 1 : 0})`, 'bg-primary text-black'));
@@ -294,7 +295,14 @@ async function openBounty(id) {
     </div>
     ${b.blocked_reason ? `<div class="mt-2 bg-black p-2 font-mono text-xs text-red-400 border border-danger">${esc(b.blocked_reason)}</div>` : ''}
     <div class="flex flex-wrap gap-2 mt-3">${actions.join('')}</div>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4 text-xs">
+    <div class="mt-4 bg-black/40 p-2 border border-warning/60">
+      <label class="block text-xs font-bold uppercase text-warning">Note to the worker${b.worker_alive ? ' (live now)' : ''}: it sees it on its next inbox/progress; later attempts get it in their prompt</label>
+      <div class="flex gap-2 mt-1"><textarea id="e-note" class="flex-1 p-2 cel font-mono h-16" placeholder="changed requirement, machine rule..."></textarea><button onclick="sendNote(${id})" class="bg-warning text-black font-bold px-3 cel shadow-comic-sm uppercase text-xs">Send</button></div>
+      <span id="note-err" class="text-danger text-xs font-mono"></span>
+      ${notes.length ? `<div class="text-[11px] font-mono mt-2 space-y-1">${notes.map(n => `<div><span class="text-gray-500">${esc(n.at.slice(5, 16).replace('T', ' '))}</span> ${n.read_at ? `<span class="text-green-400">read ${esc(n.read_at.slice(11, 16))} by ${esc(n.read_by || '?')}</span>` : '<span class="text-warning font-bold">UNREAD</span>'} ${esc(n.note)}</div>`).join('')}</div>` : ''}
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-2 mt-4 text-xs">
+      <label>Project<select id="e-project" class="w-full p-1 cel">${S.projects.map(p => `<option ${p.id === b.project_id ? 'selected' : ''}>${esc(p.id)}</option>`).join('')}</select></label>
       <label>Assignee<select id="e-slot" class="w-full p-1 cel"><option value="">unassigned</option>${slots.map(s => `<option ${s.id === b.assignee_slot ? 'selected' : ''}>${esc(s.id)}</option>`).join('')}</select></label>
       <label>Type<select id="e-type" class="w-full p-1 cel">${['task', 'bug', 'test', 'research', 'art', 'docs'].map(t => `<option ${t === b.type ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       <label>Tier<select id="e-tier" class="w-full p-1 cel">${['S', 'A', 'B', 'C'].map(t => `<option ${t === b.tier ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
@@ -321,11 +329,17 @@ async function saveEdit(id) {
   const b = S.open;
   try {
     const criteria = v('e-crit').split('\n').map(s => s.trim()).filter(Boolean).map(s => { const m = s.match(/^\[([ xX])\]\s*(.*)$/); return m ? { text: m[2], done: m[1] !== ' ' } : { text: s.replace(/^[-*]\s*/, ''), done: false }; });
-    await api('PATCH', `/bounties/${id}`, { title: v('e-title'), description: v('e-desc'), criteria, type: v('e-type'), tier: v('e-tier'), priority: v('e-pri'),
+    await api('PATCH', `/bounties/${id}`, { title: v('e-title'), description: v('e-desc'), criteria, type: v('e-type'), tier: v('e-tier'), priority: v('e-pri'), project: v('e-project'),
       depends_on: v('e-deps').split(/[ ,]+/).map(s => Number(s.replace('#', ''))).filter(Boolean) });
     if ((v('e-slot') || null) !== (b.assignee_slot || null)) await api('POST', `/bounties/${id}/assign`, { slot: v('e-slot') || null });
     await openBounty(id); load();
   } catch (e) { document.getElementById('e-err').textContent = e.message; }
+}
+
+async function sendNote(id) {
+  const text = document.getElementById('e-note').value.trim();
+  if (!text) return;
+  try { await api('POST', `/bounties/${id}/notes`, { text }); await openBounty(id); } catch (e) { document.getElementById('note-err').textContent = e.message; }
 }
 
 async function doAct(id, what) {
