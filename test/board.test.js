@@ -421,6 +421,7 @@ test('notes: orchestrator -> live worker via inbox, start and progress; later at
     assert.match(prompt, /## Orchestrator notes[\s\S]*use port 7777[\s\S]*one rendered UE instance[\s\S]*criterion 2 is dropped/);
     assert.match(prompt, /`bounty inbox` right after start/);
     assert.match(prompt, /# Machine rules[\s\S]*check free -g first/);
+    assert.match(prompt, /When you end your turn, your process exits/);
     // a bounty with no notes has no notes section
     const c = board.create({ title: 'y', project: 'scratch', criteria: CRIT });
     assert.doesNotMatch(workerPrompt(board, board.need(c.id), board.slot('fake-1'), { worktree: t.repo, branch: 'y' }), /## Orchestrator notes/);
