@@ -1,4 +1,6 @@
-# Database files
+# Runtime data (DB, worker logs)
+data/
+logs/
 bounty-board.db
 bounty-board.db-shm
 bounty-board.db-wal
@@ -11,7 +13,6 @@ server.err
 
 # Node
 node_modules/
-package-lock.json
 npm-debug.log
 
 # Runtime
