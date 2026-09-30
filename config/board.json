@@ -79,6 +79,13 @@
       "bin": "claude-kewky"
     },
     {
+      "id": "kewky-opus-3",
+      "runner": "claude",
+      "model": "opus",
+      "effort": "high",
+      "bin": "claude-kewky"
+    },
+    {
       "id": "kewky-sonnet-tester",
       "runner": "claude",
       "model": "sonnet",
