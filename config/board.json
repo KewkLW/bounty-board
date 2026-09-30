@@ -10,7 +10,7 @@
   "db_path": "data/bounty-board.db",
   "logs_dir": "logs",
   "default_project": "tribulation",
-  "concurrency_cap": 5,
+  "concurrency_cap": 6,
   "tick_seconds": 5,
   "watchdog": {
     "stall_minutes": 30,
