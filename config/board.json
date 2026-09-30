@@ -55,14 +55,14 @@
       "runner": "claude",
       "model": "opus",
       "effort": "high",
-      "disabled_until": "2026-10-02T00:00:00-07:00"
+      "disabled_until": "2026-10-01T21:26:00-07:00"
     },
     {
       "id": "kewk-opus-2",
       "runner": "claude",
       "model": "opus",
       "effort": "high",
-      "disabled_until": "2026-10-02T00:00:00-07:00"
+      "disabled_until": "2026-10-01T21:26:00-07:00"
     },
     {
       "id": "kewky-opus-1",
