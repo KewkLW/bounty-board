@@ -713,3 +713,19 @@ test('close-merged: commits a slot submitted and the orchestrator merged credit 
     assert.strictEqual(board.slotStats('fake-1').total_loot, 0);
   } finally { await t.s.close(); }
 });
+
+test('dispatcher: a slot with disabled_until in the future takes no work', async () => {
+  const cmd = ['bash', path.join(ROOT, 'test', 'fake-worker.sh')];
+  const t = await startBoard('bench', { dispatch: false, over: { slots: [
+    { id: 'benched', runner: 'command', cmd, disabled_until: new Date(Date.now() + 3600e3).toISOString() },
+    { id: 'expired', runner: 'command', cmd, disabled_until: new Date(Date.now() - 1000).toISOString() },
+  ] } });
+  try {
+    const benched = t.board.create({ title: 'b', project: 'scratch', type: 'task', tier: 'C', criteria: CRIT, status: 'ready', assignee_slot: 'benched' });
+    const expired = t.board.create({ title: 'e', project: 'scratch', type: 'task', tier: 'C', criteria: CRIT, status: 'ready', assignee_slot: 'expired' });
+    t.s.dispatcher.tick();
+    await new Promise(r => setTimeout(r, 1500));
+    assert.equal(t.board.raw(benched.id).status, 'ready');
+    assert.notEqual(t.board.raw(expired.id).status, 'ready');
+  } finally { await t.s.close(); }
+});
