@@ -134,6 +134,7 @@
     "At most ONE rendered UE instance machine-wide (editor GUI, rendered or -RenderOffscreen game client). Take the render lock (Scripts/lib/ue-render-lock.sh, see the GPU rule in the protocol) before any rendered run; if the script is not on main yet, check `ps -eo pid,args | grep -E 'UnrealEditor|Tribulation'` for a rendered instance and wait until it is gone.",
     "One heavy job at a time: before an editor, cook, build or test stack, run `free -g`; wait (and send progress while you wait) if 'available' is under 16 GB or two editors are already running.",
     "Test servers and clients listen on ports below 32768 (the ephemeral range above it collides with outgoing connections).",
-    "Never kill, restart or pause processes you did not start (other workers, Kewky's game or editor, the board itself)."
+    "Never kill, restart or pause processes you did not start (other workers, Kewky's game or editor, the board itself).",
+    "Director migrations: number yours as the next free number on CURRENT main (git fetch first) and re-check before you submit; if main gained a migration with your number, renumber yours (never edit one already on main). Two branches both used 0018 on 2026-09-30."
   ]
 }
