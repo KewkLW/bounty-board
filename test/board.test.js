@@ -729,3 +729,19 @@ test('dispatcher: a slot with disabled_until in the future takes no work', async
     assert.notEqual(t.board.raw(expired.id).status, 'ready');
   } finally { await t.s.close(); }
 });
+
+test('board restart re-queues verifies that were queued or running', async () => {
+  const t = await startBoard('resume-verify', { dispatch: false });
+  let id;
+  try {
+    const b = t.board.create({ title: 'r', project: 'scratch', type: 'task', tier: 'C', criteria: CRIT, status: 'in_progress' });
+    id = b.id;
+    t.board.db.prepare(`UPDATE bounties SET ci_status = 'running', ci_at = ? WHERE id = ?`).run(new Date().toISOString(), id);
+  } finally { await t.s.close(); }
+  const { Board } = require('../lib/board');
+  const b2 = new Board(t.cfg);
+  try {
+    const queued = b2.verifyQueue.some(j => j.id === id) || b2.verifyActive.has(id);
+    assert.ok(queued, 'restarted board re-queues the running verify');
+  } finally { b2.verifyQueue.length = 0; b2.db.close(); }
+});
