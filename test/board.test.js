@@ -351,7 +351,7 @@ test('ready needs acceptance criteria', async () => {
 test('Tribulation import: backlog + in-flight + tests, deduped, re-runnable', async (tt) => {
   const im = require('../lib/importer');
   if (!fs.existsSync(im.DEFAULTS.taskList)) { tt.skip('vault not mounted'); return; }
-  const t = await startBoard('import', { dispatch: false, over: { slots: [{ id: 'sonnet-tester', runner: 'command', cmd: ['true'] }] } });
+  const t = await startBoard('import', { dispatch: false, over: { slots: [{ id: 'kewky-sonnet-tester', runner: 'command', cmd: ['true'] }] } });
   try {
     const { board } = t;
     board.upsertProject({ id: 'tribulation', repo: '/mnt/ue/Tribulation', main_branch: 'main' });
@@ -365,7 +365,7 @@ test('Tribulation import: backlog + in-flight + tests, deduped, re-runnable', as
       ['/mnt/ue/ArtSource/titan-darkknight', '/mnt/ue/ArtSource/titan-darkknight-sol', 'p0-game-bugs', 'portal-real-test'].sort());
     assert.strictEqual(board.list({ status: 'ready', project: 'tribulation' }).length, 0);
     const tests = board.list({ type: 'test', project: 'tribulation' });
-    assert.ok(tests.length >= 40 && tests.every(b => b.assignee_slot === 'sonnet-tester' && b.status === 'backlog'));
+    assert.ok(tests.length >= 40 && tests.every(b => b.assignee_slot === 'kewky-sonnet-tester' && b.status === 'backlog'));
     const others = board.list({ status: 'backlog', project: 'tribulation' }).filter(b => b.type !== 'test');
     assert.ok(others.every(b => !b.assignee_slot));
     // the Task List portal item is folded into the in-flight portal bounty, not duplicated
@@ -482,7 +482,7 @@ test('close-merged: an external bounty is done once its commit is on main; refus
     const { board, repo, call } = t;
     const { spawn } = require('child_process');
     // an external bounty: in_progress, no board worker, no branch recorded
-    const b = board.create({ title: 'external fix', project: 'scratch', type: 'bug', tier: 'B', criteria: CRIT, status: 'in_progress', external_owner: 'opus-1' });
+    const b = board.create({ title: 'external fix', project: 'scratch', type: 'bug', tier: 'B', criteria: CRIT, status: 'in_progress', external_owner: 'kewk-opus-1' });
     assert.strictEqual(board.raw(b.id).status, 'in_progress');
     commitOnBranch(repo, 'ext-br', { 'mul.js': 'module.exports = (a, b) => a * b;\n' });
     const sha = sh(repo, 'git rev-parse ext-br').trim();

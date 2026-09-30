@@ -51,34 +51,37 @@
   },
   "slots": [
     {
-      "id": "opus-1",
+      "id": "kewk-opus-1",
       "runner": "claude",
       "model": "opus",
       "effort": "high"
     },
     {
-      "id": "opus-2",
+      "id": "kewk-opus-2",
       "runner": "claude",
       "model": "opus",
       "effort": "high"
     },
     {
-      "id": "opus-3",
+      "id": "kewky-opus-1",
       "runner": "claude",
       "model": "opus",
-      "effort": "high"
+      "effort": "high",
+      "bin": "claude-kewky"
     },
     {
-      "id": "opus-4",
+      "id": "kewky-opus-2",
       "runner": "claude",
       "model": "opus",
-      "effort": "high"
+      "effort": "high",
+      "bin": "claude-kewky"
     },
     {
-      "id": "sonnet-tester",
+      "id": "kewky-sonnet-tester",
       "runner": "claude",
       "model": "sonnet",
-      "effort": "low"
+      "effort": "low",
+      "bin": "claude-kewky"
     },
     {
       "id": "codex-1",
