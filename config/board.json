@@ -10,7 +10,7 @@
   "db_path": "data/bounty-board.db",
   "logs_dir": "logs",
   "default_project": "tribulation",
-  "concurrency_cap": 7,
+  "concurrency_cap": 8,
   "tick_seconds": 5,
   "watchdog": {
     "stall_minutes": 30,
@@ -90,6 +90,13 @@
       "id": "kewky-opus-4",
       "runner": "claude",
       "model": "opus",
+      "effort": "high",
+      "bin": "claude-kewky"
+    },
+    {
+      "id": "kewky-fable-1",
+      "runner": "claude",
+      "model": "claude-fable-5-1",
       "effort": "high",
       "bin": "claude-kewky"
     },
