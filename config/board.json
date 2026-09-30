@@ -76,7 +76,8 @@
       "runner": "claude",
       "model": "opus",
       "effort": "high",
-      "bin": "claude-kewky"
+      "bin": "claude-kewky",
+      "worktree_root": "/run/media/kewk/secondary_backup/ue-wt"
     },
     {
       "id": "kewky-opus-3",

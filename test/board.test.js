@@ -745,3 +745,21 @@ test('board restart re-queues verifies that were queued or running', async () =>
     assert.ok(queued, 'restarted board re-queues the running verify');
   } finally { b2.verifyQueue.length = 0; b2.db.close(); }
 });
+
+test('dispatcher: a slot with worktree_root builds its worktree there and symlinks the usual path', async () => {
+  const t = await startBoard('wtroot', { dispatch: false });
+  try {
+    const root = path.join(t.dir, 'otherdrive');
+    fs.mkdirSync(root);
+    t.board.upsertProject({ id: 'scratch', repo: t.repo, main_branch: 'main', worktree_cmd: 'git worktree add "$WORKTREE_ROOT/{task}" -b {branch} {main}',
+      worktree_path: path.join(t.dir, 'wt', '{task}'), verify_cmd: './verify.sh', verify_timeout_min: 2 });
+    fs.mkdirSync(path.join(t.dir, 'wt'), { recursive: true });
+    const b = t.board.create({ title: 'on hdd', project: 'scratch', type: 'task', tier: 'C', criteria: CRIT, status: 'ready' });
+    const logFd = fs.openSync(path.join(t.dir, 'wtroot.log'), 'a');
+    const wt = await t.s.dispatcher.ensureWorktree(t.board.need(b.id), t.board.project('scratch'), logFd, { id: 'hdd-slot', worktree_root: root });
+    fs.closeSync(logFd);
+    assert.ok(fs.lstatSync(wt.worktree).isSymbolicLink(), 'usual path is a symlink');
+    assert.equal(fs.realpathSync(wt.worktree), fs.realpathSync(path.join(root, wt.branch)));
+    assert.ok(fs.existsSync(path.join(wt.worktree, 'math.js')));
+  } finally { await t.s.close(); }
+});
