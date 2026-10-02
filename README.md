@@ -110,6 +110,12 @@ The `agents` table's counters are only a cache, rebuilt from the ledger on every
 
 Tier names: bug = Kill Order / Wanted: Dead / Bounty Posted / Pest Control; task = Black Ops / Merc Contract / Salvage Run / Scrap Work.
 
+## A board per project (required: its own themed UI)
+
+Each project gets its own board instance, never a shared one: its own config directory (`board.json`, `data/`, `logs/`), port, systemd user unit (`Environment=BOUNTY_CONFIG=...` and `BOUNTY_NO_SEED=1`), CLI wrapper exporting `BOUNTY_URL`, and project (`bounty project add`). Slots alternate the two Claude accounts (kewk-*, kewky-* interleaved, `autopilot: true`) so they stay even.
+
+**Every new board must get its own themed UI before work starts. This is mandatory, not polish.** Copy `public/` into the instance (`public_dir` in its config), make that copy a git repo, and restyle it after the project's world at the quality bar of the AsheronUE board (`/mnt/ue/asheronue-board/public`, "Dereth Command") and the LE Season 5 site (`~/build/le-s5-site/site`): layered dark backgrounds, framed panels, a display serif, real art extracted from the project's own game data (portraits per slot, icons, a world map), phone and desktop widths, every behavior kept, no edits to the shared `public/`. Verify with headless Playwright (no state-changing clicks), then open the board in Kewky's browser.
+
 ## History
 
 The February 2026 board broke because agents faked work (appending to WORK_LOG.md) and the old reviewer approved any evidence string longer than 50 characters. Its 57 bounties are kept under the `legacy` project (tick "legacy" on the dashboard) with their old agent names as text; its agents and their inflated loot were deleted (September 2026), and legacy work never counts toward loot. The gates above exist so that cannot happen again.
