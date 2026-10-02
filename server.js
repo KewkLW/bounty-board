@@ -43,7 +43,8 @@ function createServer(cfg, { dispatch = true, seed = true } = {}) {
   app.use((req, res, next) => (allowed(req.socket.remoteAddress) ? next() : res.status(403).send('forbidden')));
   app.use(express.json({ limit: '2mb' }));
   app.use('/api', makeApi(board, dispatcher));
-  const pub = path.join(__dirname, 'public');
+  // A board instance may serve its own themed copy of the UI (config public_dir); default is ./public.
+  const pub = cfg.public_dir ? path.resolve(cfg.public_dir) : path.join(__dirname, 'public');
   app.use(express.static(pub));
   app.get('/roster', (req, res) => res.sendFile(path.join(pub, 'roster.html')));
   app.get('/live', (req, res) => res.sendFile(path.join(pub, 'live.html')));
