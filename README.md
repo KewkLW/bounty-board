@@ -94,6 +94,8 @@ Projects are generic (`bounty project add ID --repo PATH --main main --wt-cmd CM
 
 ## Agents = the configured slots
 
+Each slot may carry a `name` (`{"id": "kewk-opus-1", "name": "Asheron"}`): the agent's name for the project's life, sent to the telemetry receiver as `agent.name` next to `project=<default_project>`, `bounty.id`, `bounty.slot` and `bounty.attempt`. Keep names stable; renaming starts a new series in the agent stats. Without a `name` the slot id stands in.
+
 The only agents are the dispatcher slots in `config/board.json` (`opus-1..4`, `sonnet-tester`, `codex-1..2`). At every start the board runs a re-runnable migration that deletes every other agent row (the Feb-2026 crew such as `opus-wsl-1` or `agent-codex-1`, and the seed/mock agents) together with its `agent_status` / `agent_events` rows; old bounties keep those names as plain text in `claimed_by`. An agent row can only be created for a configured slot: `POST /api/agents {id}` and `board.registerAgent` refuse any other id (403), and `GET /api/agents/<non-slot>` is a 404.
 
 ## Loot, levels, streaks: derived from verified work
