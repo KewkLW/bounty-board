@@ -304,7 +304,7 @@ The person running the board can answer a worker or the orchestrator without a t
 
 | Endpoint | Body | Result |
 |---|---|---|
-| `POST /api/bounties/:id/human-notes` | `{ "text": "1..4000 chars", "from": "name (default human)", "unblock": true }` | `{ note, bounty: {id, status} }`. With `unblock: true` a `blocked` bounty moves to `ready` (the status event's actor is `human:<from>`). 400 empty or too long text, 404 unknown bounty, 409 when unblock is asked but the bounty is not blocked (or its worker is still live): the note is still stored, and the 409 body says so (`note_stored: true`, plus `note` and `bounty`) |
+| `POST /api/bounties/:id/human-notes` | `{ "text": "1..4000 chars", "from": "name (default human)", "unblock": true }` | `{ note, bounty: {id, status} }`. With `unblock: true` a `blocked` bounty moves to `ready` (the status event's actor is `human:<from>`). 400 empty or too long text, 404 unknown bounty, 409 when unblock is asked but the bounty is not blocked: the note is still stored, and the 409 body says so (`note_stored: true`, plus `note` and `bounty`) |
 | `GET /api/human-notes[?unread=1]` | | the human notes, newest first: `id, bounty_id, title, project, text, from, created_at, read` (`read` = the orchestrator has seen it) |
 | `POST /api/human-notes/read` | `{ "ids": [noteId, ...] }` | `{ marked }`: marks those read for the orchestrator |
 

@@ -4,7 +4,7 @@ Branch `b2-r1-board-messages-from-the-human-and`. Gate: `npm ci --silent && npm 
 
 ## What changed
 - `lib/db.js`: new column `events.orch_read_at` (the orchestrator's read mark; `read_at`/`read_by` stay the worker's).
-- `lib/board.js`: `humanNote()` stores an event of kind `human`, actor `human:<from>` (default `human`), text trimmed, 1..4000 chars. `unblock: true` on a `blocked` bounty runs `transition(..., 'ready', { actor: 'human:<from>', note: 'unblocked by the human (<from>)' })`. Not blocked (or a live worker still attached): the note is stored and the API answers 409 saying so. `humanNotes()` / `markHumanRead()` for the list and read endpoints. `notes()` (worker inbox, start/progress output, prompt) now covers kinds `message` and `human`.
+- `lib/board.js`: `humanNote()` stores an event of kind `human`, actor `human:<from>` (default `human`), text trimmed, 1..4000 chars. `unblock: true` on a `blocked` bounty runs `transition(..., 'ready', { actor: 'human:<from>', note: 'unblocked by the human (<from>)' })`. Not blocked: the note is stored and the API answers 409 saying so. `humanNotes()` / `markHumanRead()` for the list and read endpoints. `notes()` (worker inbox, start/progress output, prompt) now covers kinds `message` and `human`.
 - `lib/api.js`: `POST /api/bounties/:id/human-notes`, `GET /api/human-notes[?unread=1]`, `POST /api/human-notes/read {ids}`. Writes need `X-Board-Request: 1` and `Content-Type: application/json` (403 otherwise; checked before 404/400); worker slots get 403. No CORS middleware: an OPTIONS preflight gets no `Access-Control-Allow-*` headers (tested). `allow_cidrs` applies via the existing middleware (tested).
 - `lib/prompt.js`: separate section `## Messages from the human (...)` with each line `(from the human, <from>)`; orchestrator notes section unchanged and excludes human notes.
 - `lib/live.js`: unread-notes count includes human notes.
@@ -21,4 +21,4 @@ Branch `b2-r1-board-messages-from-the-human-and`. Gate: `npm ci --silent && npm 
 
 ## Notes for the orchestrator / hub (#3)
 - 409 body: `{ error, note_stored: true, note, bounty: {id, status} }`. 200 body with `unblock: true` also carries `unblocked: true`.
-- Extra 409 case: unblock on a blocked bounty whose worker process is still alive (it would otherwise be re-dispatched next to the live one). The note is still stored.
+- Attempt 2 (reviewer fix): removed the extra live-worker 409. A blocked bounty always moves to ready on `unblock: true`, live worker record or not; 409 is only for a bounty that is not blocked. Regression test in `test/human-notes.test.js` "human-notes API": stubs `workerAlive` true for the blocked bounty, asserts `worker_alive: true`, then 200, `unblocked: true`, status `ready`.

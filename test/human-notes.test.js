@@ -102,6 +102,19 @@ test('human-notes API: header check, 400/404/409, unblock, list and read marks',
     assert.strictEqual(st.to_status, 'ready');
     assert.strictEqual(st.actor, 'human:kewk');
     assert.match(st.note, /unblocked by the human \(kewk\)/);
+    // unblock works even while a live worker record exists for the blocked bounty
+    board.start(b.id, 'fake-1');
+    board.block(b.id, 'still stuck', 'fake-1');
+    const realAlive = board.workerAlive;
+    board.workerAlive = bid => bid === b.id || realAlive.call(board, bid);
+    try {
+      assert.strictEqual(board.get(b.id).worker_alive, true);
+      r = await hcall(url, 'POST', p, { text: 'go on anyway', unblock: true });
+      assert.strictEqual(r.status, 200);
+      assert.strictEqual(r.data.unblocked, true);
+      assert.deepStrictEqual(r.data.bounty, { id: b.id, status: 'ready' });
+      assert.strictEqual(board.get(b.id).status, 'ready');
+    } finally { board.workerAlive = realAlive; }
     // unblock: false on a non-blocked bounty is just a note
     assert.strictEqual((await hcall(url, 'POST', p, { text: 'fyi', unblock: false })).status, 200);
 
@@ -120,7 +133,7 @@ test('human-notes API: header check, 400/404/409, unblock, list and read marks',
     assert.strictEqual(all[0].read, false);
     for (let i = 1; i < all.length; i++) assert.ok(all[i - 1].id > all[i].id, 'newest first');
     const n = all.length;
-    assert.strictEqual(n, 7);
+    assert.strictEqual(n, 8);
 
     // POST /human-notes/read: needs the header; marks only what it's given
     assert.strictEqual((await call('POST', '/human-notes/read', { ids: [all[0].id] })).status, 403);
