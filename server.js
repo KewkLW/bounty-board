@@ -3,32 +3,20 @@
 const express = require('express');
 const http = require('http');
 const path = require('path');
-const net = require('net');
 const WebSocket = require('ws');
 const { load } = require('./lib/config');
 const { Board } = require('./lib/board');
 const { Dispatcher } = require('./lib/dispatcher');
 const { Reviewer } = require('./lib/reviewer');
 const { makeApi } = require('./lib/api');
+const { allowList } = require('./lib/allow');
+const registry = require('./lib/registry');
 
 // Optional: seed a default project from config.  Set "seed_project" in board.json to auto-create
 // a project on first boot.  Example:
 //   "seed_project": { "id": "my-project", "repo": "/path/to/repo", "main_branch": "main",
 //     "verify_cmd": "npm test", "verify_timeout_min": 30 }
 
-
-function allowList(cidrs) {
-  const bl = new net.BlockList();
-  for (const c of cidrs || []) {
-    const [addr, bits] = c.split('/');
-    bl.addSubnet(addr, Number(bits), addr.includes(':') ? 'ipv6' : 'ipv4');
-  }
-  return ip => {
-    if (!ip) return false;
-    const v4 = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
-    return bl.check(v4, v4.includes(':') ? 'ipv6' : 'ipv4');
-  };
-}
 
 function createServer(cfg, { dispatch = true, seed = true } = {}) {
   const board = new Board(cfg);
@@ -67,19 +55,27 @@ function createServer(cfg, { dispatch = true, seed = true } = {}) {
   function listen() {
     return new Promise(resolve => server.listen(cfg.port, cfg.host, () => {
       cfg.port = server.address().port;
+      // Tell the hub this board is up (a config built without load() has no registry_dir: skip).
+      if (cfg.registry_dir) {
+        try {
+          const proj = board.project(board.defaultProject()) || {};
+          registry.register(cfg.registry_dir, registry.entryFor(cfg, cfg.port, { name: proj.name, defaultProject: board.defaultProject(), publicDir: pub }));
+        } catch (e) { console.error('[registry]', e.message); }
+      }
       if (dispatch) { dispatcher.start(); reviewer.start(); }
       resolve(server.address().port);
     }));
   }
   function close() {
     dispatcher.stop(); reviewer.stop();
+    if (cfg.registry_dir) { try { registry.unregister(cfg.registry_dir, cfg.port); } catch {} }
     for (const c of wss.clients) c.terminate();
     return new Promise(resolve => server.close(() => { board.db.close(); resolve(); }));
   }
   return { app, server, board, dispatcher, reviewer, listen, close };
 }
 
-module.exports = { createServer };
+module.exports = { createServer, allowList };
 
 if (require.main === module) {
   const cfg = load();

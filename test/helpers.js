@@ -30,7 +30,7 @@ function makeRepo(dir, { verify = 'pass' } = {}) {
 function writeConfig(dir, over = {}) {
   const cfg = {
     port: 0, host: '127.0.0.1', allow_cidrs: ['127.0.0.0/8', '::1/128'],
-    db_path: path.join(dir, 'board.db'), logs_dir: path.join(dir, 'logs'),
+    db_path: path.join(dir, 'board.db'), logs_dir: path.join(dir, 'logs'), registry_dir: path.join(dir, 'registry'),
     concurrency_cap: 3, tick_seconds: 1,
     watchdog: { stall_minutes: 30, check_seconds: 1, kill_grace_seconds: 1 },
     retry: { max_attempts: 4, escalate_after_failures: 2, escalate_model: { haiku: 'sonnet', sonnet: 'opus' } },

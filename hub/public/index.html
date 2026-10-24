@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Hub · Totally not a Kanban</title>
+<link rel="icon" href="/img/favicon.png" type="image/png"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script src="/op-theme.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="/op.css" rel="stylesheet"/>
+<link href="/status.css" rel="stylesheet"/>
+<link href="/hub.css" rel="stylesheet"/>
+</head>
+<body class="bg-background-dark min-h-screen text-gray-100 font-display">
+<header class="op-header hub-header">
+  <a class="op-brand" href="/" title="Every project's status">
+    <span class="op-mark" aria-hidden="true"></span>
+    <div class="min-w-0">
+      <h1 class="op-title"><span class="t">Every project</span></h1>
+      <div class="op-sub">one page for every running board · <span id="hub-updated">loading</span></div>
+    </div>
+  </a>
+  <div class="hub-stats" id="hub-stats"></div>
+</header>
+<nav class="hub-tabs-wrap" aria-label="Projects">
+  <div class="hub-tabs" id="hub-tabs" role="tablist" aria-label="Projects"></div>
+</nav>
+<main id="hub-panels" class="hub-panels"></main>
+<script src="/hub.js"></script>
+</body></html>

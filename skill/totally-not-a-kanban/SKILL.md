@@ -5,7 +5,7 @@ description: Set up and run "Totally not a Kanban", a bounty board that dispatch
 
 # Totally not a Kanban
 
-A board per project. Workers are spawned by the board, one fresh agent per bounty. A bounty reaches **done** only when its commits are on the project's main branch. The user checks progress on the board's **Status** page (goals) and **Live** page (agents), from any device on their Tailscale network, instead of asking you.
+A board per project. Workers are spawned by the board, one fresh agent per bounty. A bounty reaches **done** only when its commits are on the project's main branch. The user checks progress on the board's **Status** page (goals) and **Live** page (agents), or on the **hub** page when several boards run, from any device on their Tailscale network, instead of asking you.
 
 Repo: `https://github.com/KewkLW/bounty-board`. Its `README.md` is the reference for every config key, CLI verb and gate; read the sections named below before acting.
 
@@ -34,6 +34,7 @@ Do this before any work on the project starts. Never file a project's work on an
 8. **Note**: write `public/status-notes.json` (`written_at`, `headline`, `body`).
 9. **Phone access**: tell the user the tailnet URL (`http://<machine>.<tailnet>.ts.net:<port>/status.html`). `allow_cidrs` already admits Tailscale addresses; never widen it to the public internet.
 10. Open `/status.html` and `/live` yourself and check they render, then tell the user the URLs.
+11. **The hub, once a second board runs**: when this is not the only board on the machine, start the hub so the user has one page for every project: install `systemd/bounty-hub.service` as a user unit and enable it (or `node hub/server.js`), default port 3770 (README, "One page for every project"). Boards register themselves; open `http://127.0.0.1:3770/` and check the new board has a card, then give the user the tailnet URL (`http://<machine>.<tailnet>.ts.net:3770/`). If the hub already runs, just check the new board shows up.
 
 ## 3. Filing work
 

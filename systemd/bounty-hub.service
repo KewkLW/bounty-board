@@ -1,0 +1,21 @@
+[Unit]
+Description=Totally not a Kanban hub (one status page for every running board)
+After=network-online.target
+
+[Service]
+Type=simple
+# Edit these paths to match your installation:
+WorkingDirectory=%h/bounty-board
+ExecStart=node %h/bounty-board/hub/server.js
+Environment=NODE_ENV=production
+# Port (default 3770). Or copy config/hub.example.json to config/hub.json, or point HUB_CONFIG at one.
+# Environment=HUB_PORT=3770
+# Boards register in $XDG_STATE_HOME/totally-not-a-kanban/boards; set this only if they use another dir:
+# Environment=BOUNTY_REGISTRY_DIR=%h/.local/state/totally-not-a-kanban/boards
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

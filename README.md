@@ -255,6 +255,7 @@ The full prompt is saved alongside each attempt's log for debugging.
 - Leaderboard: `/leaderboard` (loot from verified work)
 - CLI: `bounty help` (symlink `bin/bounty` to your PATH)
 - Service: install `systemd/bounty-board.service` as a user unit
+- Hub: `node hub/server.js` on :3770, one page for every running board (see "One page for every project")
 - Tests: `npm test`
 
 Only addresses in `allow_cidrs` may connect. The default allows loopback and Tailscale ranges (100.64.0.0/10).
@@ -381,7 +382,33 @@ A themed board copies `status.html` from its own `live.html` (header, fonts and 
 
 ## A board per project
 
-Each project gets its own board instance, never a shared one: its own config directory, port, systemd user unit (`Environment=BOUNTY_CONFIG=...` and `BOUNTY_NO_SEED=1`), CLI wrapper exporting `BOUNTY_URL`, and project entry.
+Each project gets its own board instance, never a shared one: its own config directory, port, systemd user unit (`Environment=BOUNTY_CONFIG=...` and `BOUNTY_NO_SEED=1`), CLI wrapper exporting `BOUNTY_URL`, and project entry. With two or more running, start the hub (see "One page for every project").
+
+## One page for every project
+
+With more than one board running, the hub gives you one page for all of them so you never have to remember ports.
+
+```bash
+node hub/server.js          # http://localhost:3770
+```
+
+- **All** tab first: one card per project with the orchestrator's headline, the Now goal and its progress bar, how many workers are on it, and a red count of bounties blocked on a human. **Needs you** at the top lists every blocked bounty across all projects with its project and the reason. Offline and idle boards sort last.
+- Then one tab per project with that board's full status (note, goals with their roads, working, needs attention, finished in 24 h) in the board's accent color, and links to the board, its Status page and Live. Tabs work with the arrow keys, Home and End.
+- The page refreshes every 30 seconds and fits a phone.
+
+**How boards are found.** Every board writes `$XDG_STATE_HOME/totally-not-a-kanban/boards/<port>.json` (default `~/.local/state/...`) when it starts: name, port, default project, public dir, accent, pid. The write is atomic (temp file and rename). A clean exit marks the file stopped. The hub reads that directory on every request, so a board started later shows up without restarting the hub; a board that does not answer, or whose process is gone, shows as offline. Stopped boards drop off after 7 days. Existing board configs need no changes. Optional keys in `board.json`: `name` (else the default project's name) and `accent` (else `--accent` or `--blue` from the board's `op.css`). `BOUNTY_REGISTRY_DIR` moves the directory for boards and hub alike.
+
+The hub server fetches each board's `/api/bounties`, `/api/bounties/stats`, `/api/state`, `status-goals.json` and `status-notes.json` over loopback (a browser could not read the other ports) and serves one aggregated JSON at `GET /api/hub`.
+
+**Config.** Port from `HUB_PORT`, `PORT`, or `port` in `config/hub.json` (copy `config/hub.example.json`; `HUB_CONFIG` points elsewhere), default 3770. `allow_cidrs` works as on the boards: loopback and Tailscale ranges by default.
+
+**As a service.** `systemd/bounty-hub.service` is a user unit:
+```bash
+cp systemd/bounty-hub.service ~/.config/systemd/user/   # edit the paths
+systemctl --user daemon-reload && systemctl --user enable --now bounty-hub
+```
+
+**On your phone over Tailscale.** Open `http://<machine>.<tailnet>.ts.net:3770/`. The board links on the page use the same host name, so they work from the phone too. Never widen `allow_cidrs` to the public internet.
 
 ## History
 

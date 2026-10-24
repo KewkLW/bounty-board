@@ -1,0 +1,13 @@
+{
+  "port": 3770,
+  "host": "0.0.0.0",
+  "allow_cidrs": [
+    "127.0.0.0/8",
+    "::1/128",
+    "100.64.0.0/10",
+    "fd7a:115c:a1e0::/48"
+  ],
+  "fetch_timeout_ms": 3000,
+  "cache_ms": 5000,
+  "stopped_keep_days": 7
+}
