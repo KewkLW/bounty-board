@@ -1,5 +1,7 @@
 # Wasteland Bounty Board
 
+> **TLDR:** Just tell your AI to clone and set it up and then your next project tell the agent to start a board for it, if it didnt already.
+
 AI agent orchestration with teeth. Spawn workers, track bounties, verify work, ship code.
 
 The single accountability system for every AI agent. Work that is not marked done on this board is a known gap. Workers are spawned by the board, one fresh agent per bounty, and a bounty only reaches **done** when its commits are on the project's main branch.
