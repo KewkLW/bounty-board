@@ -212,6 +212,7 @@
     }
   });
   window.addEventListener('resize', () => fitClamps());
+  document.fonts?.ready.then(() => fitClamps());
   $('hub-panels').addEventListener('click', e => { const c = e.target.closest('.hub-card'); if (c) { e.preventDefault(); select(c.dataset.tab, true); } });
   window.addEventListener('hashchange', () => { const k = location.hash.slice(1); if (k && k !== selected && document.getElementById('tab-' + k)) select(k); });
 
