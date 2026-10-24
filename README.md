@@ -2,6 +2,8 @@
 
 > **TLDR:** Just tell your AI to clone and set it up and then your next project tell the agent to start a board for it, if it didnt already.
 
+> For Claude Code: copy `skill/its-not-a-kanban/` into `~/.claude/skills/` and it knows how to install the board, start one per project, and keep its Status page current.
+
 ## Why use it
 
 Run a few AI agents in parallel and you hit the same problems fast: they say "done" when nothing landed, they stall silently, they drift off task, and you lose track of who is doing what. A Kanban board just shows you cards. This one makes the agents prove it.
@@ -248,6 +250,7 @@ The full prompt is saved alongside each attempt's log for debugging.
 
 - Dashboard: `http://localhost:3777/` (kanban, slots, locks, pause switch, add/edit/assign)
 - Live: `/live` (what every agent is doing right now)
+- Status: `/status.html` (goals, the orchestrator's note, what is moving; see "The Status page")
 - Roster: `/roster` (the slots and their stats)
 - Leaderboard: `/leaderboard` (loot from verified work)
 - CLI: `bounty help` (symlink `bin/bounty` to your PATH)
@@ -343,6 +346,7 @@ The theme files:
 - `op.css`: all visual styling (colors, panels, bar, dock, handset frame)
 - `op-theme.js`: Tailwind config (color tokens, shadows, fonts)
 - `avatars.js`: per-slot portraits, color swatches, fallback avatars
+- `status.html`: copy it from your themed `live.html` (header and nav); symlink `status.js` and `status.css` from the default `public/`
 - `img/`: backgrounds, favicon, slot portraits in `img/portrait/`
 - `index.html`, `live.html`, `roster.html`, `leaderboard.html`: the four pages
 
