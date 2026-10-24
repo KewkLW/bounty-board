@@ -1,0 +1,93 @@
+{
+  "port": 3777,
+  "host": "0.0.0.0",
+  "allow_cidrs": [
+    "127.0.0.0/8",
+    "::1/128",
+    "100.64.0.0/10",
+    "fd7a:115c:a1e0::/48"
+  ],
+  "db_path": "data/bounty-board.db",
+  "logs_dir": "logs",
+  "default_project": "my-project",
+  "concurrency_cap": 4,
+  "tick_seconds": 5,
+  "watchdog": {
+    "stall_minutes": 30,
+    "check_seconds": 30,
+    "kill_grace_seconds": 15
+  },
+  "retry": {
+    "max_attempts": 4,
+    "escalate_after_failures": 2,
+    "escalate_model": {
+      "haiku": "sonnet",
+      "sonnet": "opus"
+    }
+  },
+  "leases": {
+    "default_ttl_minutes": 45
+  },
+  "merge_check_seconds": 60,
+  "verify_concurrency": 1,
+  "reviewer": {
+    "runner": "codex",
+    "model": null,
+    "timeout_minutes": 25,
+    "max_diff_chars": 160000,
+    "max_errors": 3
+  },
+  "runners": {
+    "claude": {
+      "bin": "claude",
+      "allowed_tools": "Bash,Read,Grep,Glob,Edit,Write,MultiEdit,TodoWrite,WebSearch,WebFetch"
+    },
+    "codex": {
+      "bin": "codex",
+      "args": ["--dangerously-bypass-approvals-and-sandbox"]
+    }
+  },
+  "seed_project": {
+    "id": "my-project",
+    "name": "My Project",
+    "repo": "/path/to/your/repo",
+    "main_branch": "main",
+    "worktree_cmd": "git worktree add {path} -b {branch} {main}",
+    "worktree_path": "/path/to/worktrees/{task}",
+    "verify_cmd": "npm test",
+    "verify_timeout_min": 30
+  },
+  "slots": [
+    {
+      "id": "opus-1",
+      "name": "Alpha",
+      "runner": "claude",
+      "model": "opus",
+      "effort": "high"
+    },
+    {
+      "id": "opus-2",
+      "name": "Bravo",
+      "runner": "claude",
+      "model": "opus",
+      "effort": "high"
+    },
+    {
+      "id": "sonnet-tester",
+      "name": "Scout",
+      "runner": "claude",
+      "model": "sonnet",
+      "effort": "low"
+    },
+    {
+      "id": "codex-1",
+      "name": "Delta",
+      "runner": "codex",
+      "model": null,
+      "effort": "high"
+    }
+  ],
+  "machine_rules": [
+    "One heavy build at a time: check free memory before starting a large compile or test suite."
+  ]
+}

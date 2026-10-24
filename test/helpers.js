@@ -38,8 +38,8 @@ function writeConfig(dir, over = {}) {
     reviewer: { runner: 'command', cmd: ['bash', path.join(ROOT, 'test', 'fake-reviewer.sh')], timeout_minutes: 2, max_errors: 3 },
     runners: {},
     slots: [
-      { id: 'fake-1', runner: 'command', model: 'sonnet', cmd: ['bash', path.join(ROOT, 'test', 'fake-worker.sh')] },
-      { id: 'fake-2', runner: 'command', model: 'opus', cmd: ['bash', path.join(ROOT, 'test', 'fake-worker.sh')] },
+      { id: 'fake-1', name: 'Alpha', runner: 'command', model: 'sonnet', cmd: ['bash', path.join(ROOT, 'test', 'fake-worker.sh')] },
+      { id: 'fake-2', name: 'Bravo', runner: 'command', model: 'opus', cmd: ['bash', path.join(ROOT, 'test', 'fake-worker.sh')] },
     ],
     ...over,
   };

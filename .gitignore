@@ -5,6 +5,9 @@ bounty-board.db
 bounty-board.db-shm
 bounty-board.db-wal
 
+# User config (users create their own from board.example.json)
+config/board.json
+
 # Logs
 *.log
 server.log

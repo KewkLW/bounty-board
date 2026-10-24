@@ -11,13 +11,11 @@ const { Dispatcher } = require('./lib/dispatcher');
 const { Reviewer } = require('./lib/reviewer');
 const { makeApi } = require('./lib/api');
 
-const TRIBULATION = {
-  id: 'tribulation', name: 'Tribulation', repo: '/mnt/ue/Tribulation', main_branch: 'main',
-  worktree_cmd: 'Scripts/wt.sh {task}', worktree_path: '/mnt/ue/wt/{task}',
-  verify_cmd: 'Scripts/ci.sh --quick', verify_timeout_min: 180,
-  rules: ['/mnt/f/Obsidian/Vault/Projects/Tribulation/Tribulation HANDOFF.md'],
-  docs_only_types: ['docs', 'research'],
-};
+// Optional: seed a default project from config.  Set "seed_project" in board.json to auto-create
+// a project on first boot.  Example:
+//   "seed_project": { "id": "my-project", "repo": "/path/to/repo", "main_branch": "main",
+//     "verify_cmd": "npm test", "verify_timeout_min": 30 }
+
 
 function allowList(cidrs) {
   const bl = new net.BlockList();
@@ -34,7 +32,7 @@ function allowList(cidrs) {
 
 function createServer(cfg, { dispatch = true, seed = true } = {}) {
   const board = new Board(cfg);
-  if (seed && !board.project('tribulation') && !process.env.BOUNTY_NO_SEED) board.upsertProject(TRIBULATION);
+  if (seed && cfg.seed_project && !board.project(cfg.seed_project.id) && !process.env.BOUNTY_NO_SEED) board.upsertProject(cfg.seed_project);
   const dispatcher = new Dispatcher(board);
   const reviewer = new Reviewer(board);
 
@@ -81,7 +79,7 @@ function createServer(cfg, { dispatch = true, seed = true } = {}) {
   return { app, server, board, dispatcher, reviewer, listen, close };
 }
 
-module.exports = { createServer, TRIBULATION };
+module.exports = { createServer };
 
 if (require.main === module) {
   const cfg = load();

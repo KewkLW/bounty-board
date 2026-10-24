@@ -28,7 +28,7 @@ Orchestrator
                                    done for work merged outside the board (external): each commit must be on main;
                                    refused while a board worker is live. Records commits + evidence; loot only to
                                    a slot whose board attempt submitted those commits (external work credits nobody).
-  bounty pause | resume            bounty status             bounty import tribulation
+  bounty pause | resume            bounty status             bounty import <source>
   bounty live [--json] [--watch [SEC]]  what every slot is doing now: bounty, pipeline stage, verify/CI stage,
                                    last actions, progress note, lock waits/holders, tester, queue, last 24 h
   bounty leaderboard [--json]      the slots' loot, dones, failures, streak and $ cost (verified work only)
@@ -396,7 +396,7 @@ async function main() {
       return;
     }
     case 'import': {
-      const src = pos[0] || 'tribulation';
+      const src = pos[0]; if (!src) { console.error('usage: bounty import <source>'); process.exit(1); }
       const r = await api('POST', `/import/${src}`, {});
       console.log(JSON.stringify(r, null, 2));
       return;

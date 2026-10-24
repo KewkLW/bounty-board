@@ -477,3 +477,31 @@ window.AgentAvatars = {
   hasGif: (id) => GIF_AGENTS.includes(id),
   visuals: AGENT_VISUALS,
 };
+
+// Wasteland Bounty Board: each slot gets a color-coded identity. A slot's portrait is in
+// public/img/portrait/<slot>.jpg and its swatches are the theme's accent colors. Unknown slot ids
+// fall back to Vantablack so a new slot always has a face.
+(function () {
+  const SLOTS = {
+    'opus-1':          { name: 'Tokyo',      theme: 'tokyo-night', accent: '#7aa2f7', sw: ['#1a1b26', '#f7768e', '#e0af68', '#9ece6a', '#7aa2f7', '#bb9af7', '#0db9d7'] },
+    'opus-2':          { name: 'Nord',       theme: 'nord',        accent: '#81a1c1', sw: ['#2e3440', '#bf616a', '#ebcb8b', '#a3be8c', '#81a1c1', '#b48ead', '#88c0d0'] },
+    'opus-3':          { name: 'Gruvbox',    theme: 'gruvbox',     accent: '#d8a657', sw: ['#282828', '#ea6962', '#d8a657', '#a9b665', '#7daea3', '#d3869b', '#89b482'] },
+    'opus-4':          { name: 'Kanagawa',   theme: 'kanagawa',    accent: '#7e9cd8', sw: ['#1f1f28', '#c34043', '#c0a36e', '#76946a', '#7e9cd8', '#957fb8', '#6a9589'] },
+    'sonnet-tester':   { name: 'Everforest', theme: 'everforest',  accent: '#a7c080', sw: ['#2d353b', '#e67e80', '#dbbc7f', '#a7c080', '#7fbbb3', '#d699b6', '#83c092'] },
+    'codex-1':         { name: 'Ristretto',  theme: 'ristretto',   accent: '#f38d70', sw: ['#2c2525', '#fd6883', '#f9cc6c', '#adda78', '#f38d70', '#a8a9eb', '#85dacc'] },
+    'codex-2':         { name: 'Osaka',      theme: 'osaka-jade',  accent: '#2dd5b7', sw: ['#111c18', '#ff5345', '#e5c736', '#549e6a', '#509475', '#d2689c', '#2dd5b7'] },
+    'vantablack':      { name: 'Vantablack', theme: 'vantablack',  accent: '#8d8d8d', sw: ['#000000', '#a4a4a4', '#cecece', '#b6b6b6', '#8d8d8d', '#9b9b9b', '#b0b0b0'] },
+  };
+  const info = id => SLOTS[id] || { name: id, theme: 'vantablack', accent: '#8d8d8d', sw: SLOTS.vantablack.sw, unknown: true };
+  const safe = s => String(s || '').replace(/["'<>]/g, '');
+  window.OPAvatars = {
+    info,
+    name: (id, fallback) => (SLOTS[id] ? SLOTS[id].name : (fallback || id)),
+    theme: id => info(id).theme,
+    accent: id => info(id).accent,
+    portrait: id => `/img/portrait/${SLOTS[id] ? id : 'vantablack'}.jpg`,
+    swatches: (id, cls) => `<span class="op-swatches ${cls || ''}" title="${info(id).theme} palette">${info(id).sw.map(c => `<i style="background:${c}"></i>`).join('')}</span>`,
+    // onerror chain for <img>: theme portrait -> server avatar -> hide
+    fallback: (id, serverUrl) => `onerror="if(!this.dataset.f&&'${safe(serverUrl)}'){this.dataset.f=1;this.src='${safe(serverUrl)}'}else{this.style.visibility='hidden'}"`,
+  };
+})();

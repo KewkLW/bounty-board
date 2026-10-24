@@ -351,7 +351,7 @@ test('ready needs acceptance criteria', async () => {
 test('Tribulation import: backlog + in-flight + tests, deduped, re-runnable', async (tt) => {
   const im = require('../lib/importer');
   if (!fs.existsSync(im.DEFAULTS.taskList)) { tt.skip('vault not mounted'); return; }
-  const t = await startBoard('import', { dispatch: false, over: { slots: [{ id: 'kewky-sonnet-tester', runner: 'command', cmd: ['true'] }] } });
+  const t = await startBoard('import', { dispatch: false, over: { slots: [{ id: 'kewky-sonnet-tester', name: 'Tester', runner: 'command', cmd: ['true'] }] } });
   try {
     const { board } = t;
     board.upsertProject({ id: 'tribulation', repo: '/mnt/ue/Tribulation', main_branch: 'main' });
@@ -717,8 +717,8 @@ test('close-merged: commits a slot submitted and the orchestrator merged credit 
 test('dispatcher: a slot with disabled_until in the future takes no work', async () => {
   const cmd = ['bash', path.join(ROOT, 'test', 'fake-worker.sh')];
   const t = await startBoard('bench', { dispatch: false, over: { slots: [
-    { id: 'benched', runner: 'command', cmd, disabled_until: new Date(Date.now() + 3600e3).toISOString() },
-    { id: 'expired', runner: 'command', cmd, disabled_until: new Date(Date.now() - 1000).toISOString() },
+    { id: 'benched', name: 'Benched', runner: 'command', cmd, disabled_until: new Date(Date.now() + 3600e3).toISOString() },
+    { id: 'expired', name: 'Expired', runner: 'command', cmd, disabled_until: new Date(Date.now() - 1000).toISOString() },
   ] } });
   try {
     const benched = t.board.create({ title: 'b', project: 'scratch', type: 'task', tier: 'C', criteria: CRIT, status: 'ready', assignee_slot: 'benched' });

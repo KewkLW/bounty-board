@@ -2,54 +2,57 @@
 <html class="dark" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Wasteland Command</title>
+<title>Wasteland Bounty Board</title>
+<link rel="icon" href="/img/favicon.png" type="image/png"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
-<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@400;700;900&family=Permanent+Marker&display=swap" rel="stylesheet"/>
+<script src="/op-theme.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
-<script>
-tailwind.config = { darkMode: "class", theme: { extend: {
-  colors: { primary: "#0ddff2", "background-dark": "#102122", danger: "#ff3e3e", warning: "#fcd34d", botched: "#4a4a4a" },
-  fontFamily: { display: ["Epilogue", "sans-serif"], hand: ["Permanent Marker", "cursive"] },
-  boxShadow: { comic: '4px 4px 0px 0px #000', 'comic-hover': '6px 6px 0px 0px #000', 'comic-sm': '2px 2px 0px 0px #000' },
-} } };
-</script>
+<link href="/op.css" rel="stylesheet"/>
+<script src="/avatars.js"></script>
 <style>
-body { background-color: #102122; }
-.cel { border: 3px solid #111; }
 .grunge { background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E"); pointer-events: none; }
 @keyframes flicker { 0%,19%,21%,23%,25%,54%,56%,100% { opacity: 1; } 20%,24%,55% { opacity: .5; } }
 .hazard { animation: flicker 4s infinite; }
-.stripes { background: repeating-linear-gradient(45deg, #000 0, #000 10px, #ff3e3e 10px, #ff3e3e 20px); }
-.stripes-y { background: repeating-linear-gradient(45deg, #000 0, #000 10px, #fcd34d 10px, #fcd34d 20px); }
-.clip-tech { clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%); }
-::-webkit-scrollbar { width: 10px; height: 10px; } ::-webkit-scrollbar-track { background: #102122; } ::-webkit-scrollbar-thumb { background: #333; border: 2px solid #000; }
-.col { min-width: 270px; width: 270px; }
+.col { min-width: 272px; width: 272px; }
 @media (max-width: 767px) { .col { min-width: 100%; width: 100%; } .col:not(.active-col) { display: none; } }
 .card { cursor: pointer; }
-input, select, textarea { background: #000 !important; color: #fff !important; border: 2px solid #333 !important; }
 pre { white-space: pre-wrap; word-break: break-word; }
+.op-reward { display: inline-flex; align-items: center; gap: 3px; font: 700 12px/1 "Chakra Petch", Inter, sans-serif; letter-spacing: .03em; }
+.op-reward .material-icons { font-size: 13px; }
+#newModal h2, #drawerBody h2 { font-family: "Chakra Petch", Inter, sans-serif; letter-spacing: .04em; }
+#drawerBody h3 { font-family: "Chakra Petch", Inter, sans-serif; letter-spacing: .1em; font-size: 13px; }
+#drawerBody label, #newForm label { color: #7982a9; }
+.op-tab .material-icons { font-size: 13px; }
 </style>
 </head>
-<body class="bg-background-dark min-h-screen text-white font-display flex flex-col">
+<body class="bg-background-dark min-h-screen text-gray-100 font-display flex flex-col">
 <div class="grunge fixed inset-0 z-50 mix-blend-overlay"></div>
 
-<header class="relative z-10 px-3 md:px-6 py-3 flex flex-wrap items-center gap-3 justify-between border-b-4 border-black shadow-comic">
-  <div class="flex items-center gap-3">
-    <div class="bg-primary p-1.5 cel -rotate-2"><span class="material-icons text-black text-2xl">terminal</span></div>
-    <div>
-      <h1 class="text-xl md:text-3xl font-black uppercase tracking-tighter italic -skew-x-6" style="-webkit-text-stroke:1px black">Wasteland <span class="text-primary">Command</span></h1>
-      <div class="text-[10px] text-gray-400 font-mono tracking-widest uppercase">Bounty Board // every agent answers here</div>
+<!-- the workspace bar: workspaces = the eight status columns, tray = dispatch state, clock -->
+<div class="op-bar" aria-hidden="true">
+  <div class="ws" id="opbar-ws"></div>
+  <div class="mid"><b>bounty-board</b> · wasteland command</div>
+  <div class="tray"><span id="opbar-dispatch" class="dot" title="dispatch"></span><span id="opbar-workers">-/-</span><span class="material-icons">wifi</span><span class="material-icons">battery_full</span><span class="date" id="opbar-date"></span><span class="clock" id="opbar-clock">--:--</span></div>
+</div>
+
+<header class="op-header px-3 md:px-6 py-3 flex flex-wrap items-center gap-x-5 gap-y-3 justify-between">
+  <a class="op-brand" href="/" title="Wasteland Bounty Board">
+    <span class="op-mark" aria-hidden="true"></span>
+    <div class="min-w-0">
+      <h1 class="op-title"><span class="t">Bounty Board</span></h1>
+      <div class="op-sub"><b>Wasteland Command</b> · every agent answers here</div>
     </div>
-  </div>
-  <div class="flex flex-wrap gap-2 md:gap-4 text-sm">
-    <div class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">WORKERS</span><span id="st-workers" class="font-hand">--</span></div>
-    <a href="/leaderboard" title="Loot the slots earned from verified dones (merged to main); legacy excluded" class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">LOOT</span><span id="st-loot" class="font-hand text-warning">--</span></a>
-    <div class="bg-danger/10 px-3 py-1 cel border-danger"><span class="text-danger text-[10px] block font-bold">OPEN BUGS</span><span id="st-bugs" class="font-hand text-danger hazard">--</span></div>
-    <div class="bg-black/40 px-3 py-1 cel"><span class="text-gray-400 text-[10px] block font-bold">SPENT</span><span id="st-cost" class="font-hand">--</span></div>
+  </a>
+  <div class="grid grid-cols-2 w-full sm:w-auto sm:flex sm:flex-wrap gap-2 text-sm">
+    <div class="op-stat" title="Running workers / concurrency cap"><span class="material-icons">memory</span><div><span class="lbl">Workers</span><span id="st-workers" class="val">--</span></div></div>
+    <a href="/leaderboard" title="Loot the slots earned from verified dones (merged to main); legacy excluded" class="op-stat"><span class="material-icons">toll</span><div><span class="lbl">Loot</span><span id="st-loot" class="val text-warning">--</span></div></a>
+    <div class="op-stat alarm" title="Open critical bugs"><span class="material-icons">bug_report</span><div><span class="lbl">Open bugs</span><span id="st-bugs" class="val text-danger hazard">--</span></div></div>
+    <div class="op-stat" title="Total spent"><span class="material-icons">payments</span><div><span class="lbl">Spent</span><span id="st-cost" class="val">--</span></div></div>
   </div>
   <div class="flex gap-2">
     <button id="pauseBtn" onclick="togglePause()" class="font-bold py-2 px-3 cel shadow-comic uppercase text-xs">...</button>
-    <button onclick="openNew()" class="bg-primary hover:bg-white text-black font-bold py-2 px-4 cel shadow-comic uppercase text-xs clip-tech">+ New Bounty</button>
+    <button onclick="openNew()" class="op-btn">+ New Bounty</button>
   </div>
 </header>
 <div id="pausedBanner" class="hidden stripes-y h-2"></div>
@@ -60,13 +63,13 @@ pre { white-space: pre-wrap; word-break: break-word; }
 </section>
 
 <!-- Filters -->
-<div class="relative z-10 px-3 md:px-6 py-2 flex flex-wrap gap-2 items-center border-b-2 border-black/50">
+<div class="relative z-10 px-3 md:px-6 py-2 flex flex-wrap gap-2 items-center border-b border-primary/20">
   <select id="f-project" class="text-xs p-1 cel" onchange="render()"></select>
   <select id="f-slot" class="text-xs p-1 cel" onchange="render()"></select>
   <select id="f-type" class="text-xs p-1 cel" onchange="render()">
     <option value="">all types</option><option>task</option><option>bug</option><option>test</option><option>research</option><option>art</option><option>docs</option>
   </select>
-  <input id="f-q" placeholder="search..." class="text-xs p-1 cel w-40" oninput="render()"/>
+  <input id="f-q" placeholder="search the board..." class="text-xs p-1 cel w-40" oninput="render()"/>
   <label class="text-xs text-gray-400 flex items-center gap-1"><input type="checkbox" id="f-legacy" onchange="render()"/> legacy</label>
   <div id="tabs" class="flex md:hidden gap-1 overflow-x-auto w-full pt-1"></div>
 </div>
@@ -76,23 +79,23 @@ pre { white-space: pre-wrap; word-break: break-word; }
 </main>
 
 <!-- Bottom nav -->
-<nav class="fixed bottom-0 left-0 w-full z-40 px-3 pb-3">
-  <div class="mx-auto max-w-md bg-gray-900 cel shadow-comic p-1.5 flex gap-2">
-    <a href="/" class="flex-1 bg-primary text-black border-2 border-black p-2 text-center"><span class="material-icons">dashboard</span></a>
-    <a href="/live" title="Live: what every agent is doing now" class="flex-1 bg-gray-800 text-gray-300 border-2 border-black p-2 text-center"><span class="material-icons">monitor_heart</span></a>
-    <a href="/roster" class="flex-1 bg-gray-800 text-gray-300 border-2 border-black p-2 text-center"><span class="material-icons">people_alt</span></a>
-    <a href="/leaderboard" class="flex-1 bg-gray-800 text-gray-300 border-2 border-black p-2 text-center"><span class="material-icons">emoji_events</span></a>
+<nav class="op-dock-wrap" aria-label="Pages">
+  <div class="op-dock">
+    <a href="/" class="on" title="Board"><span class="material-icons">grid_view</span>Board</a>
+    <a href="/live" title="Live: what every agent is doing now"><span class="material-icons">phonelink_ring</span>Live</a>
+    <a href="/roster" title="Roster: the slots"><span class="material-icons">palette</span>Roster</a>
+    <a href="/leaderboard" title="Leaderboard: loot from verified work"><span class="material-icons">emoji_events</span>Loot</a>
   </div>
 </nav>
 
 <!-- Detail / edit drawer -->
 <div id="drawer" class="fixed inset-0 z-[100] hidden bg-black/80 overflow-y-auto">
-  <div class="bg-[#1a2e30] cel shadow-comic w-full max-w-3xl mx-auto md:my-8 min-h-full md:min-h-0 p-4 md:p-6" id="drawerBody"></div>
+  <div class="op-win shadow-comic w-full max-w-3xl mx-auto md:my-8 min-h-full md:min-h-0 p-4 md:p-6" id="drawerBody"></div>
 </div>
 
 <!-- New bounty -->
 <div id="newModal" class="fixed inset-0 z-[100] hidden bg-black/80 overflow-y-auto">
-  <div class="bg-[#1a2e30] cel shadow-comic w-full max-w-xl mx-auto md:my-8 p-4 md:p-6">
+  <div class="op-win shadow-comic w-full max-w-xl mx-auto md:my-8 p-4 md:p-6">
     <h2 class="text-2xl font-black text-primary uppercase mb-3">Post New Bounty</h2>
     <form id="newForm" class="space-y-3" onsubmit="submitNew(event)">
       <div><label class="text-xs text-gray-400 uppercase font-bold">Title</label><input id="n-title" required class="w-full p-2 cel font-mono"/></div>
@@ -100,7 +103,7 @@ pre { white-space: pre-wrap; word-break: break-word; }
       <div><label class="text-xs text-gray-400 uppercase font-bold">Acceptance criteria (one per line)</label><textarea id="n-crit" class="w-full p-2 cel font-mono h-24" placeholder="The reviewer checks each line against the diff"></textarea></div>
       <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div><label class="text-xs text-gray-400 uppercase font-bold">Type</label><select id="n-type" class="w-full p-2 cel"><option>task</option><option>bug</option><option>test</option><option>research</option><option>art</option><option>docs</option></select></div>
-        <div><label class="text-xs text-gray-400 uppercase font-bold">Tier</label><select id="n-tier" class="w-full p-2 cel"><option value="C">C - scrap</option><option value="B" selected>B - salvage</option><option value="A">A - merc</option><option value="S">S - black ops</option></select></div>
+        <div><label class="text-xs text-gray-400 uppercase font-bold">Tier</label><select id="n-tier" class="w-full p-2 cel"><option value="C">C - patch</option><option value="B" selected>B - minor</option><option value="A">A - major</option><option value="S">S - quattro</option></select></div>
         <div><label class="text-xs text-gray-400 uppercase font-bold">Priority</label><select id="n-pri" class="w-full p-2 cel"><option>normal</option><option>low</option><option>high</option><option>critical</option></select></div>
         <div><label class="text-xs text-gray-400 uppercase font-bold">Project</label><select id="n-project" class="w-full p-2 cel"></select></div>
         <div><label class="text-xs text-gray-400 uppercase font-bold">Assignee</label><select id="n-slot" class="w-full p-2 cel"></select></div>
@@ -109,32 +112,39 @@ pre { white-space: pre-wrap; word-break: break-word; }
       <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="n-ready"/> Ready now (the dispatcher spawns the assignee's worker)</label>
       <div id="n-err" class="text-danger text-sm font-mono"></div>
       <div class="flex gap-3 pt-1">
-        <button type="submit" class="flex-1 bg-primary text-black font-bold py-2 cel shadow-comic uppercase">Post Bounty</button>
-        <button type="button" onclick="closeModal('newModal')" class="flex-1 bg-gray-700 font-bold py-2 cel uppercase">Cancel</button>
+        <button type="submit" class="flex-1 op-btn">Post Bounty</button>
+        <button type="button" onclick="closeModal('newModal')" class="flex-1 op-btn ghost">Cancel</button>
       </div>
     </form>
   </div>
 </div>
 
 <script>
+// Status keys are the server's; the labels are Hyprland's. Each column is a workspace on the bar.
 const STATUSES = [
-  ['backlog', 'Backlog', 'text-gray-300', 'border-t-gray-500'],
-  ['ready', 'Wanted', 'text-primary', 'border-t-primary'],
-  ['in_progress', 'Hunting', 'text-warning', 'border-t-warning'],
-  ['review', 'Under Review', 'text-purple-300', 'border-t-purple-400'],
-  ['approved', 'Awaiting Merge', 'text-sky-300', 'border-t-sky-400'],
-  ['done', 'Fragged', 'text-green-400', 'border-t-green-600'],
-  ['blocked', 'Pinned Down', 'text-danger', 'border-t-danger'],
-  ['failed', 'Botched', 'text-gray-500', 'border-t-gray-700'],
+  ['backlog', 'Scratchpad', 'text-gray-300', 'border-t-gray-500', 'special workspace, not dispatched', 'inbox'],
+  ['ready', 'Dispatch', 'text-primary', 'border-t-primary', 'ready: the dispatcher spawns a worker', 'bolt'],
+  ['in_progress', 'Focused', 'text-warning', 'border-t-warning', 'a worker holds the window', 'terminal'],
+  ['review', 'Review', 'text-purple-300', 'border-t-purple-400', 'under the reviewer', 'rate_review'],
+  ['approved', 'Staged', 'text-sky-300', 'border-t-sky-400', 'approved, awaiting merge', 'merge_type'],
+  ['done', 'Merged', 'text-green-400', 'border-t-green-600', 'on main', 'check_circle'],
+  ['blocked', 'Blocked', 'text-danger', 'border-t-danger', 'pinned: needs a hand', 'push_pin'],
+  ['failed', 'Killed', 'text-gray-500', 'border-t-gray-700', 'the attempt failed', 'close'],
 ];
+const TIER = { C: 'patch', B: 'minor', A: 'major', S: 'quattro' };
 let S = { bounties: [], state: null, projects: [], activeTab: localGet('tab') || 'ready' };
 function localGet(k) { try { return localStorage.getItem('bb.' + k); } catch { return null; } }
 function localSet(k, v) { try { localStorage.setItem('bb.' + k, v); } catch {} }
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ago = t => { if (!t) return ''; const s = Math.max(0, (Date.now() - Date.parse(t)) / 1000); return s < 60 ? `${s | 0}s` : s < 3600 ? `${(s / 60) | 0}m` : s < 86400 ? `${(s / 3600).toFixed(1)}h` : `${(s / 86400).toFixed(1)}d`; };
-const tierCls = t => ({ S: 'text-yellow-400 border-yellow-400', A: 'text-orange-400 border-orange-400', B: 'text-blue-400 border-blue-400', C: 'text-gray-400 border-gray-400' }[t]);
+const tierCls = t => `tier-${t}`;
 const priCls = p => ({ critical: 'bg-danger/20 text-danger border-danger', high: 'bg-orange-500/20 text-orange-400 border-orange-500/50', normal: 'bg-gray-700 text-gray-300 border-gray-600', low: 'bg-gray-800 text-gray-500 border-gray-700' }[p]);
-const badge = (txt, cls) => `<span class="text-[10px] px-1.5 py-0.5 border ${cls} uppercase font-bold whitespace-nowrap">${esc(txt)}</span>`;
+const badge = (txt, cls) => `<span class="text-[10px] px-1.5 py-0.5 border rounded bg-black/30 ${cls} uppercase font-bold tracking-wide whitespace-nowrap">${esc(txt)}</span>`;
+const tierBadge = t => badge(`${t} · ${TIER[t] || ''}`, tierCls(t));
+const AV = () => window.OPAvatars;
+const portraitOf = id => AV() ? AV().portrait(id) : ((S.avatars || {})[id] || '');
+const portraitFallback = id => AV() ? AV().fallback(id, (S.avatars || {})[id]) : `onerror="this.style.visibility='hidden'"`;
+const slotName = (id, fb) => AV() ? AV().name(id, fb) : (fb || id);
 
 async function api(method, path, body) {
   const r = await fetch('/api' + path, { method, headers: { 'content-type': 'application/json', 'x-bounty-actor': 'orchestrator' }, body: body ? JSON.stringify(body) : undefined });
@@ -153,15 +163,15 @@ async function load() {
 
 function fillSelects() {
   const fp = document.getElementById('f-project'), fs = document.getElementById('f-slot');
-  const keepP = fp.value || localGet('project') || 'tribulation', keepS = fs.value;
+  const keepP = fp.value || localGet('project') || '', keepS = fs.value;
   fp.innerHTML = '<option value="">all projects</option>' + S.projects.map(p => `<option value="${esc(p.id)}">${esc(p.id)}</option>`).join('');
   fp.value = S.projects.some(p => p.id === keepP) ? keepP : '';
-  fs.innerHTML = '<option value="">all slots</option><option value="none">unassigned</option>' + S.state.slots.map(s => `<option>${esc(s.id)}</option>`).join('');
+  fs.innerHTML = '<option value="">all slots</option><option value="none">unassigned</option>' + S.state.slots.map(s => `<option value="${esc(s.id)}">${esc(slotName(s.id, s.name))} (${esc(s.id)})</option>`).join('');
   fs.value = keepS;
   const np = document.getElementById('n-project');
   if (!np.options.length) { np.innerHTML = S.projects.filter(p => p.id !== 'legacy').map(p => `<option>${esc(p.id)}</option>`).join(''); if (S.state.default_project) np.value = S.state.default_project; }
   const ns = document.getElementById('n-slot');
-  if (!ns.options.length) ns.innerHTML = '<option value="">unassigned</option>' + S.state.slots.map(s => `<option>${esc(s.id)}</option>`).join('');
+  if (!ns.options.length) ns.innerHTML = '<option value="">unassigned</option>' + S.state.slots.map(s => `<option value="${esc(s.id)}">${esc(slotName(s.id, s.name))} (${esc(s.id)})</option>`).join('');
 }
 
 function filtered() {
@@ -183,24 +193,45 @@ function render() {
   document.getElementById('st-cost').textContent = '$' + (s.total_cost_usd || 0).toFixed(2);
   const pb = document.getElementById('pauseBtn');
   pb.textContent = st.paused ? '▶ Resume dispatch' : '❚❚ Pause dispatch';
-  pb.className = `font-bold py-2 px-3 cel shadow-comic uppercase text-xs ${st.paused ? 'bg-warning text-black hazard' : 'bg-gray-800 text-gray-200'}`;
+  pb.className = `font-bold py-2 px-3 cel shadow-comic uppercase text-xs ${st.paused ? 'bg-warning text-black' : 'bg-gray-800 text-gray-200'}`;
   document.getElementById('pausedBanner').classList.toggle('hidden', !st.paused);
   renderSlots();
   const rows = filtered();
+  renderBar(rows);
   const tabs = document.getElementById('tabs');
-  tabs.innerHTML = STATUSES.map(([k, label]) => `<button onclick="setTab('${k}')" class="text-[10px] font-bold uppercase px-2 py-1 cel whitespace-nowrap ${S.activeTab === k ? 'bg-primary text-black' : 'bg-gray-800'}">${label} ${rows.filter(b => b.status === k).length}</button>`).join('');
-  document.getElementById('board').innerHTML = STATUSES.map(([k, label, color, border]) => {
+  tabs.innerHTML = STATUSES.map(([k, label, , , , icon]) => `<button onclick="setTab('${k}')" class="op-tab op-display flex-none text-[10px] font-bold uppercase px-2 py-1.5 cel whitespace-nowrap flex items-center gap-1 ${S.activeTab === k ? 'bg-primary text-black' : 'bg-gray-900 text-gray-300'}"><span class="material-icons">${icon}</span>${label} ${rows.filter(b => b.status === k).length}</button>`).join('');
+  document.getElementById('board').innerHTML = STATUSES.map(([k, label, color, border, sub, icon], i) => {
     let list = rows.filter(b => b.status === k);
     const total = list.length;
     if (k === 'done' || k === 'failed') list = list.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))).slice(0, 40);
     return `<div class="col ${S.activeTab === k ? 'active-col' : ''} flex flex-col">
-      <div class="bg-[#1a2e30] p-3 cel shadow-comic border-t-[6px] ${border} mb-3 flex justify-between items-center">
-        <h2 class="font-black uppercase tracking-wide ${color}">${label}</h2><span class="text-xs font-mono bg-black/40 px-2">${total}</span>
+      <div class="op-titlebar shadow-comic border-t-2 ${border} mb-3">
+        <span class="num">${i + 1}</span><div class="min-w-0"><h2 class="${color}">${label}</h2><small>${sub}</small></div><span class="op-count ml-auto">${total}</span>
       </div>
-      <div class="space-y-3">${list.map(card).join('') || '<div class="text-gray-600 text-center font-mono text-xs p-3">empty</div>'}${total > list.length ? `<div class="text-gray-500 text-xs text-center">+${total - list.length} older</div>` : ''}</div>
+      <div class="space-y-3">${list.map(card).join('') || '<div class="text-gray-500 text-center font-mono text-xs p-3">empty workspace</div>'}${total > list.length ? `<div class="text-gray-500 text-xs text-center">+${total - list.length} older</div>` : ''}</div>
     </div>`;
   }).join('');
 }
+
+// The bar across the top: one workspace per status column (lit when it holds bounties, active = the phone tab),
+// dispatch dot, running workers, the clock.
+function renderBar(rows) {
+  const st = S.state; if (!st) return;
+  document.getElementById('opbar-ws').innerHTML = STATUSES.map(([k, label], i) => {
+    const n = rows.filter(b => b.status === k).length;
+    const phone = matchMedia('(max-width: 767px)').matches; // the phone shows one column (the tab); the desktop shows them all
+    return `<i class="${phone && S.activeTab === k ? 'on' : n ? 'has' : ''}" title="${label}: ${n}">${i + 1}</i>`;
+  }).join('');
+  document.getElementById('opbar-dispatch').className = 'dot' + (st.paused ? ' paused' : '');
+  document.getElementById('opbar-dispatch').title = st.paused ? 'dispatch paused' : 'dispatch running';
+  document.getElementById('opbar-workers').textContent = `${st.running}/${st.cap}`;
+}
+function tickClock() {
+  const d = new Date();
+  document.getElementById('opbar-clock').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('opbar-date').textContent = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+}
+tickClock(); setInterval(tickClock, 10000);
 
 function setTab(k) { S.activeTab = k; localSet('tab', k); render(); }
 
@@ -209,16 +240,16 @@ function card(b) {
   const crit = b.criteria || [];
   const done = crit.filter(c => c.done).length;
   const dim = ['done', 'failed'].includes(b.status) ? 'opacity-70' : '';
-  return `<div class="card group bg-[#162628] p-3 cel shadow-comic hover:shadow-comic-hover hover:-translate-y-0.5 transition-all border-l-[6px] ${isBug ? 'border-l-danger' : 'border-l-primary'} ${dim}" onclick="openBounty(${b.id})">
-    <div class="flex justify-between items-start gap-2 mb-1">
+  return `<div class="card group op-win p-3 shadow-comic hover:shadow-comic-hover hover:-translate-y-0.5 transition-all border-l-2 ${isBug ? 'border-l-danger' : 'border-l-primary'} ${dim}" onclick="openBounty(${b.id})">
+    <div class="flex justify-between items-center gap-2 mb-1">
       <span class="${isBug ? 'text-danger/80' : 'text-primary/70'} font-mono text-[11px]">#${b.id} ${esc(b.ticket_id || '')}</span>
-      <span class="font-hand text-xs ${isBug ? 'text-danger' : 'text-primary'}">$${(b.reward || 0).toLocaleString()}</span>
+      <span class="op-reward ${isBug ? 'text-danger' : 'text-warning'}" title="Reward"><span class="material-icons">toll</span>${(b.reward || 0).toLocaleString()}</span>
     </div>
-    <h3 class="font-bold leading-tight mb-2 ${b.status === 'done' ? 'line-through text-gray-400' : ''}">${esc(b.title)}</h3>
-    ${b.blocked_reason && b.status === 'blocked' ? `<div class="bg-black p-1.5 font-mono text-[10px] text-red-400 border border-gray-700 mb-2 line-clamp-3">${esc(b.blocked_reason)}</div>` : ''}
-    <div class="flex flex-wrap gap-1 mb-1">${badge(b.tier + ' ' + (b.tier_name || ''), tierCls(b.tier))} ${badge(b.priority, priCls(b.priority))} ${badge(b.type, 'border-gray-600 text-gray-400')}</div>
+    <h3 class="font-bold text-[15px] leading-snug mb-2 ${b.status === 'done' ? 'line-through text-gray-400' : 'text-gray-50'}">${esc(b.title)}</h3>
+    ${b.blocked_reason && b.status === 'blocked' ? `<div class="op-sunk p-1.5 font-mono text-[10px] text-red-300 mb-2 line-clamp-3">${esc(b.blocked_reason)}</div>` : ''}
+    <div class="flex flex-wrap gap-1 mb-1">${tierBadge(b.tier)} ${badge(b.priority, priCls(b.priority))} ${badge(b.type, 'border-gray-600 text-gray-400')}</div>
     <div class="flex justify-between items-center text-[11px] text-gray-400 mt-1">
-      <span>${b.assignee_slot ? `<span class="material-icons text-[12px] align-middle">smart_toy</span> ${esc(b.assignee_slot)}` : b.external_owner ? `<span class="text-gray-500">ext: ${esc(b.external_owner.slice(0, 26))}</span>` : '<span class="text-gray-600">unassigned</span>'}</span>
+      <span class="flex items-center gap-1.5 min-w-0">${b.assignee_slot ? `<img src="${esc(portraitOf(b.assignee_slot))}" alt="" class="w-4 h-5 object-cover rounded-sm border border-primary/40 flex-none" ${portraitFallback(b.assignee_slot)}/> <span class="truncate" title="${esc(b.assignee_slot)}">${esc(slotName(b.assignee_slot))}</span>` : b.external_owner ? `<span class="text-gray-500">ext: ${esc(b.external_owner.slice(0, 26))}</span>` : '<span class="text-gray-500">unassigned</span>'}</span>
       <span>${crit.length ? `${done}/${crit.length} ✓` : '<span class="text-warning">no criteria</span>'}${b.cost_usd ? ` · $${b.cost_usd.toFixed(2)}` : ''}</span>
     </div>
     ${b.ci_status || b.review_state ? `<div class="flex gap-1 mt-1">${b.ci_status ? badge('verify ' + b.ci_status, b.ci_status === 'pass' ? 'text-green-400 border-green-700' : b.ci_status === 'fail' ? 'text-danger border-danger' : 'text-warning border-warning') : ''}${b.review_state && b.status === 'review' ? badge('review ' + b.review_state, 'text-purple-300 border-purple-500') : ''}</div>` : ''}
@@ -230,11 +261,15 @@ function renderSlots() {
   const slots = st.slots.map(s => {
     const w = s.state === 'working' && s.bounty;
     const u = s.usage || {};
-    return `<div class="min-w-[210px] max-w-[240px] bg-[#162628] p-2 cel shadow-comic-sm ${w ? 'border-warning' : ''}">
-      <div class="flex items-center gap-2">
-        <img src="${esc((S.avatars || {})[s.id] || '')}" class="w-8 h-8 border-2 border-black bg-gray-800 object-cover" onerror="this.style.visibility='hidden'"/>
-        <div class="min-w-0"><div class="font-black text-sm uppercase">${esc(s.id)}</div><div class="text-[10px] text-gray-400 font-mono">${esc(s.runner)}${s.model ? ' · ' + esc(s.model) : ''}${s.effort ? ' · ' + esc(s.effort) : ''}</div></div>
-        <span class="ml-auto text-[10px] font-bold uppercase px-1 ${w ? 'bg-warning text-black' : s.state === 'spawning' ? 'bg-primary text-black' : 'bg-gray-700 text-gray-300'}">${esc(s.state)}</span>
+    const name = slotName(s.id, s.name), theme = AV() ? AV().theme(s.id) : '', accent = AV() ? AV().accent(s.id) : '#7aa2f7';
+    return `<div class="op-win flex-none w-[268px] p-2.5 shadow-comic-sm ${w ? 'focus' : ''}" style="--accent:${accent}">
+      <div class="flex items-center gap-2.5">
+        <span class="op-portrait w-10 h-[52px]"><img src="${esc(portraitOf(s.id))}" alt="" ${portraitFallback(s.id)}/></span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2"><span class="op-display font-bold text-[13px] uppercase text-gray-50 truncate" style="color:${accent}">${esc(name)}</span><span class="ml-auto text-[9px] font-bold uppercase px-1 rounded-sm flex-none ${w ? 'bg-warning text-black' : s.state === 'spawning' ? 'bg-primary text-black' : 'bg-gray-800 text-gray-300'}">${esc(s.state)}</span></div>
+          <div class="op-theme-tag truncate mt-0.5" title="${esc(s.id)}">${esc(s.id)} · <b>${esc(theme)}</b></div>
+          <div class="flex items-center gap-2 mt-1">${AV() ? AV().swatches(s.id) : ''}<span class="text-[10px] text-gray-400 font-mono truncate">${esc(s.runner)}${s.model ? ' · ' + esc(s.model) : ''}${s.effort ? ' · ' + esc(s.effort) : ''}</span></div>
+        </div>
       </div>
       ${w ? `<div class="mt-1 text-xs leading-tight cursor-pointer hover:text-primary" onclick="openBounty(${s.bounty.id})">#${s.bounty.id} ${esc(s.bounty.title)}</div>
         <div class="text-[10px] text-gray-400 font-mono mt-1">${ago(s.attempt && s.attempt.started_at)} · hb ${ago(s.bounty.heartbeat_at) || '-'} · tok ${((u.tokens_in || 0) + (u.cache_read || 0) + (u.tokens_out || 0)).toLocaleString()}${u.cost_usd != null ? ' · $' + u.cost_usd.toFixed(2) : ''}</div>
@@ -244,10 +279,10 @@ function renderSlots() {
     </div>`;
   }).join('');
   const leases = st.leases.map(l => l.external
-    ? `<div class="min-w-[200px] bg-[#1a1a10] p-2 cel shadow-comic-sm"><div class="font-black text-sm uppercase flex items-center gap-1"><span class="material-icons text-sm ${l.held ? 'text-danger hazard' : 'text-green-400'}">memory</span> ${esc(l.resource)} lock</div>
-       <div class="text-[11px] ${l.held ? 'text-danger' : 'text-green-400'} font-bold">${l.held ? 'HELD' : 'FREE'}</div>
-       <div class="text-[10px] text-gray-400 font-mono break-all">${l.holder ? esc(Object.entries(l.holder).filter(([k]) => !['file'].includes(k)).map(([k, v]) => k + '=' + v).join(' ')) : 'one rendered UE at a time'}${l.holder_stale ? ' (stale)' : ''}</div></div>`
-    : `<div class="min-w-[200px] bg-[#1a1a10] p-2 cel shadow-comic-sm"><div class="font-black text-sm uppercase">${esc(l.resource)} lease</div><div class="text-[10px] text-gray-400 font-mono">${esc(l.holder)} until ${esc((l.expires_at || '').slice(11, 16))}</div></div>`).join('');
+    ? `<div class="op-win min-w-[200px] p-2.5 shadow-comic-sm ${l.held ? 'op-held' : ''}"><div class="op-display font-bold text-[13px] uppercase flex items-center gap-1.5"><span class="material-icons text-base ${l.held ? 'text-warning' : 'text-green-400'}">lock${l.held ? '' : '_open'}</span> ${esc(l.resource)} lock</div>
+       <div class="text-[11px] ${l.held ? 'text-warning' : 'text-green-400'} font-bold">${l.held ? 'HELD' : 'FREE'}</div>
+       <div class="op-lease-holder text-[10px] text-gray-400 font-mono break-all" title="${l.holder ? esc(Object.values(l.holder).join(' ')) : ''}">${l.holder ? esc(Object.entries(l.holder).filter(([k]) => !['file'].includes(k)).map(([k, v]) => k + '=' + v).join(' ')) : 'one holder at a time'}${l.holder_stale ? ' (stale)' : ''}</div></div>`
+    : `<div class="op-win min-w-[200px] p-2.5 shadow-comic-sm"><div class="op-display font-bold text-[13px] uppercase">${esc(l.resource)} lease</div><div class="text-[10px] text-gray-400 font-mono">${esc(l.holder)} until ${esc((l.expires_at || '').slice(11, 16))}</div></div>`).join('');
   document.getElementById('slots').innerHTML = slots + leases;
 }
 
@@ -281,6 +316,7 @@ async function openBounty(id) {
   const crit = b.criteria || [];
   const notes = b.events.filter(e => e.kind === 'message');
   const act = (label, fn, cls = 'bg-gray-700') => `<button onclick="${fn}" class="${cls} font-bold text-xs uppercase py-1.5 px-3 cel shadow-comic-sm">${label}</button>`;
+  const slotOpt = s => `<option value="${esc(s.id)}" ${s.id === b.assignee_slot ? 'selected' : ''}>${esc(slotName(s.id, s.name))} (${esc(s.id)})</option>`;
   const actions = [];
   if (['backlog', 'blocked', 'failed', 'in_progress'].includes(b.status)) actions.push(act('Ready → dispatch', `doReady(${id}, ${b.external_owner ? 1 : 0})`, 'bg-primary text-black'));
   if (['ready', 'blocked', 'failed', 'in_progress'].includes(b.status)) actions.push(act('Back to backlog', `doAct(${id},'backlog')`));
@@ -305,7 +341,7 @@ async function openBounty(id) {
     </div>
     <div class="grid grid-cols-2 md:grid-cols-5 gap-2 mt-4 text-xs">
       <label>Project<select id="e-project" class="w-full p-1 cel">${S.projects.map(p => `<option ${p.id === b.project_id ? 'selected' : ''}>${esc(p.id)}</option>`).join('')}</select></label>
-      <label>Assignee<select id="e-slot" class="w-full p-1 cel"><option value="">unassigned</option>${slots.map(s => `<option ${s.id === b.assignee_slot ? 'selected' : ''}>${esc(s.id)}</option>`).join('')}</select></label>
+      <label>Assignee<select id="e-slot" class="w-full p-1 cel"><option value="">unassigned</option>${slots.map(slotOpt).join('')}</select></label>
       <label>Type<select id="e-type" class="w-full p-1 cel">${['task', 'bug', 'test', 'research', 'art', 'docs'].map(t => `<option ${t === b.type ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       <label>Tier<select id="e-tier" class="w-full p-1 cel">${['S', 'A', 'B', 'C'].map(t => `<option ${t === b.tier ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       <label>Priority<select id="e-pri" class="w-full p-1 cel">${['critical', 'high', 'normal', 'low'].map(t => `<option ${t === b.priority ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
@@ -314,7 +350,7 @@ async function openBounty(id) {
     <label class="block text-xs mt-2">Description / brief<textarea id="e-desc" class="w-full p-2 cel font-mono h-40">${esc(b.description)}</textarea></label>
     <label class="block text-xs mt-2">Acceptance criteria (one per line; ✓ = met)<textarea id="e-crit" class="w-full p-2 cel font-mono h-28">${esc(crit.map(c => (c.done ? '[x] ' : '') + c.text).join('\n'))}</textarea></label>
     <label class="block text-xs mt-2">Depends on (ids)<input id="e-deps" class="w-full p-2 cel font-mono" value="${esc((b.depends_on || []).join(', '))}"/></label>
-    <div class="flex gap-2 mt-3"><button onclick="saveEdit(${id})" class="bg-primary text-black font-bold py-2 px-4 cel shadow-comic uppercase text-sm">Save</button><span id="e-err" class="text-danger text-xs font-mono self-center"></span></div>
+    <div class="flex gap-2 mt-3"><button onclick="saveEdit(${id})" class="op-btn">Save</button><span id="e-err" class="text-danger text-xs font-mono self-center"></span></div>
     <div class="mt-5 grid md:grid-cols-2 gap-3 text-xs font-mono text-gray-300">
       <div>branch: ${esc(b.branch || '-')}<br>worktree: ${esc(b.worktree || '-')}<br>${b.external_owner ? 'external: ' + esc(b.external_owner) + '<br>' : ''}parent: ${b.parent_id ? `<a class="text-primary underline" href="#" onclick="openBounty(${b.parent_id});return false">#${b.parent_id}</a>` : '-'}${b.children.length ? '<br>children: ' + b.children.map(c => `<a class="text-primary underline" href="#" onclick="openBounty(${c.id});return false">#${c.id}</a> [${esc(c.status)}]`).join(', ') : ''}</div>
       <div>attempts ${b.attempts.filter(a => a.kind === 'worker').length} · failures ${b.failures}<br>cost $${(b.cost_usd || 0).toFixed(4)} · tokens in ${b.tokens_in} out ${b.tokens_out}<br>verify: ${esc(b.ci_status || '-')} ${b.ci_log ? `<a class="text-primary underline" target="_blank" href="/api/bounties/${b.id}/verify-log">log</a>` : ''}<br>commits: ${esc((b.commits || []).map(c => c.slice(0, 8)).join(' ') || '-')}</div>

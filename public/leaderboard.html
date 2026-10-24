@@ -2,147 +2,124 @@
 <html class="dark" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Scavenger Leaderboard</title>
+<title>Loot · Wasteland Bounty Board</title>
+<link rel="icon" href="/img/favicon.png" type="image/png"/>
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="/op-theme.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="/op.css" rel="stylesheet"/>
 <script src="/avatars.js"></script>
-<script>
-tailwind.config = {
-  darkMode: "class",
-  theme: { extend: {
-    colors: { "primary": "#f2df0d", "primary-dark": "#c4b40b", "background-dark": "#222110" },
-    fontFamily: { "display": ["Space Grotesk", "sans-serif"] },
-    boxShadow: { "hard": "4px 4px 0px 0px #000000", "hard-sm": "2px 2px 0px 0px #000000", "hard-lg": "8px 8px 0px 0px #000000", "glow": "0 0 20px rgba(242, 223, 13, 0.5)" },
-  }},
-}
-</script>
 <style>
-.halftone-pattern { background-image: radial-gradient(#4b4b4b 1px, transparent 1px); background-size: 20px 20px; }
-.card-border { border: 3px solid #121212; }
-.text-stroke { -webkit-text-stroke: 2px black; }
-.scavenger-row:hover { transform: scale(1.02) translateX(-5px); box-shadow: 6px 6px 0px 0px #f2df0d; border-color: #f2df0d; }
-.progress-bar-striped { background-image: linear-gradient(45deg, rgba(0,0,0,0.15) 25%, transparent 25%, transparent 50%, rgba(0,0,0,0.15) 50%, rgba(0,0,0,0.15) 75%, transparent 75%, transparent); background-size: 1rem 1rem; }
+.lb-row:hover { transform: translateX(3px); border-color: rgba(122,162,247,.55) !important; }
+.lb-row { transition: transform .15s, border-color .15s; }
+.lb-rank { font: 700 14px/1 "JetBrains Mono", monospace; color: #565f89; }
+.lb-medal {
+  width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; flex: none;
+  font: 700 16px/1 "Chakra Petch", sans-serif; color: #0b0b10; border: 1px solid #0b0b10; box-shadow: 0 4px 12px rgba(0,0,0,.6);
+}
+.lb-medal.r1 { background: linear-gradient(160deg, #f0c98a, #e0af68 55%, #b8863d); }
+.lb-medal.r2 { background: linear-gradient(160deg, #e8ecfa, #a9b1d6 55%, #7982a9); }
+.lb-medal.r3 { background: linear-gradient(160deg, #ffb98a, #ff9e64 55%, #c47342); }
+.lb-bar { height: 8px; border-radius: 4px; background: rgba(9,9,14,.7); border: 1px solid rgba(122,162,247,.14); overflow: hidden; }
+.lb-bar > div { height: 100%; }
+.lb-striped { background-image: linear-gradient(45deg, rgba(0,0,0,0.18) 25%, transparent 25%, transparent 50%, rgba(0,0,0,0.18) 50%, rgba(0,0,0,0.18) 75%, transparent 75%, transparent); background-size: 1rem 1rem; }
+.lb-cell { background: rgba(9,9,14,.55); border: 1px solid rgba(122,162,247,.16); border-radius: 6px; padding: 10px 12px; }
+.lb-cell .k { display: block; font: 600 9.5px/1.2 "JetBrains Mono", monospace; letter-spacing: .12em; text-transform: uppercase; color: #565f89; margin-bottom: 4px; }
+.lb-hero-glow { position: absolute; inset: -2px; border-radius: 12px; background: linear-gradient(135deg, rgba(224,175,104,.55), rgba(187,154,247,.45), rgba(122,162,247,.5)); filter: blur(14px); opacity: .45; }
 </style>
 </head>
-<body class="bg-[#222110] text-white font-display min-h-screen relative overflow-x-hidden selection:bg-primary selection:text-black">
-<div class="fixed inset-0 z-0 halftone-pattern opacity-5 pointer-events-none"></div>
+<body class="bg-background-dark text-gray-100 font-display min-h-screen relative overflow-x-hidden">
+<div class="grunge fixed inset-0 z-50 mix-blend-overlay"></div>
 
-<div class="relative z-10 container mx-auto px-4 py-8 max-w-6xl pb-32">
-  <!-- Header -->
-  <header class="mb-12 relative">
-    <div class="absolute top-10 right-0 w-64 h-2 bg-primary transform -rotate-2 shadow-hard"></div>
-    <div class="flex flex-col md:flex-row items-start md:items-end justify-between gap-6">
-      <div>
-        <div class="inline-block bg-primary px-4 py-1 transform -skew-x-12 border-2 border-black shadow-hard-sm mb-2">
-          <span class="block transform skew-x-12 text-black font-bold tracking-widest text-sm uppercase">Weekly Haul // Sector 7</span>
-        </div>
-        <h1 class="text-6xl md:text-8xl font-black italic tracking-tighter text-primary drop-shadow-[4px_4px_0_rgba(0,0,0,1)] text-stroke">TOP SCAVENGERS</h1>
-      </div>
-      <div class="flex flex-col items-end">
-        <div class="text-right mb-1">
-          <span class="text-sm text-gray-400 font-mono uppercase tracking-widest">System Status</span>
-          <span class="ml-2 text-primary font-bold animate-pulse">&#9679; ONLINE</span>
-        </div>
-        <div class="bg-zinc-800 border-2 border-black p-4 shadow-hard transform rotate-1 rounded-sm max-w-xs">
-          <p class="text-xs text-gray-300 font-mono leading-tight">&gt; WARNING: Competition for loot creates erratic behavior in AI agents. Maintain safe distance.</p>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <!-- Leaderboard -->
-  <main id="leaderboard" class="space-y-6"></main>
+<div class="op-bar" aria-hidden="true">
+  <div class="ws" id="opbar-ws"></div>
+  <div class="mid"><b>bounty-board</b> · loot · wasteland command</div>
+  <div class="tray"><span class="material-icons">wifi</span><span class="material-icons">battery_full</span><span class="date" id="opbar-date"></span><span class="clock" id="opbar-clock">--:--</span></div>
 </div>
 
-<!-- Bottom Nav -->
-<div class="fixed bottom-0 left-0 w-full z-50 px-4 pb-4">
-  <div class="container mx-auto max-w-4xl">
-    <div class="bg-gray-900 card-border shadow-hard p-2 flex items-center justify-center gap-2 md:gap-4 relative">
-      <a href="/" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 border-2 border-black p-3 md:p-4 transition-all group">
-        <div class="flex flex-col items-center justify-center">
-          <span class="material-icons text-2xl group-hover:text-white">dashboard</span>
-          <span class="text-[10px] uppercase font-bold mt-1 tracking-widest hidden md:block">Board</span>
-        </div>
-      </a>
-      <a href="/live" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 border-2 border-black p-3 md:p-4 transition-all group">
-        <div class="flex flex-col items-center justify-center">
-          <span class="material-icons text-2xl group-hover:text-white">monitor_heart</span>
-          <span class="text-[10px] uppercase font-bold mt-1 tracking-widest hidden md:block">Live</span>
-        </div>
-      </a>
-      <a href="/roster" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 border-2 border-black p-3 md:p-4 transition-all group">
-        <div class="flex flex-col items-center justify-center">
-          <span class="material-icons text-2xl group-hover:text-white">people_alt</span>
-          <span class="text-[10px] uppercase font-bold mt-1 tracking-widest hidden md:block">Roster</span>
-        </div>
-      </a>
-      <a href="/leaderboard" class="flex-1 bg-primary text-black border-2 border-black p-3 md:p-4 shadow-[inset_0_0_20px_rgba(255,255,255,0.4)] relative -mt-4 transform scale-110 z-10">
-        <div class="flex flex-col items-center justify-center">
-          <span class="material-icons text-3xl">emoji_events</span>
-          <span class="text-xs uppercase font-black mt-1 tracking-widest hidden md:block">Leaderboard</span>
-        </div>
-      </a>
+<header class="op-header px-3 md:px-6 py-3 flex flex-wrap items-center gap-x-5 gap-y-3 justify-between">
+  <a class="op-brand" href="/" title="Back to the board">
+    <span class="op-mark" aria-hidden="true"></span>
+    <div class="min-w-0">
+      <h1 class="op-title"><span class="t">Loot</span></h1>
+      <div class="op-sub"><b>Wasteland Command</b> · loot from verified work, merged to main · <span class="text-green-400">&#9679; online</span></div>
     </div>
+  </a>
+  <div class="grid grid-cols-2 w-full sm:w-auto sm:flex gap-2">
+    <div class="op-stat"><span class="material-icons">toll</span><div><span class="lbl">Total loot</span><span id="stat-loot" class="val text-warning">--</span></div></div>
+    <div class="op-stat"><span class="material-icons">check_circle</span><div><span class="lbl">Merged</span><span id="stat-done" class="val text-green-400">--</span></div></div>
   </div>
+</header>
+
+<div class="relative z-10 container mx-auto px-3 md:px-4 py-6 max-w-6xl pb-32">
+  <div class="op-kicker mb-3">Ranked by loot · legacy excluded · ties keep board order</div>
+  <main id="leaderboard" class="space-y-4"></main>
 </div>
+
+<nav class="op-dock-wrap" aria-label="Pages">
+  <div class="op-dock">
+    <a href="/" title="Board"><span class="material-icons">grid_view</span>Board</a>
+    <a href="/live" title="Live: what every agent is doing now"><span class="material-icons">phonelink_ring</span>Live</a>
+    <a href="/roster" title="Roster: the slots"><span class="material-icons">palette</span>Roster</a>
+    <a href="/leaderboard" class="on" title="Leaderboard: loot from verified work"><span class="material-icons">emoji_events</span>Loot</a>
+  </div>
+</nav>
 
 <script>
 const money = v => '$' + Number(v || 0).toFixed(2);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const AV = () => window.OPAvatars;
+const nameOf = a => AV() ? AV().name(a.id, a.name) : a.name;
+const themeOf = a => AV() ? AV().theme(a.id) : '';
+const colorOf = a => AV() ? AV().accent(a.id) : '#7aa2f7';
+const portraitOf = a => AV() ? AV().portrait(a.id) : (a.avatar_url || '');
+const fbOf = a => AV() ? AV().fallback(a.id, a.avatar_url) : '';
+const statusColor = s => ({ active: 'text-green-400', idle: 'text-gray-400', repairing: 'text-orange-400', offline: 'text-red-400' }[s] || 'text-gray-400');
+
+function tickClock() {
+  const d = new Date();
+  document.getElementById('opbar-clock').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('opbar-date').textContent = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+}
+tickClock(); setInterval(tickClock, 10000);
+
 async function loadLeaderboard() {
   const agents = await fetch('/api/agents/leaderboard').then(r => r.json());
   const container = document.getElementById('leaderboard');
+  document.getElementById('stat-loot').textContent = '$' + agents.reduce((n, a) => n + (a.total_loot || 0), 0).toLocaleString();
+  document.getElementById('stat-done').textContent = agents.reduce((n, a) => n + (a.missions_completed || 0), 0);
+  document.getElementById('opbar-ws').innerHTML = agents.map((a, i) => `<i class="${i === 0 && a.total_loot > 0 ? 'on' : a.total_loot > 0 ? 'has' : ''}" title="${esc(nameOf(a))}: ${a.total_loot.toLocaleString()}">${i + 1}</i>`).join('');
 
   container.innerHTML = agents.map((a, i) => {
     const rank = i + 1;
-    const barColor = rank === 1 ? 'bg-primary' : rank === 2 ? 'bg-yellow-500' : rank === 3 ? 'bg-yellow-600' : 'bg-zinc-500';
-    const statusColor = { active: 'text-green-400', idle: 'text-gray-400', repairing: 'text-orange-400', offline: 'text-red-400' }[a.status] || 'text-gray-400';
+    const barColor = rank === 1 ? 'bg-warning' : rank === 2 ? 'bg-gray-200' : rank === 3 ? 'bg-orange-400' : 'bg-gray-500';
+    const sc = statusColor(a.status);
+    const name = nameOf(a), color = colorOf(a), theme = themeOf(a);
 
     if (rank === 1) {
       return `<div class="relative group">
-        <div class="absolute -inset-1 bg-gradient-to-r from-primary to-yellow-600 rounded-lg blur opacity-40 group-hover:opacity-75 transition duration-1000 animate-pulse"></div>
-        <div class="relative flex flex-col md:flex-row items-center gap-6 bg-zinc-900 border-4 border-primary rounded-lg p-6 shadow-hard-lg transform transition-all duration-300 hover:-translate-y-1">
-          <div class="absolute -top-6 -left-4 md:-left-6 w-20 h-20 bg-primary border-4 border-black rotate-12 flex items-center justify-center shadow-hard z-20 rounded-full">
-            <span class="material-icons text-5xl text-black">emoji_events</span>
+        <div class="lb-hero-glow"></div>
+        <div class="op-win focus relative flex flex-col md:flex-row items-center gap-6 p-5 md:p-6 shadow-hard-lg" style="--accent:${color}">
+          <div class="absolute -top-4 -left-3 md:-left-5 z-20 lb-medal r1" style="width:46px;height:46px;border-radius:13px"><span class="material-icons" style="font-size:26px">emoji_events</span></div>
+          <div class="relative flex-shrink-0">
+            <span class="op-portrait block w-28 h-[150px] md:w-36 md:h-48"><img src="${esc(portraitOf(a))}" alt="${esc(name)}" ${fbOf(a)}/></span>
+            <div class="absolute bottom-0 left-0 right-0 bg-warning/90 text-black text-center text-[10px] font-bold py-1 tracking-widest font-mono">TOP SLOT</div>
           </div>
-          <div class="relative flex-shrink-0 ml-4 md:ml-6">
-            <div class="w-24 h-24 md:w-32 md:h-32 border-4 border-black bg-zinc-800 overflow-hidden flex items-center justify-center" style="clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);">
-              <img src="${a.avatar_url}" alt="${a.name}" class="w-full h-full object-cover"/>
+          <div class="flex-grow text-center md:text-left z-10 w-full min-w-0">
+            <div class="flex flex-col md:flex-row md:items-baseline gap-1 md:gap-4 mb-1">
+              <h2 class="op-display text-3xl md:text-4xl font-bold uppercase" style="color:${color}">${esc(name)}</h2>
+              <span class="op-theme-tag">${esc(a.id)} · <b>${esc(theme)}</b> · <span class="${sc}">&#9679; ${esc(a.status)}</span></span>
             </div>
-            <div class="absolute bottom-0 left-0 right-0 bg-primary/90 text-black text-center text-xs font-bold py-1">LEGENDARY</div>
-          </div>
-          <div class="flex-grow text-center md:text-left z-10 w-full">
-            <div class="flex flex-col md:flex-row md:items-baseline gap-2 md:gap-4 mb-2">
-              <h2 class="text-4xl font-black text-white uppercase tracking-tight italic">${a.name}</h2>
-              <span class="bg-zinc-800 text-primary px-2 py-0.5 text-xs font-mono border border-primary/30 rounded">Class: ${a.class}</span>
-              <span class="${statusColor} text-xs font-bold uppercase">&#9679; ${a.status}</span>
-            </div>
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
-              <div class="bg-black/40 p-3 rounded border border-zinc-700">
-                <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Total Loot</span>
-                <div class="flex items-center gap-2"><span class="material-icons text-primary animate-bounce">diamond</span><span class="text-2xl font-mono text-white font-bold">${a.total_loot.toLocaleString()}</span></div>
-              </div>
-              <div class="bg-black/40 p-3 rounded border border-zinc-700">
-                <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Success Rate</span>
-                <div class="flex items-center gap-2">
-                  <div class="flex-grow bg-zinc-800 h-4 rounded-full overflow-hidden border border-zinc-600"><div class="h-full bg-primary progress-bar-striped" style="width:${a.success_rate}%"></div></div>
-                  <span class="text-xl font-mono text-primary font-bold">${a.success_rate}%</span>
-                </div>
-              </div>
-              <div class="bg-black/40 p-3 rounded border border-zinc-700">
-                <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Done / Failed</span>
-                <span class="text-xl font-mono text-white font-bold">${a.missions_completed}</span><span class="text-xl font-mono text-red-400 font-bold"> / ${a.missions_failed}</span>
-              </div>
-              <div class="bg-black/40 p-3 rounded border border-zinc-700">
-                <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Cost</span>
-                <span class="text-xl font-mono text-white font-bold">${money(a.cost_usd)}</span>
-              </div>
-              <div class="bg-black/40 p-3 rounded border border-zinc-700">
-                <span class="text-xs text-gray-500 uppercase font-bold block mb-1">Streak</span>
-                <span class="text-xl font-mono text-primary font-bold">${a.streak}x</span>
-              </div>
+            <div class="flex justify-center md:justify-start mb-3">${AV() ? AV().swatches(a.id, 'lg') : ''}</div>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3">
+              <div class="lb-cell"><span class="k">Total loot</span><div class="flex items-center gap-2"><span class="material-icons text-warning">toll</span><span class="text-2xl font-mono text-gray-50 font-bold">${a.total_loot.toLocaleString()}</span></div></div>
+              <div class="lb-cell"><span class="k">Success rate</span><div class="flex items-center gap-2"><div class="lb-bar flex-grow"><div class="bg-primary lb-striped" style="width:${a.success_rate}%"></div></div><span class="text-lg font-mono text-primary font-bold">${a.success_rate}%</span></div></div>
+              <div class="lb-cell"><span class="k">Done / Failed</span><span class="text-xl font-mono text-gray-50 font-bold">${a.missions_completed}</span><span class="text-xl font-mono text-red-400 font-bold"> / ${a.missions_failed}</span></div>
+              <div class="lb-cell"><span class="k">Cost</span><span class="text-xl font-mono text-gray-50 font-bold">${money(a.cost_usd)}</span></div>
+              <div class="lb-cell"><span class="k">Streak</span><span class="text-xl font-mono text-primary font-bold">${a.streak}x</span></div>
             </div>
           </div>
         </div>
@@ -150,29 +127,24 @@ async function loadLeaderboard() {
     }
 
     if (rank <= 3) {
-      const badgeBg = rank === 2 ? 'bg-white' : 'bg-zinc-400';
-      return `<div class="scavenger-row relative flex flex-col md:flex-row items-center gap-4 bg-zinc-800 card-border rounded-md p-4 shadow-hard transition-all duration-200">
-        <div class="absolute -left-3 top-1/2 transform -translate-y-1/2 w-10 h-10 ${badgeBg} border-2 border-black rotate-45 flex items-center justify-center shadow-sm z-20">
-          <span class="text-2xl font-black text-black -rotate-45">${rank}</span>
-        </div>
-        <div class="flex-shrink-0 ml-4 w-16 h-16 rounded-full border-2 border-white bg-zinc-700 overflow-hidden flex items-center justify-center">
-          <img src="${a.avatar_url}" alt="${a.name}" class="w-full h-full object-cover"/>
-        </div>
-        <div class="flex-grow w-full grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-          <div class="md:col-span-4 text-center md:text-left">
-            <h3 class="text-2xl font-bold text-white uppercase italic">${a.name}</h3>
-            <span class="text-xs text-gray-400 font-mono">Class: ${a.class} // Level ${a.level} // <span class="${statusColor}">${a.status}</span></span>
-            <span class="block text-xs text-gray-400 font-mono">${a.missions_completed} done · ${a.missions_failed} failed · ${money(a.cost_usd)} spent</span>
+      return `<div class="lb-row op-win relative flex flex-col md:flex-row items-center gap-4 p-4 shadow-hard" style="--accent:${color}">
+        <div class="lb-medal r${rank}">${rank}</div>
+        <span class="op-portrait flex-shrink-0 w-14 h-[74px]"><img src="${esc(portraitOf(a))}" alt="${esc(name)}" ${fbOf(a)}/></span>
+        <div class="flex-grow w-full grid grid-cols-1 md:grid-cols-12 gap-3 items-center min-w-0">
+          <div class="md:col-span-4 text-center md:text-left min-w-0">
+            <h3 class="op-display text-2xl font-bold uppercase" style="color:${color}">${esc(name)}</h3>
+            <div class="op-theme-tag">${esc(a.id)} · <b>${esc(theme)}</b> · Lv.${esc(a.level)} · <span class="${sc}">${esc(a.status)}</span></div>
+            <div class="text-[11px] text-gray-400 font-mono mt-0.5">${a.missions_completed} done · ${a.missions_failed} failed · ${money(a.cost_usd)} spent</div>
           </div>
-          <div class="md:col-span-3 flex items-center justify-center md:justify-start gap-2 bg-black/20 p-2 rounded">
-            <span class="material-icons text-yellow-400 text-sm">savings</span>
-            <span class="text-xl font-mono text-primary font-bold">${a.total_loot.toLocaleString()}</span>
-            <span class="text-xs text-gray-500 uppercase">Loot</span>
+          <div class="md:col-span-3 flex items-center justify-center md:justify-start gap-2 op-sunk p-2">
+            <span class="material-icons text-warning text-base">toll</span>
+            <span class="text-xl font-mono text-warning font-bold">${a.total_loot.toLocaleString()}</span>
+            <span class="text-[10px] text-gray-500 uppercase font-mono tracking-widest">loot</span>
           </div>
           <div class="md:col-span-4">
             <div class="flex items-center gap-2 w-full">
-              <span class="text-xs font-bold text-gray-400 w-12 text-right">${a.success_rate}%</span>
-              <div class="flex-grow bg-zinc-900 h-3 transform -skew-x-12 border border-zinc-600"><div class="h-full ${barColor} progress-bar-striped" style="width:${a.success_rate}%"></div></div>
+              <span class="text-xs font-bold font-mono text-gray-400 w-12 text-right">${a.success_rate}%</span>
+              <div class="lb-bar flex-grow"><div class="${barColor} lb-striped" style="width:${a.success_rate}%"></div></div>
             </div>
           </div>
           <div class="md:col-span-1 text-center font-mono text-primary text-sm">${a.streak}x</div>
@@ -180,13 +152,13 @@ async function loadLeaderboard() {
       </div>`;
     }
 
-    return `<div class="scavenger-row relative flex flex-col md:flex-row items-center gap-4 bg-zinc-800/80 card-border rounded-md p-3 shadow-hard-sm transition-all duration-200">
-      <div class="w-8 flex justify-center font-mono text-gray-500 font-bold">#${rank}</div>
-      <div class="w-10 h-10 rounded border border-black bg-zinc-700 overflow-hidden flex items-center justify-center"><img src="${a.avatar_url}" alt="${a.name}" class="w-full h-full object-cover"/></div>
-      <div class="flex-grow w-full grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-        <div class="md:col-span-4"><h3 class="text-lg font-bold text-gray-200 uppercase">${a.name}</h3><span class="text-[10px] text-gray-500 font-mono"><span class="${statusColor}">&#9679;</span> ${a.status} · ${a.missions_completed} done · ${a.missions_failed} failed · ${money(a.cost_usd)} spent</span></div>
-        <div class="md:col-span-3 flex items-center gap-2"><span class="text-lg font-mono text-gray-300">${a.total_loot.toLocaleString()}</span><span class="text-[10px] text-gray-600 uppercase">Loot</span></div>
-        <div class="md:col-span-4"><div class="flex items-center gap-2 w-full"><span class="text-xs font-bold text-gray-500 w-8 text-right">${a.success_rate}%</span><div class="flex-grow bg-zinc-900 h-2 rounded-full border border-zinc-700"><div class="h-full bg-zinc-500" style="width:${a.success_rate}%"></div></div></div></div>
+    return `<div class="lb-row op-win flat relative flex flex-col md:flex-row items-center gap-4 p-3 shadow-hard-sm" style="--accent:${color}">
+      <div class="w-8 flex justify-center lb-rank">#${rank}</div>
+      <span class="op-portrait flex-shrink-0 w-10 h-[52px]"><img src="${esc(portraitOf(a))}" alt="${esc(name)}" ${fbOf(a)}/></span>
+      <div class="flex-grow w-full grid grid-cols-1 md:grid-cols-12 gap-3 items-center min-w-0">
+        <div class="md:col-span-4 min-w-0"><h3 class="op-display text-lg font-bold uppercase" style="color:${color}">${esc(name)}</h3><div class="op-theme-tag">${esc(a.id)} · <b>${esc(theme)}</b> · <span class="${sc}">&#9679;</span> ${esc(a.status)} · ${a.missions_completed} done · ${a.missions_failed} failed · ${money(a.cost_usd)} spent</div></div>
+        <div class="md:col-span-3 flex items-center gap-2"><span class="material-icons text-gray-500 text-base">toll</span><span class="text-lg font-mono text-gray-200">${a.total_loot.toLocaleString()}</span><span class="text-[10px] text-gray-600 uppercase font-mono tracking-widest">loot</span></div>
+        <div class="md:col-span-4"><div class="flex items-center gap-2 w-full"><span class="text-xs font-bold font-mono text-gray-500 w-8 text-right">${a.success_rate}%</span><div class="lb-bar flex-grow" style="height:6px"><div class="bg-gray-500" style="width:${a.success_rate}%"></div></div></div></div>
         <div class="md:col-span-1 text-center font-mono text-gray-500 text-sm">${a.streak}x</div>
       </div>
     </div>`;
