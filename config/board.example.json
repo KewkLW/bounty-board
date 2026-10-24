@@ -10,6 +10,7 @@
   "db_path": "data/bounty-board.db",
   "logs_dir": "logs",
   "default_project": "my-project",
+  "orchestrator": "Conductor",
   "concurrency_cap": 4,
   "tick_seconds": 5,
   "watchdog": {

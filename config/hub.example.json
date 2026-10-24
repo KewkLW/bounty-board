@@ -11,6 +11,17 @@
   "cache_ms": 5000,
   "stopped_keep_days": 7,
   "human_markers": [
-    "Robin"
-  ]
+    "Your Name"
+  ],
+  "human_name": "Your Name",
+  "on_reply": [
+    "/path/to/your/relay",
+    "--to",
+    "{orchestrator}",
+    "--project",
+    "{project}",
+    "[{board} #{id} {title}] {text}"
+  ],
+  "reply_timeout_ms": 5000,
+  "hook_timeout_ms": 15000
 }

@@ -70,6 +70,27 @@ async function fakeBoard(fixture) {
   const app = express();
   app.get('/api/bounties/stats', (req, res) => res.json(fixture.stats));
   app.get('/api/bounties', (req, res) => res.json(fixture.bounties));
+  app.get('/api/bounties/:id', (req, res) => {
+    const b = fixture.bounties.find(x => x.id === Number(req.params.id));
+    return b ? res.json(b) : res.status(404).json({ error: 'not found' });
+  });
+  // The board's human-notes contract (bounty #2): X-Board-Request: 1, 400 empty, 404 unknown,
+  // 409 unblock on a bounty that is not blocked (the note is still stored). Every call lands in
+  // fixture.received; fixture.reply_status forces a failure.
+  app.post('/api/bounties/:id/human-notes', express.json(), (req, res) => {
+    fixture.received = fixture.received || [];
+    fixture.received.push({ id: Number(req.params.id), headers: req.headers, body: req.body });
+    if (fixture.reply_status) return res.status(fixture.reply_status).json({ error: 'board is having a bad day' });
+    if (req.get('x-board-request') !== '1') return res.status(403).json({ error: 'forbidden' });
+    const text = String((req.body && req.body.text) || '').trim();
+    if (!text) return res.status(400).json({ error: 'text is required' });
+    const b = fixture.bounties.find(x => x.id === Number(req.params.id));
+    if (!b) return res.status(404).json({ error: 'not found' });
+    const note = { id: (fixture.notes_stored = (fixture.notes_stored || 0) + 1), bounty_id: b.id, text, from: req.body.from || 'human', created_at: new Date().toISOString() };
+    if (req.body.unblock && b.status !== 'blocked') return res.status(409).json({ error: `#${b.id} is not blocked`, note, bounty: { id: b.id, status: b.status } });
+    if (req.body.unblock) { b.status = 'ready'; b.blocked_reason = null; }
+    res.status(201).json({ note, bounty: { id: b.id, status: b.status } });
+  });
   app.get('/api/state', (req, res) => res.json(fixture.state));
   app.get('/status-goals.json', (req, res) => (fixture.goals ? res.json(fixture.goals) : res.status(404).end()));
   app.get('/status-notes.json', (req, res) => (fixture.notes ? res.json(fixture.notes) : res.status(404).end()));
