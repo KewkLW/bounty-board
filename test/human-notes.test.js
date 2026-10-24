@@ -194,8 +194,14 @@ test('human notes reach workers: live inbox/progress and the prompt of a later w
     // bounty show and bounty log list them
     r = await cli(url, ['show', String(b.id)]);
     assert.match(r.out, /Messages from the human:[\s\S]*kewk \(unread by the orchestrator\): ship the small version first/);
+    const logPath = path.join(t.dir, 'attempt.log');
+    require('fs').writeFileSync(logPath, 'worker transcript line\n');
+    board.db.prepare("INSERT INTO attempts (bounty_id, slot, kind, log_path, started_at) VALUES (?, 'fake-1', 'worker', ?, ?)").run(b.id, logPath, new Date().toISOString());
     r = await cli(url, ['log', String(b.id)]);
-    assert.match(r.out, /messages from the human on #\d+[\s\S]*kewk\] also add a test/);
+    assert.strictEqual(r.code, 0, r.err);
+    assert.match(r.out, /messages from the human on #\d+[\s\S]*kewk\] also add a test[\s\S]*end of messages[\s\S]*worker transcript line/);
+    r = await cli(url, ['log', String(b.id), '--raw']);
+    assert.doesNotMatch(r.out, /messages from the human/);
   } finally { await t.s.close(); }
 });
 
