@@ -8,7 +8,7 @@ const { spawn } = require('child_process');
 const { startBoard, waitFor, tmpdir, writeConfig, ROOT } = require('./helpers');
 const registry = require('../lib/registry');
 const { computeGoals, noteView } = require('../lib/goals');
-const { loadHubConfig } = require('../hub/server');
+const { loadHubConfig, waitsOnHuman, HUMAN_MARKERS } = require('../hub/server');
 const { busyBoard, quietBoard, fakeBoard, deadPort, registerFake, startHub, hoursAgo } = require('./hub-fixtures');
 
 const getHub = async url => (await fetch(url + '/api/hub')).json();
@@ -126,7 +126,8 @@ test('GET /api/hub: two fake boards and an offline one; a new board appears with
     assert.deepStrictEqual(r.goals[1].stuck, [4]);
     assert.deepStrictEqual(r.working.map(w => [w.slot, w.slot_name, w.bounty.id]), [['w-1', 'Fern', 3]]);
     assert.deepStrictEqual(r.attention.map(a => [a.id, a.status]), [[4, 'blocked'], [5, 'review']]);
-    assert.strictEqual(r.attention[0].blocked_reason, 'needs the sensor plugged in by a human');
+    assert.strictEqual(r.attention[0].blocked_reason, 'Waiting on a human to plug in the sensor');
+    assert.deepStrictEqual([r.needs_human.map(a => a.id), r.blocked_other.map(a => a.id)], [[4], []]);
     assert.deepStrictEqual(r.recent.map(x => x.id), [2], 'finished in the last 24 h only');
     assert.strictEqual(r.idle, false);
 
@@ -134,14 +135,14 @@ test('GET /api/hub: two fake boards and an offline one; a new board appears with
     assert.strictEqual(q.idle, true);
     assert.strictEqual(q.goals, null, 'no goals file');
     assert.strictEqual(q.note.stale, true, 'a note older than 3 h is stale');
+    assert.deepStrictEqual([q.needs_human.length, q.blocked_other.map(a => a.id)], [0, [2]], 'a question with no human marker is not "needs you"');
 
     const g = d.boards[2];
     assert.deepStrictEqual([g.online, g.stats, g.working], [false, null, []]);
     assert.ok(g.offline_reason);
 
     assert.deepStrictEqual(d.needs_you.map(x => [x.board, x.project, x.id, x.blocked_reason]), [
-      ['Rocket Garden', 'rocket', 4, 'needs the sensor plugged in by a human'],
-      ['Archive Cleanup', 'archive', 2, 'which label printer?'],
+      ['Rocket Garden', 'rocket', 4, 'Waiting on a human to plug in the sensor'],
     ]);
 
     // A board that stops answering shows as offline; one that exits cleanly too.
@@ -169,6 +170,37 @@ test('GET /api/hub reads a real board end to end', async () => {
     assert.deepStrictEqual(d.needs_you.map(n => [n.id, n.blocked_reason]), [[b.id, 'needs a human login']]);
     assert.ok(x.working.length === 0 && x.idle);
   } finally { await hub.close(); await t.s.close(); }
+});
+
+test('Needs you: only blocked reasons with a human marker (case-insensitive), extendable in hub.json', async () => {
+  assert.deepStrictEqual(HUMAN_MARKERS, ['waiting on', 'needs a human', 'blocked on a human', 'needs the user']);
+  for (const r of ['WAITING ON the login', 'this needs a human', 'Blocked on a human: keys', 'needs the user to choose']) assert.ok(waitsOnHuman(r), r);
+  for (const r of ['worker exited with code 1', 'worker-2: rebase first', '', null, 'which label printer?']) assert.ok(!waitsOnHuman(r), String(r));
+  const tmp = tmpdir('hubmark');
+  const f = path.join(tmp, 'hub.json');
+  fs.writeFileSync(f, JSON.stringify({ human_markers: ['Robin', 'label printer'] }));
+  const c = loadHubConfig(f);
+  assert.deepStrictEqual(c.human_markers, [...HUMAN_MARKERS, 'robin', 'label printer'], 'config adds to the defaults');
+  assert.ok(waitsOnHuman('ask robin', c.human_markers));
+
+  // End to end: the extra marker moves Archive Cleanup's question into Needs you.
+  const dir = path.join(tmp, 'boards');
+  const quiet = await fakeBoard(quietBoard());
+  registerFake(dir, quiet.port, { name: 'Archive Cleanup', default_project: 'archive' });
+  const hub = await startHub(dir, { human_markers: c.human_markers });
+  try {
+    const d = await getHub(hub.url);
+    assert.deepStrictEqual(d.needs_you.map(x => x.id), [2]);
+    assert.deepStrictEqual(d.boards[0].blocked_other, []);
+  } finally { await hub.close(); await quiet.close(); }
+});
+
+test('registry names: board.json project name, else the title-cased default project, never a raw id', () => {
+  assert.strictEqual(registry.entryFor({}, 4101, { name: 'Rocket Garden', defaultProject: 'rocket' }).name, 'Rocket Garden');
+  assert.strictEqual(registry.entryFor({}, 4101, { name: 'rocket-garden', defaultProject: 'rocket-garden' }).name, 'Rocket Garden', 'a name equal to the id is title-cased');
+  assert.strictEqual(registry.entryFor({ default_project: 'my_old-shed' }, 4101).name, 'My Old Shed');
+  assert.strictEqual(registry.entryFor({ name: 'Override' }, 4101, { name: 'X', defaultProject: 'x' }).name, 'Override');
+  assert.strictEqual(registry.entryFor({}, 4101).name, 'Board 4101');
 });
 
 test('hub config: default port 3770, loopback + Tailscale ranges, env overrides; outside addresses get 403', async () => {

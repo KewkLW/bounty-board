@@ -15,7 +15,7 @@ function busyBoard(name = 'Rocket Garden') {
     { id: 1, title: 'G1.1 Seed tray', status: 'done', done_at: hoursAgo(30), project_id: 'rocket' },
     { id: 2, title: 'G1.2 Gate: first sprout', status: 'done', done_at: hoursAgo(1), project_id: 'rocket' },
     { id: 3, title: 'G2.1 Water pump', status: 'in_progress', project_id: 'rocket' },
-    { id: 4, title: 'G2.2 Soil sensor', status: 'blocked', blocked_reason: 'needs the sensor plugged in by a human', project_id: 'rocket' },
+    { id: 4, title: 'G2.2 Soil sensor', status: 'blocked', blocked_reason: 'Waiting on a human to plug in the sensor', project_id: 'rocket' },
     { id: 5, title: 'G2.3 Dashboard', status: 'review', project_id: 'rocket' },
     { id: 6, title: 'G2.4 Harvest', status: 'ready', project_id: 'rocket' },
   ];
@@ -45,6 +45,23 @@ function quietBoard(name = 'Archive Cleanup') {
     state: { paused: false, slots: [{ id: 'q-1', name: 'Dust', state: 'idle', bounty: null }] },
     goals: null,
     notes: { written_at: hoursAgo(5), headline: 'Waiting on a printer answer', body: [] },
+  };
+}
+
+// A board whose blocked items are mostly not for a person (worker crashes, agent notes), plus
+// seven that are, one of them with a 2,000-character reason: the page must keep all of it in check.
+function floodBoard(name = 'Wall Of Text') {
+  const wall = 'Waiting on you: ' + 'the deploy key was rotated and the old one still sits in the vault, so every run fails at the same step. '.repeat(20).slice(0, 1984);
+  const bounties = [{ id: 1, title: 'Huge reason', status: 'blocked', blocked_reason: wall, project_id: 'wall' }];
+  for (let i = 2; i <= 7; i++) bounties.push({ id: i, title: `Human thing ${i}`, status: 'blocked', blocked_reason: `needs the user to pick option ${i}`, project_id: 'wall' });
+  bounties.push({ id: 8, title: 'Crashed run', status: 'blocked', blocked_reason: 'worker exited with code 1 before submit', project_id: 'wall' });
+  bounties.push({ id: 9, title: 'Agent note', status: 'blocked', blocked_reason: 'worker-2: rebase onto #12 first', project_id: 'wall' });
+  return {
+    name, bounties,
+    stats: { done: 0, in_progress: 0, ready: 0, review: 0, approved: 0, blocked: 9, backlog: 0 },
+    state: { paused: false, slots: [] },
+    goals: null,
+    notes: { written_at: hoursAgo(0.2), headline: 'A very long headline. '.repeat(30), body: ['A long paragraph. '.repeat(80), 'Second paragraph.'] },
   };
 }
 
@@ -85,4 +102,4 @@ async function startHub(dir, over = {}) {
   return { hub, port, url: `http://127.0.0.1:${port}`, close: () => hub.close() };
 }
 
-module.exports = { busyBoard, quietBoard, fakeBoard, deadPort, registerFake, startHub, hoursAgo };
+module.exports = { busyBoard, quietBoard, floodBoard, fakeBoard, deadPort, registerFake, startHub, hoursAgo };

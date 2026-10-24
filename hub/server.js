@@ -14,6 +14,10 @@ const { computeGoals, noteView } = require('../lib/goals');
 const DEFAULT_CIDRS = ['127.0.0.0/8', '::1/128', '100.64.0.0/10', 'fd7a:115c:a1e0::/48'];
 const ATTENTION = ['blocked', 'review', 'approved'];
 const OPEN = ['backlog', 'ready', 'in_progress', 'review', 'approved', 'blocked'];
+// A blocked item is waiting on a person when its reason contains one of these (case-insensitive).
+// config/hub.json "human_markers" adds to them (e.g. the user's name); everything else that is
+// blocked (worker crashes, agent-to-agent notes) stays in its project tab, never in Needs you.
+const HUMAN_MARKERS = ['waiting on', 'needs a human', 'blocked on a human', 'needs the user'];
 
 function loadHubConfig(file) {
   const p = file || process.env.HUB_CONFIG || path.join(ROOT, 'config', 'hub.json');
@@ -28,6 +32,7 @@ function loadHubConfig(file) {
     fetch_timeout_ms: cfg.fetch_timeout_ms ?? 3000,
     cache_ms: cfg.cache_ms ?? 5000,
     stopped_keep_days: cfg.stopped_keep_days ?? 7,
+    human_markers: [...new Set(HUMAN_MARKERS.concat(cfg.human_markers || []).map(m => String(m).toLowerCase().trim()).filter(Boolean))],
   };
 }
 
@@ -45,6 +50,11 @@ async function getJson(url, ms) {
   } catch (e) { return { ok: false, error: e.name === 'TimeoutError' ? 'timeout' : e.message, data: null }; }
 }
 
+function waitsOnHuman(reason, markers = HUMAN_MARKERS) {
+  const r = String(reason || '').toLowerCase();
+  return !!r && markers.some(m => r.includes(String(m).toLowerCase()));
+}
+
 // One board's summary for the hub: everything its own Status page shows, in one object.
 async function boardView(e, cfg, now = Date.now()) {
   const base = apiBase(e);
@@ -52,7 +62,7 @@ async function boardView(e, cfg, now = Date.now()) {
     name: e.name, port: e.port, default_project: e.default_project || null, accent: e.accent || registry.DEFAULT_ACCENT,
     api: base, started_at: e.started_at || null, stopped_at: e.stopped_at || null,
     online: false, offline_reason: null, idle: true, paused: false,
-    stats: null, note: null, goals: null, now_goal: null, working: [], attention: [], needs_human: [], recent: [], open: 0,
+    stats: null, note: null, goals: null, now_goal: null, working: [], attention: [], needs_human: [], blocked_other: [], recent: [], open: 0,
   };
   if (e.stopped) { view.offline_reason = e.stopped_at ? 'stopped' : 'process gone'; return view; }
   const ms = cfg.fetch_timeout_ms;
@@ -78,10 +88,13 @@ async function boardView(e, cfg, now = Date.now()) {
       started_at: (s.attempt && s.attempt.started_at) || null,
     };
   });
+  const markers = cfg.human_markers || HUMAN_MARKERS;
   view.attention = bounties.filter(b => ATTENTION.includes(b.status)).map(b => ({
     id: b.id, title: b.title, status: b.status, project: b.project_id || null, blocked_reason: b.blocked_reason || null,
+    needs_human: b.status === 'blocked' && waitsOnHuman(b.blocked_reason, markers),
   }));
-  view.needs_human = view.attention.filter(a => a.status === 'blocked');
+  view.needs_human = view.attention.filter(a => a.needs_human);
+  view.blocked_other = view.attention.filter(a => a.status === 'blocked' && !a.needs_human);
   const dayAgo = now - 864e5;
   view.recent = bounties.filter(b => b.status === 'done' && b.done_at && new Date(b.done_at).getTime() > dayAgo)
     .sort((a, b) => new Date(b.done_at) - new Date(a.done_at)).map(b => ({ id: b.id, title: b.title, done_at: b.done_at }));
@@ -143,7 +156,7 @@ function createHub(cfg = loadHubConfig()) {
   };
 }
 
-module.exports = { createHub, loadHubConfig, aggregate, boardView, apiBase };
+module.exports = { createHub, loadHubConfig, aggregate, boardView, apiBase, waitsOnHuman, HUMAN_MARKERS };
 
 if (require.main === module) {
   const cfg = loadHubConfig();

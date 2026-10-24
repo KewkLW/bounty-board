@@ -41,7 +41,7 @@ Do this before any work on the project starts. Never file a project's work on an
 - One bounty = one reviewable change. Title prefix with the goal id (`M2.3 ...`) so the Status page can build each goal's road.
 - Acceptance criteria are what the reviewer checks against the real diff: observable, one thing each, specific (README, "Writing good acceptance criteria").
 - Work already done off the board (by you or the user) is logged too: file it, then `close-merged ID --commit SHA "evidence"`. External work credits no slot.
-- Anything waiting on the user (a login, a dashboard, hardware): file it and `block` it with the exact step they need to do. It then shows under "Needs attention".
+- Anything waiting on the user (a login, a dashboard, hardware): file it and `block` it with the exact step they need to do, and start the reason with "Waiting on the user:" (the hub's Needs you lists only reasons with a human marker such as "waiting on" or "needs the user"). It then shows under "Needs attention" and in the hub's Needs you.
 
 ## 4. Every round while work is running
 

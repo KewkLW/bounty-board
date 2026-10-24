@@ -18,6 +18,22 @@
   const tabKey = b => 'p' + b.port;
   let data = null;
   let selected = (location.hash || '#all').slice(1);
+  // Long text is clamped to 2 lines; what the user expanded (and Show all) survives the 30 s refresh.
+  const opened = new Set();
+  let needsAll = false;
+  const NEEDS_CAP = 5;
+  const clamp = (key, html, cls = '') => `<div class="hub-clamp${cls ? ' ' + cls : ''}${opened.has(key) ? ' open' : ''}" data-ck="${esc(key)}">${html}</div>
+    <button type="button" class="hub-more" data-ck="${esc(key)}" aria-expanded="${opened.has(key)}" hidden>${opened.has(key) ? 'Show less' : 'Show more'}</button>`;
+  // A clamp gets its expand control only when its text really runs past 2 lines (measured, so hidden
+  // panels are measured again when their tab is shown).
+  function fitClamps(root = document) {
+    for (const el of root.querySelectorAll('.hub-clamp')) {
+      if (!el.offsetParent) continue;
+      const btn = el.nextElementSibling;
+      const over = el.classList.contains('open') || el.scrollHeight > el.clientHeight + 2;
+      if (btn && btn.classList.contains('hub-more')) btn.hidden = !over;
+    }
+  }
 
   function chip(b, board) {
     if (!b) return '<span class="st-chip st-missing">?</span>';
@@ -29,22 +45,25 @@
 
   // ---------- All ----------
   function renderNeedsYou(list) {
-    if (!list.length) return empty('Nothing is blocked on you.');
-    return list.map(x => `<div class="st-panel st-row hub-need">
+    if (!list.length) return empty('Nothing is waiting on you.');
+    const shown = needsAll ? list : list.slice(0, NEEDS_CAP);
+    return shown.map(x => `<div class="st-panel st-row hub-need">
       ${chip(x, { port: x.port })} <span class="hub-proj">${esc(x.board)}</span> ${esc(x.title)}
-      <div class="st-sub hub-reason">${esc(x.blocked_reason || 'blocked, no reason given')}</div>
-    </div>`).join('');
+      ${clamp(`need-${x.port}-${x.id}`, esc(x.blocked_reason || 'blocked, no reason given'), 'st-sub hub-reason')}
+    </div>`).join('') + (list.length > NEEDS_CAP ? `<button type="button" class="op-btn ghost hub-needs-all" aria-expanded="${needsAll}" aria-controls="hub-needs">${needsAll ? 'Show fewer' : `Show all ${list.length}`}</button>` : '');
   }
 
   function renderCard(b) {
     const g = nowGoal(b);
     const blocked = b.needs_human.length;
+    const other = b.blocked_other.length;
     const state = !b.online ? `offline${b.offline_reason ? ' · ' + esc(b.offline_reason) : ''}` : b.paused ? 'paused' : b.idle ? 'idle' : 'working';
     return `<a href="#${tabKey(b)}" class="hub-card op-win${b.online ? '' : ' hub-offline'}" data-tab="${tabKey(b)}" style="--st-accent:${esc(b.accent)}">
       <div class="hub-card-head">${dot(b)}<span class="hub-card-name">${esc(b.name)}</span>
-        ${blocked ? `<span class="hub-blocked" title="${blocked} blocked on a human">${blocked} blocked</span>` : ''}</div>
+        ${blocked ? `<span class="hub-blocked" title="${blocked} waiting on you">${blocked} on you</span>` : ''}
+        ${other ? `<span class="hub-blocked-other" title="${other} blocked for other reasons (crashes, agent notes)">${other} blocked</span>` : ''}</div>
       <div class="hub-card-state">${state}</div>
-      ${b.note?.headline ? `<div class="hub-card-headline">${md(b.note.headline)}</div>` : b.online ? '<div class="hub-card-headline st-empty">No note from the orchestrator yet.</div>' : ''}
+      ${b.note?.headline ? `<div class="hub-card-headline hub-clamp">${md(b.note.headline)}</div>` : b.online ? '<div class="hub-card-headline st-empty">No note from the orchestrator yet.</div>' : ''}
       ${g ? `<div class="hub-card-goal"><b>Now:</b> ${esc(g.id)} ${esc(g.name)}</div>
         <div class="st-bar"><span style="width:${g.pct}%"></span></div>
         <div class="st-road-meta">${g.done} of ${g.total} done</div>` : ''}
@@ -53,19 +72,33 @@
   }
 
   function renderAll(d) {
-    return `<section><h2>Needs you <small>blocked on a human, every project</small></h2><div class="st-list" id="hub-needs">${renderNeedsYou(d.needs_you)}</div></section>
+    return `<section><h2>Needs you <small>waiting on a person, every project</small></h2><div class="st-list" id="hub-needs">${renderNeedsYou(d.needs_you)}</div></section>
       <section><h2>Projects <small>${d.boards.length} registered</small></h2>
       <div class="hub-cards" id="hub-cards">${d.boards.length ? d.boards.map(renderCard).join('') : empty('No board has registered yet. Start a board and it shows up here.')}</div></section>`;
   }
 
   // ---------- one project ----------
-  function renderNote(n) {
+  function renderNote(n, key) {
     if (!n) return empty('No note from the orchestrator yet.');
     return `<div class="st-panel st-note">
       ${n.stale ? `<div class="st-stale">This note is ${esc(ago(n.written_at))}. The orchestrator should update it every round.</div>` : ''}
-      ${n.headline ? `<div class="st-headline">${md(n.headline)}</div>` : ''}
-      ${(n.body || []).map(p => `<p>${md(p)}</p>`).join('')}
+      ${n.headline ? clamp(`head-${key}`, md(n.headline), 'st-headline') : ''}
+      ${(n.body || []).length ? clamp(`note-${key}`, n.body.map(p => `<p>${md(p)}</p>`).join(''), 'hub-note-body') : ''}
     </div>`;
+  }
+
+  function renderItem(a, b) {
+    return `<div class="st-panel st-row${a.needs_human ? ' hub-need' : ''}">
+      ${chip(a, b)} ${esc(a.title)}
+      <div class="st-sub">${esc(a.status)}${a.needs_human ? ' · <b class="hub-on-you">waiting on you</b>' : ''}</div>
+      ${a.blocked_reason ? clamp(`reason-${b.port}-${a.id}`, esc(a.blocked_reason), 'st-sub' + (a.needs_human ? ' hub-reason' : '')) : ''}
+    </div>`;
+  }
+
+  function renderAttention(b) {
+    if (!b.attention.length) return empty('Nothing waiting on review or blocked.');
+    const groups = [['Waiting on you', b.needs_human], ['Blocked', b.blocked_other], ['Review and approved', b.attention.filter(a => a.status !== 'blocked')]];
+    return groups.filter(([, l]) => l.length).map(([t, l]) => `<h3 class="hub-group">${t} <small>${l.length}</small></h3>${l.map(a => renderItem(a, b)).join('')}`).join('');
   }
 
   function renderGoals(b) {
@@ -96,17 +129,14 @@
     const stats = [['done', s.done], ['working', s.in_progress], ['ready', s.ready], ['review', (s.review || 0) + (s.approved || 0)], ['blocked', s.blocked], ['backlog', s.backlog]]
       .filter(([, v]) => v != null).map(([k, v]) => `<span class="st-stat"><b>${esc(v)}</b> ${k}</span>`).join('');
     return `<section class="hub-board-head"><h2>${esc(b.name)} <small>port ${b.port}${b.paused ? ' · paused' : ''}</small></h2><div class="st-stats">${stats}</div>${links}</section>
-      <section><h2>From the orchestrator <small>${esc(ago(b.note?.written_at))}</small></h2>${renderNote(b.note)}</section>
+      <section><h2>From the orchestrator <small>${esc(ago(b.note?.written_at))}</small></h2>${renderNote(b.note, b.port)}</section>
       <section><h2>Goals <small>a goal is reached only when its exit test is recorded</small></h2><div class="st-goals">${renderGoals(b)}</div></section>
       <section class="st-two">
         <div><h2>Working now</h2><div class="st-list">${b.working.length ? b.working.map(w => `<div class="st-panel st-row">
           ${chip(w.bounty, b)} <b>${esc(w.slot_name)}</b> ${esc(w.bounty.title)}
           <div class="st-sub">${esc(w.bounty.status.replace('_', ' '))}${w.started_at ? ' · started ' + esc(ago(w.started_at)) : ''}${w.heartbeat_at ? ' · heartbeat ' + esc(ago(w.heartbeat_at)) : ''}</div>
         </div>`).join('') : empty('No worker running.')}</div></div>
-        <div><h2>Needs attention <small>review, approved, blocked</small></h2><div class="st-list">${b.attention.length ? b.attention.map(a => `<div class="st-panel st-row">
-          ${chip(a, b)} ${esc(a.title)}
-          <div class="st-sub">${esc(a.status)}${a.blocked_reason ? ' · ' + esc(a.blocked_reason) : ''}</div>
-        </div>`).join('') : empty('Nothing waiting on review or blocked.')}</div></div>
+        <div><h2>Needs attention <small>blocked, review, approved</small></h2><div class="st-list">${renderAttention(b)}</div></div>
       </section>
       <section><h2>Finished, last 24 h <small>${b.recent.length || ''}</small></h2>${b.recent.length ? b.recent.map(r => `<div class="st-line">${chip({ ...r, status: 'done' }, b)} ${esc(r.title)} <span class="st-sub">${esc(ago(r.done_at))}</span></div>`).join('') : empty('Nothing finished in the last 24 hours.')}</section>`;
   }
@@ -125,10 +155,11 @@
     const hadFocus = document.activeElement && document.activeElement.getAttribute('role') === 'tab';
     $('hub-tabs').innerHTML = list.map(t => `<button type="button" role="tab" id="tab-${t.key}" data-tab="${t.key}" aria-controls="panel-${t.key}"
         aria-selected="${t.key === selected}" tabindex="${t.key === selected ? 0 : -1}" class="hub-tab${t.cls}"${t.accent ? ` style="--st-accent:${esc(t.accent)}"` : ''}>
-        ${t.board ? dot(t.board) : ''}<span>${esc(t.label)}</span>${t.count ? `<span class="hub-tab-count" aria-label="${t.count} blocked">${t.count}</span>` : ''}</button>`).join('');
+        ${t.board ? dot(t.board) : ''}<span>${esc(t.label)}</span>${t.count ? `<span class="hub-tab-count" aria-label="${t.count} waiting on you">${t.count}</span>` : ''}</button>`).join('');
     $('hub-panels').innerHTML = list.map(t => `<div role="tabpanel" id="panel-${t.key}" aria-labelledby="tab-${t.key}" class="st-wrap hub-panel" tabindex="0"
         ${t.key === selected ? '' : 'hidden'}${t.accent ? ` style="--st-accent:${esc(t.accent)}"` : ''}>${t.key === 'all' ? renderAll(d) : renderBoard(t.board)}</div>`).join('');
     if (hadFocus) $('tab-' + selected)?.focus();
+    fitClamps();
     const online = d.boards.filter(b => b.online);
     const working = online.reduce((n, b) => n + b.working.length, 0);
     $('hub-stats').innerHTML = `<div class="op-stat"><div><span class="lbl">Boards up</span><span class="val">${online.length}/${d.boards.length}</span></div></div>
@@ -146,6 +177,7 @@
       if (on && focus) t.focus();
     }
     for (const p of document.querySelectorAll('[role=tabpanel]')) p.hidden = p.id !== 'panel-' + key;
+    fitClamps();
     window.scrollTo(0, 0);
   }
 
@@ -159,6 +191,27 @@
     e.preventDefault();
     select(list[(j + list.length) % list.length].dataset.tab, true);
   });
+  $('hub-panels').addEventListener('click', e => {
+    const more = e.target.closest('.hub-more');
+    if (more) {
+      const k = more.dataset.ck;
+      const box = more.previousElementSibling;
+      const open = !opened.has(k);
+      if (open) opened.add(k); else opened.delete(k);
+      box.classList.toggle('open', open);
+      more.setAttribute('aria-expanded', open);
+      more.textContent = open ? 'Show less' : 'Show more';
+      return;
+    }
+    if (e.target.closest('.hub-needs-all')) {
+      needsAll = !needsAll;
+      $('hub-needs').innerHTML = renderNeedsYou(data.needs_you);
+      fitClamps($('hub-needs'));
+      $('hub-needs').querySelector('.hub-needs-all')?.focus();
+      return;
+    }
+  });
+  window.addEventListener('resize', () => fitClamps());
   $('hub-panels').addEventListener('click', e => { const c = e.target.closest('.hub-card'); if (c) { e.preventDefault(); select(c.dataset.tab, true); } });
   window.addEventListener('hashchange', () => { const k = location.hash.slice(1); if (k && k !== selected && document.getElementById('tab-' + k)) select(k); });
 

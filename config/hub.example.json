@@ -9,5 +9,8 @@
   ],
   "fetch_timeout_ms": 3000,
   "cache_ms": 5000,
-  "stopped_keep_days": 7
+  "stopped_keep_days": 7,
+  "human_markers": [
+    "waiting on Robin"
+  ]
 }

@@ -9,13 +9,21 @@
 - `systemd/bounty-hub.service`, `config/hub.example.json`, README "One page for every project", skill step 11.
 - `playwright-core` devDependency (drives `/usr/bin/chromium`, no browser download). `.npmrc` sets `include=dev` so `npm ci` installs it even with `NODE_ENV=production`, which is set on this machine. Without it the UI test would skip.
 
-## Tests (`npm ci && npm test`: 39 pass, 0 skipped)
+## Tests (`npm ci && npm test`: 42 pass, 0 skipped)
 - `test/hub.test.js`: registry (atomic write, bad files skipped, dead pid, mark stopped, pid guard), accent detection, a board registering on start (port 0 resolves to the real port), the real `node server.js` registering under `$XDG_STATE_HOME/totally-not-a-kanban/boards` and SIGTERM marking it stopped, goal rules, and `/api/hub` against two fake boards plus a dead port. The aggregation test also covers a board registered after the hub started (picked up without a restart), a board going offline, a clean stop, `/api/hub` against a real board, the hub config defaults, and a 403 for an outside address.
 - `test/hub.ui.test.js`: headless Chromium checks tab order, Needs you with project and reason, the cards (headline, Now goal, bar, working count, red blocked count, offline last), click and arrow-key tab switching with wrap and Home, the accent and board link on a project tab, the selected tab surviving a reload, and `scrollWidth <= 390` on All and on a project tab at 390 px.
 - `test/helpers.js` gives every test board a temp `registry_dir`, so tests never touch the real state dir. After the full run `~/.local/state/totally-not-a-kanban` does not exist.
 
+## Attempt 2: the orchestrator's two fixes (criteria 7-9)
+- **Needs you is only for people.** `hub/server.js` `waitsOnHuman()`: a blocked item counts when its reason contains a `human_markers` entry, case-insensitive. Defaults `["waiting on", "needs a human", "blocked on a human", "needs the user"]`; `config/hub.json` `human_markers` adds to them. Each board in `/api/hub` now has `needs_human` (in Needs you) and `blocked_other` (crashes, agent notes). Every `attention` item carries a `needs_human` flag. The All card shows a red "N on you" and a muted "M blocked". The project tab's Needs attention is grouped: Waiting on you, Blocked, Review and approved.
+- **Long text is clamped.** Block reasons (Needs you and project tabs), the note headline and the note body show 2 lines (`-webkit-line-clamp`). A **Show more** button (`aria-expanded`, a real `<button>` so Tab, Enter and Space work) appears only when the text really overflows. Overflow is measured after each render and on tab switch. Card headlines are clamped too; the full note is in the project tab. Needs you shows 5 items, then **Show all N** / **Show fewer**. Expanded state survives the 30 s refresh.
+- **Names.** `registry.entryFor`: board.json `name`, else the project's name unless it equals the id, else the title-cased id (`my_old-shed` becomes "My Old Shed").
+- Skill: a block that waits on the user starts its reason with "Waiting on the user:" so it reaches Needs you.
+- Tests: `Needs you: only blocked reasons with a human marker...` (marker matching, config extension, end to end through `/api/hub`); `registry names: ...`. The new headless test `a 2,000-character reason and a flood of blocked items stay in check` uses a fixture with 7 human-blocked items (one reason 2,000 chars), a crash and an agent note. It checks the tab count of 8, the 5-item cap, that no crash or agent note is in Needs you, and the card counts "7 on you" / "2 blocked". It checks the long reason is at most 2 lines tall and that every project card's bottom is within 900 px at 1280x900. It expands with Enter and collapses with Space, checks Show all 8 and back, the Blocked group and clamps in the project tab, and 390 px without sideways scroll.
+
 ## Screenshots (from the UI test with `HUB_SHOTS_DIR=docs/evidence/b1`, fixture data only)
 - `hub-all-desktop.png`, `hub-project-desktop.png`, `hub-all-390.png`, `hub-project-390.png`
+- Attempt 2: `hub-flood-desktop.png` (1280x900 viewport: Needs you capped, 2,000-char reason clamped, every card visible), `hub-flood-project.png` (clamped note and reasons, grouped attention), `hub-flood-390.png` (phone, full page)
 
 ## Not done here
 - I bound no port in 3770-3790 and did not start the hub against the live boards. The orchestrator rolls boards and starts the hub.
