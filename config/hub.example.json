@@ -11,9 +11,9 @@
   "cache_ms": 5000,
   "stopped_keep_days": 7,
   "human_markers": [
-    "Robin"
+    "Your Name"
   ],
-  "human_name": "Robin",
+  "human_name": "Your Name",
   "on_reply": [
     "/path/to/your/relay",
     "--to",

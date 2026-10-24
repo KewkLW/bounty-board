@@ -178,10 +178,10 @@ test('Needs you: only blocked reasons with a human marker (case-insensitive), ex
   for (const r of ['worker exited with code 1', 'worker-2: rebase first', '', null, 'which label printer?']) assert.ok(!waitsOnHuman(r), String(r));
   const tmp = tmpdir('hubmark');
   const f = path.join(tmp, 'hub.json');
-  fs.writeFileSync(f, JSON.stringify({ human_markers: ['Robin', 'label printer'] }));
+  fs.writeFileSync(f, JSON.stringify({ human_markers: ['Test Human', 'label printer'] }));
   const c = loadHubConfig(f);
-  assert.deepStrictEqual(c.human_markers, [...HUMAN_MARKERS, 'robin', 'label printer'], 'config adds to the defaults');
-  assert.ok(waitsOnHuman('ask robin', c.human_markers));
+  assert.deepStrictEqual(c.human_markers, [...HUMAN_MARKERS, 'test human', 'label printer'], 'config adds to the defaults');
+  assert.ok(waitsOnHuman('ask test human', c.human_markers));
 
   // End to end: the extra marker moves Archive Cleanup's question into Needs you.
   const dir = path.join(tmp, 'boards');

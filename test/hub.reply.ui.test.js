@@ -26,7 +26,7 @@ test('hub page: reply box, Send, Done, errors kept inline, 390 px', { skip, time
   const arch = await fakeBoard(quiet);
   registerFake(dir, busy.port, { name: 'Rocket Garden', default_project: 'rocket', accent: '#bb9af7' });
   registerFake(dir, arch.port, { name: 'Archive Cleanup', default_project: 'archive', accent: '#e0af68' });
-  const hub = await startHub(dir, { human_name: 'Robin', on_reply: [process.execPath, hook, '{text}'] });
+  const hub = await startHub(dir, { human_name: 'Test Human', on_reply: [process.execPath, hook, '{text}'] });
   const browser = await chromium.launch({ executablePath: CHROMIUM, headless: true, args: ['--no-sandbox'] });
   const shot = async (page, name) => { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: path.join(SHOTS, name), fullPage: true }); } };
   try {
@@ -66,7 +66,7 @@ test('hub page: reply box, Send, Done, errors kept inline, 390 px', { skip, time
     assert.match(sent, /You: plugged in, port 2 · \d{1,2}:\d{2}/);
     assert.match(sent, /delivered/);
     assert.strictEqual(await sensor.locator('input').inputValue(), '');
-    assert.deepStrictEqual(busy.fixture.received.at(-1).body, { text: 'plugged in, port 2', from: 'Robin', unblock: false });
+    assert.deepStrictEqual(busy.fixture.received.at(-1).body, { text: 'plugged in, port 2', from: 'Test Human', unblock: false });
     assert.strictEqual(busy.fixture.bounties[3].status, 'blocked', 'Send does not unblock');
     // The same message shows on the project tab's copy of the item.
     assert.match(await box(busy.port, 4, '#panel-p' + busy.port).locator('.hub-sent').textContent(), /plugged in, port 2/);
@@ -93,7 +93,7 @@ test('hub page: reply box, Send, Done, errors kept inline, 390 px', { skip, time
     await page.keyboard.press('Enter');
     await printer.locator('.hub-sent').waitFor();
     assert.match((await printer.locator('.hub-sent').textContent()).replace(/\s+/g, ' '), /You: Done · .*unblocked, leaves Needs you on the next refresh/);
-    assert.deepStrictEqual(arch.fixture.received.at(-1).body, { text: 'Done', from: 'Robin', unblock: true });
+    assert.deepStrictEqual(arch.fixture.received.at(-1).body, { text: 'Done', from: 'Test Human', unblock: true });
     assert.ok(await printer.locator('form').isHidden(), 'nothing more to send once unblocked');
     await shot(page, 'reply-done.png');
     // The next refresh drops it from Needs you.

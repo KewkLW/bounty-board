@@ -30,9 +30,9 @@ test('hub config: human_name defaults to "human", on_reply off unless it is an a
   fs.writeFileSync(f, '{}');
   let c = loadHubConfig(f);
   assert.deepStrictEqual([c.human_name, c.on_reply], ['human', null]);
-  fs.writeFileSync(f, JSON.stringify({ human_name: ' Robin ', on_reply: 'notify-send {text}' }));
+  fs.writeFileSync(f, JSON.stringify({ human_name: ' Test Human ', on_reply: 'notify-send {text}' }));
   c = loadHubConfig(f);
-  assert.deepStrictEqual([c.human_name, c.on_reply], ['Robin', null], 'a shell string is not accepted');
+  assert.deepStrictEqual([c.human_name, c.on_reply], ['Test Human', null], 'a shell string is not accepted');
   fs.writeFileSync(f, JSON.stringify({ on_reply: ['relay', '--to', '{orchestrator}', '{text}'] }));
   assert.deepStrictEqual(loadHubConfig(f).on_reply, ['relay', '--to', '{orchestrator}', '{text}']);
   assert.deepStrictEqual(fillArgv(['x', '{text}', 'id={id}', '{nope}'], { text: 'see {id} $(id)', id: 4 }), ['x', 'see {id} $(id)', 'id=4', '{nope}'],
@@ -50,7 +50,7 @@ test('POST /api/reply: headers, unknown port, forwarding, 409, board down, no ho
   const gone = await deadPort();
   registerFake(dir, busy.port, { name: 'Rocket Garden', default_project: 'rocket' });
   registerFake(dir, gone, { name: 'Gone Board' });
-  const hub = await startHub(dir, { human_name: 'Robin', on_reply: null });
+  const hub = await startHub(dir, { human_name: 'Test Human', on_reply: null });
   try {
     // 403 without the header or without a JSON body; nothing reaches the board.
     for (const h of [{ 'content-type': 'application/json' }, { 'x-hub-request': '1', 'content-type': 'text/plain' }, { 'x-hub-request': '0', 'content-type': 'application/json' }, { 'x-hub-request': '1' }]) {
@@ -73,12 +73,12 @@ test('POST /api/reply: headers, unknown port, forwarding, 409, board down, no ho
     assert.deepStrictEqual([r.body.saved, r.body.delivered, r.body.note.text, r.body.bounty], [true, null, 'plugged in', { id: 4, status: 'blocked' }], 'no hook: save only');
     let got = busy.fixture.received.at(-1);
     assert.strictEqual(got.headers['x-board-request'], '1');
-    assert.deepStrictEqual([got.id, got.body], [4, { text: 'plugged in', from: 'Robin', unblock: false }]);
+    assert.deepStrictEqual([got.id, got.body], [4, { text: 'plugged in', from: 'Test Human', unblock: false }]);
 
     // Done with an empty box sends "Done" with unblock; the item leaves Needs you.
     r = await post(hub.url, { port: busy.port, bounty_id: 4, text: '', unblock: true });
     assert.strictEqual(r.status, 201);
-    assert.deepStrictEqual(busy.fixture.received.at(-1).body, { text: 'Done', from: 'Robin', unblock: true });
+    assert.deepStrictEqual(busy.fixture.received.at(-1).body, { text: 'Done', from: 'Test Human', unblock: true });
     assert.deepStrictEqual(r.body.bounty, { id: 4, status: 'ready' });
     const hubData = await (await fetch(hub.url + '/api/hub')).json();
     assert.deepStrictEqual(hubData.needs_you, [], 'gone from Needs you on the next refresh');
