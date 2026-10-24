@@ -7,8 +7,8 @@
     "test": "node --test --test-concurrency=1 test/"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Kewk",
+  "license": "AGPL-3.0-only",
   "description": "Wasteland Bounty Board: the task system and dispatcher every agent is accountable to",
   "dependencies": {
     "better-sqlite3": "^13.0.3",

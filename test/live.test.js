@@ -12,21 +12,21 @@ const CRIT = ['works'];
 const j = o => JSON.stringify(o);
 
 test('worker stream-json: last actions, running tool, last text, usage counted once per message', () => {
-  const cwd = '/mnt/ue/wt/b1-x';
+  const cwd = '/tmp/wt/b1-x';
   const lines = [
     '# board: spawn claude -p ...',
     j({ type: 'system', subtype: 'init', cwd, model: 'opus' }),
     j({ type: 'assistant', timestamp: '2026-09-29T10:00:00Z', message: { id: 'm1', content: [{ type: 'text', text: 'Let me look.\nReading the build script first.' }], usage: { input_tokens: 5, output_tokens: 2, cache_read_input_tokens: 100, cache_creation_input_tokens: 10 } } }),
     j({ type: 'assistant', message: { id: 'm1', content: [{ type: 'tool_use', id: 'a', name: 'Bash', input: { command: 'Scripts/ci.sh --quick\necho done' } }], usage: { input_tokens: 5, output_tokens: 2, cache_read_input_tokens: 100, cache_creation_input_tokens: 10 } } }),
     j({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: 'PASS' }] }, timestamp: '2026-09-29T10:01:00Z' }),
-    j({ type: 'assistant', message: { id: 'm2', content: [{ type: 'tool_use', id: 'b', name: 'Edit', input: { file_path: `${cwd}/Source/Tribulation/Ship.cpp`, old_string: 'a', new_string: 'b' } }], usage: { input_tokens: 1, output_tokens: 1 } } }),
+    j({ type: 'assistant', message: { id: 'm2', content: [{ type: 'tool_use', id: 'b', name: 'Edit', input: { file_path: `${cwd}/src/Ship.cpp`, old_string: 'a', new_string: 'b' } }], usage: { input_tokens: 1, output_tokens: 1 } } }),
     j({ type: 'assistant', message: { id: 'm3', content: [{ type: 'tool_use', id: 'c', name: 'TodoWrite', input: { todos: [{ content: 'x', status: 'completed' }, { content: 'y', activeForm: 'Writing the test', status: 'in_progress' }] } }], usage: { input_tokens: 1, output_tokens: 1 } } }),
     'not json at all',
   ];
   const st = live.parseWorkerLog(lines.join('\n'));
   const v = live.workerView(st);
   assert.deepStrictEqual(v.actions.map(a => a.summary), [
-    'Bash: Scripts/ci.sh --quick …(+1 lines)', 'Edit: Source/Tribulation/Ship.cpp', 'Todo 1/2: Writing the test']);
+    'Bash: Scripts/ci.sh --quick …(+1 lines)', 'Edit: src/Ship.cpp', 'Todo 1/2: Writing the test']);
   assert.deepStrictEqual(v.actions.map(a => a.running), [false, true, true]);
   assert.strictEqual(v.last_text.text, 'Reading the build script first.');
   assert.strictEqual(v.last_text.at, '2026-09-29T10:00:00Z');
@@ -91,7 +91,7 @@ test('Follower reads only appended bytes, holds partial lines, restarts on trunc
 
 test('ci.sh logs: current stage, position in the plan, lock waits, summary and exit', () => {
   const log = [
-    '$ Scripts/ci.sh --quick', '# cwd /mnt/ue/wt/b87', '# started 2026-09-29T23:07:03.927Z', '',
+    '$ Scripts/ci.sh --quick', '# cwd /tmp/wt/b87', '# started 2026-09-29T23:07:03.927Z', '',
     '==> [lfs]', 'Content repo present', '', '==> [rules]', 'Rule scan passed', '', '==> [render-lock]', '== syntax', '  ok   bash -n x',
     '==> [editor-build]', '==> Running ShardPortal automation tests',
   ];
@@ -117,7 +117,7 @@ full_stages=("\${all_stages[@]}")
   assert.deepStrictEqual(live.ciPlan(lists, '--only chat,lfs'), ['lfs', 'chat'], 'only keeps the canonical order');
   assert.deepStrictEqual(live.ciPlan(lists, '--quick --skip=editor-build,game-build').slice(3, 5), ['stack-gate', 'automation']);
   assert.ok(live.isCiProc('/bin/bash Scripts/ci.sh --quick'));
-  assert.ok(live.isCiProc('bash /mnt/ue/Tribulation/Scripts/ci.sh'));
+  assert.ok(live.isCiProc('bash /opt/project/Scripts/ci.sh'));
   assert.ok(!live.isCiProc("/usr/bin/bash -c source x && eval 'Scripts/ci.sh --quick > /tmp/log 2>&1'"), 'a shell that runs ci.sh is not ci.sh');
   let v = live.ciView(st, live.ciPlan(lists, '--quick'));
   assert.strictEqual(v.stage, 'editor-build');
@@ -142,7 +142,7 @@ full_stages=("\${all_stages[@]}")
 });
 
 test('holder files: key=value, JSON, empty; stale when the flock is free, held while flocked', async () => {
-  const h = live.parseHolder(`version=1\ntoken=1-2\npid=${process.pid}\npids=11 12\nkind=agent\nowner=tester\nworktree=/mnt/ue/wt/tester\nwhat=playtest.sh p0 (offscreen)\nstarted_epoch=${Math.floor(Date.now() / 1000) - 90}\nstate=admitting\n`);
+  const h = live.parseHolder(`version=1\ntoken=1-2\npid=${process.pid}\npids=11 12\nkind=agent\nowner=tester\nworktree=/tmp/wt/tester\nwhat=playtest.sh p0 (offscreen)\nstarted_epoch=${Math.floor(Date.now() / 1000) - 90}\nstate=admitting\n`);
   assert.strictEqual(h.owner, 'tester');
   assert.strictEqual(h.what, 'playtest.sh p0 (offscreen)');
   assert.deepStrictEqual(h.pids, [11, 12]);

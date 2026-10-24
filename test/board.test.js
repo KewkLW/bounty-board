@@ -175,10 +175,10 @@ test('leases: exclusive, renewable, released on TTL expiry and when the holder b
     assert.match(board.expireLeases()[0].why, /no longer in progress/);
     assert.strictEqual(board.listLeases().length, 0);
     // release by the holder only
-    await call('POST', '/leases/gpu', { holder: 'kewky' });
+    await call('POST', '/leases/gpu', { holder: 'test-holder' });
     r = await call('DELETE', '/leases/gpu', { holder: 'someone-else' });
     assert.strictEqual(r.status, 409);
-    r = await call('DELETE', '/leases/gpu', { holder: 'kewky' });
+    r = await call('DELETE', '/leases/gpu', { holder: 'test-holder' });
     assert.strictEqual(r.data.released, true);
   } finally { await t.s.close(); }
 });
@@ -348,29 +348,43 @@ test('ready needs acceptance criteria', async () => {
   } finally { await t.s.close(); }
 });
 
-test('Tribulation import: backlog + in-flight + tests, deduped, re-runnable', async (tt) => {
+test('backlog import: tasks + audit + tests from fixture Markdown, deduped, re-runnable', async () => {
   const im = require('../lib/importer');
-  if (!fs.existsSync(im.DEFAULTS.taskList)) { tt.skip('vault not mounted'); return; }
-  const t = await startBoard('import', { dispatch: false, over: { slots: [{ id: 'kewky-sonnet-tester', name: 'Tester', runner: 'command', cmd: ['true'] }] } });
+  const t = await startBoard('import', { dispatch: false, over: { slots: [{ id: 'tester-slot', name: 'Tester', runner: 'command', cmd: ['true'] }] } });
   try {
-    const { board } = t;
-    board.upsertProject({ id: 'tribulation', repo: '/mnt/ue/Tribulation', main_branch: 'main' });
-    const r1 = im.importTribulation(board);
-    assert.ok(r1.created_count > 60, `created ${r1.created_count}`);
-    const r2 = im.importTribulation(board);
-    assert.strictEqual(r2.created_count, 0);
+    const { board, dir } = t;
+    board.upsertProject({ id: 'myproject', repo: t.repo, main_branch: 'main' });
+    // Write fixture Markdown files
+    const fixtures = path.join(dir, 'fixtures');
+    fs.mkdirSync(fixtures, { recursive: true });
+    fs.writeFileSync(path.join(fixtures, 'tasklist.md'), [
+      '# Task List', '## LIVE BACKLOG', '### Missing core systems',
+      '- [ ] User auth flow', '- [ ] Database migrations',
+      '### Bugs on main', '- [ ] Fix crash on login', '- [ ] Null pointer in parser',
+      '### Half built', '- [ ] Inventory system', '- [ ] Chat system',
+      '### No code yet', '**No code yet**', '- [ ] Leaderboard; Achievements; Trading',
+      '### Tech debt', '- [ ] Stale docs in README',
+    ].join('\n'));
+    fs.writeFileSync(path.join(fixtures, 'audit.md'), [
+      '## By system', '### Auth', '| Where | What | Size |', '| --- | --- | --- |',
+      '| src/auth.js | Login page missing | M |', '### Database', '| Where | What | Size |', '| --- | --- | --- |',
+      '| src/db.js | No rollback support | L |',
+    ].join('\n'));
+    fs.writeFileSync(path.join(fixtures, 'queue.md'), [
+      '## P0 Critical', '- [ ] T01 Login flow end to end', '- [ ] T02 Signup validation',
+      '## P1 Normal', '- [ ] T03 Profile page renders', '- [ ] T04 Settings save',
+    ].join('\n'));
+    const paths = { taskList: path.join(fixtures, 'tasklist.md'), audit: path.join(fixtures, 'audit.md'), queue: path.join(fixtures, 'queue.md') };
+    const r1 = im.importBacklog(board, { paths, project: 'myproject', tester_slot: 'tester-slot' });
+    assert.ok(r1.created_count >= 10, `created ${r1.created_count}`);
+    const r2 = im.importBacklog(board, { paths, project: 'myproject', tester_slot: 'tester-slot' });
+    assert.strictEqual(r2.created_count, 0, 'second run creates nothing');
     assert.strictEqual(r2.existing, r1.created_count);
-    const flight = board.list({ status: 'in_progress', project: 'tribulation' });
-    assert.deepStrictEqual(flight.map(b => b.branch || b.worktree).sort(),
-      ['/mnt/ue/ArtSource/titan-darkknight', '/mnt/ue/ArtSource/titan-darkknight-sol', 'p0-game-bugs', 'portal-real-test'].sort());
-    assert.strictEqual(board.list({ status: 'ready', project: 'tribulation' }).length, 0);
-    const tests = board.list({ type: 'test', project: 'tribulation' });
-    assert.ok(tests.length >= 40 && tests.every(b => b.assignee_slot === 'kewky-sonnet-tester' && b.status === 'backlog'));
-    const others = board.list({ status: 'backlog', project: 'tribulation' }).filter(b => b.type !== 'test');
+    const tests = board.list({ type: 'test', project: 'myproject' });
+    assert.ok(tests.length === 4 && tests.every(b => b.assignee_slot === 'tester-slot' && b.status === 'backlog'));
+    const others = board.list({ status: 'backlog', project: 'myproject' }).filter(b => b.type !== 'test');
     assert.ok(others.every(b => !b.assignee_slot));
-    // the Task List portal item is folded into the in-flight portal bounty, not duplicated
-    assert.strictEqual(board.list({ project: 'tribulation', q: 'portal-real-test' }).length, 1);
-    const titles = board.list({ project: 'tribulation' }).map(b => b.title.toLowerCase());
+    const titles = board.list({ project: 'myproject' }).map(b => b.title.toLowerCase());
     assert.strictEqual(new Set(titles).size, titles.length, 'no duplicate titles');
   } finally { await t.s.close(); }
 });
@@ -482,7 +496,7 @@ test('close-merged: an external bounty is done once its commit is on main; refus
     const { board, repo, call } = t;
     const { spawn } = require('child_process');
     // an external bounty: in_progress, no board worker, no branch recorded
-    const b = board.create({ title: 'external fix', project: 'scratch', type: 'bug', tier: 'B', criteria: CRIT, status: 'in_progress', external_owner: 'kewk-opus-1' });
+    const b = board.create({ title: 'external fix', project: 'scratch', type: 'bug', tier: 'B', criteria: CRIT, status: 'in_progress', external_owner: 'external-worker-1' });
     assert.strictEqual(board.raw(b.id).status, 'in_progress');
     commitOnBranch(repo, 'ext-br', { 'mul.js': 'module.exports = (a, b) => a * b;\n' });
     const sha = sh(repo, 'git rev-parse ext-br').trim();
