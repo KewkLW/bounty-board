@@ -1,4 +1,4 @@
-// Wasteland Bounty Board. Shared Tailwind (Play CDN) theme; load right after the CDN script.
+// It's not a Kanban. Shared Tailwind (Play CDN) theme; load right after the CDN script.
 // Recolours every utility into the Tokyo Night palette: primary = tokyo blue, warning = tokyo yellow,
 // danger = tokyo red, gray/zinc = night tints, purple = magenta, sky = cyan.
 (function () {

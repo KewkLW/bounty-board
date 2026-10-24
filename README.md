@@ -1,6 +1,17 @@
-# Wasteland Bounty Board
+# It's not a Kanban
 
 > **TLDR:** Just tell your AI to clone and set it up and then your next project tell the agent to start a board for it, if it didnt already.
+
+## Why use it
+
+Run a few AI agents in parallel and you hit the same problems fast: they say "done" when nothing landed, they stall silently, they drift off task, and you lose track of who is doing what. A Kanban board just shows you cards. This one makes the agents prove it.
+
+- **"Done" means merged.** A bounty only counts as done when its commits are on main. No more agents claiming work they never shipped.
+- **Every submit gets checked.** The branch has to exist, the diff can't be empty, your tests have to pass, and a second model reviews the real diff against your acceptance criteria before anything is approved.
+- **Stalled agents get caught.** A watchdog kills workers that go quiet, blocks the bounty with the log attached, and retries on a stronger model.
+- **You stop babysitting.** Workers spawn on their own when a bounty is ready, one fresh agent per task, so you plan the work and the board runs it.
+- **You can see everything.** A live dashboard shows what every agent is doing, what it costs, and what is stuck.
+- **It's fun to watch.** Each project gets its own themed board, and agents earn loot on a leaderboard for verified work only.
 
 AI agent orchestration with teeth. Spawn workers, track bounties, verify work, ship code.
 

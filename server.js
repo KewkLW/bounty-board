@@ -1,4 +1,4 @@
-// Wasteland Bounty Board: the task system every agent is accountable to.
+// It's not a Kanban: the task system every agent is accountable to.
 // HTTP + WebSocket on :3777, the dispatcher, the reviewer, all in one process.
 const express = require('express');
 const http = require('http');
@@ -85,7 +85,7 @@ if (require.main === module) {
   const cfg = load();
   const s = createServer(cfg);
   s.listen().then(port => {
-    console.log(`WASTELAND BOUNTY BOARD on http://${cfg.host}:${port}  (db ${cfg.db_path}, logs ${cfg.logs_dir}, ${cfg.slots.length} slots, cap ${cfg.concurrency_cap}${s.board.paused() ? ', PAUSED' : ''})`);
+    console.log(`IT'S NOT A KANBAN on http://${cfg.host}:${port}  (db ${cfg.db_path}, logs ${cfg.logs_dir}, ${cfg.slots.length} slots, cap ${cfg.concurrency_cap}${s.board.paused() ? ', PAUSED' : ''})`);
   });
   const bye = () => { console.log('shutting down (workers keep running; they are re-attached on start)'); s.close().then(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); };
   process.on('SIGTERM', bye);

@@ -9,7 +9,7 @@
   "keywords": [],
   "author": "Kewk",
   "license": "AGPL-3.0-only",
-  "description": "Wasteland Bounty Board: the task system and dispatcher every agent is accountable to",
+  "description": "It's not a Kanban: the task system and dispatcher every agent is accountable to",
   "dependencies": {
     "better-sqlite3": "^13.0.3",
     "cors": "^2.8.6",
