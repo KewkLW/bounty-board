@@ -1,9 +1,9 @@
 ---
-name: its-not-a-kanban
-description: Set up and run "It's not a Kanban", a bounty board that dispatches AI coding agents and only counts work as done when it is merged. Use when the user says to set up the board, start a board for a project, file or track work on a board, orchestrate agents, or asks "where are we at" on a project that has a board. Also use at the start of any multi-step project the user wants tracked, if it has no board yet.
+name: totally-not-a-kanban
+description: Set up and run "Totally not a Kanban", a bounty board that dispatches AI coding agents and only counts work as done when it is merged. Use when the user says to set up the board, start a board for a project, file or track work on a board, orchestrate agents, or asks "where are we at" on a project that has a board. Also use at the start of any multi-step project the user wants tracked, if it has no board yet.
 ---
 
-# It's not a Kanban
+# Totally not a Kanban
 
 A board per project. Workers are spawned by the board, one fresh agent per bounty. A bounty reaches **done** only when its commits are on the project's main branch. The user checks progress on the board's **Status** page (goals) and **Live** page (agents), from any device on their Tailscale network, instead of asking you.
 

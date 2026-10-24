@@ -478,7 +478,7 @@ window.AgentAvatars = {
   visuals: AGENT_VISUALS,
 };
 
-// It's not a Kanban: each slot gets a color-coded identity. A slot's portrait is in
+// Totally not a Kanban: each slot gets a color-coded identity. A slot's portrait is in
 // public/img/portrait/<slot>.jpg and its swatches are the theme's accent colors. Unknown slot ids
 // fall back to Vantablack so a new slot always has a face.
 (function () {

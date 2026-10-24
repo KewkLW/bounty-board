@@ -2,7 +2,7 @@
 
 > **TLDR:** Just tell your AI to clone and set it up and then your next project tell the agent to start a board for it, if it didnt already.
 
-> For Claude Code: copy `skill/its-not-a-kanban/` into `~/.claude/skills/` and it knows how to install the board, start one per project, and keep its Status page current.
+> For Claude Code: copy `skill/totally-not-a-kanban/` into `~/.claude/skills/` and it knows how to install the board, start one per project, and keep its Status page current.
 
 ## Why use it
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=It's not a Kanban (task board, dispatcher, reviewer)
+Description=Totally not a Kanban (task board, dispatcher, reviewer)
 After=network-online.target
 
 [Service]
