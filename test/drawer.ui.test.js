@@ -19,7 +19,7 @@ test('drawer: human notes are shown apart from orchestrator notes', { skip, time
     const { board } = t;
     const b = board.create({ title: 'Pick the pump', project: 'scratch', criteria: ['a pump is picked'] });
     board.note(b.id, 'orchestrator: check the datasheet first');
-    board.humanNote(b.id, { text: 'Use the 12 V one.\nThe 5 V one is too weak.', from: 'kewk' });
+    board.humanNote(b.id, { text: 'Use the 12 V one.\nThe 5 V one is too weak.', from: 'robin' });
     board.markHumanRead(board.humanNotes().map(n => n.id));
     board.humanNote(b.id, { text: 'second human reply' });
 
@@ -34,7 +34,7 @@ test('drawer: human notes are shown apart from orchestrator notes', { skip, time
 
     const human = await page.$$eval('#human-notes .human-note', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
     assert.strictEqual(human.length, 2);
-    assert.match(human[0], /kewk · worker UNREAD · orchestrator read ?Use the 12 V one\. The 5 V one is too weak\./);
+    assert.match(human[0], /robin · worker UNREAD · orchestrator read ?Use the 12 V one\. The 5 V one is too weak\./);
     assert.match(human[1], /human · worker UNREAD · orchestrator UNREAD ?second human reply/);
     const head = await page.$eval('#human-notes', e => e.firstElementChild.textContent.replace(/\s+/g, ' ').trim());
     assert.match(head, /From the human \(2\)/);

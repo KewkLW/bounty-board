@@ -64,21 +64,21 @@ test('human-notes API: header check, 400/404/409, unblock, list and read marks',
     assert.strictEqual((await hcall(url, 'POST', p, { text: 'y'.repeat(4000) })).status, 200, '4000 chars is allowed');
 
     // 200: stored as kind human, actor human:<from>; default from is "human"
-    r = await hcall(url, 'POST', p, { text: 'use the blue one', from: 'kewk' });
+    r = await hcall(url, 'POST', p, { text: 'use the blue one', from: 'robin' });
     assert.strictEqual(r.status, 200);
     assert.deepStrictEqual(r.data.bounty, { id: b.id, status: 'backlog' });
     assert.strictEqual(r.data.note.text, 'use the blue one');
-    assert.strictEqual(r.data.note.from, 'kewk');
+    assert.strictEqual(r.data.note.from, 'robin');
     assert.strictEqual(r.data.note.read, false);
     const ev = board.get(b.id).events.find(e => e.id === r.data.note.id);
     assert.strictEqual(ev.kind, 'human');
-    assert.strictEqual(ev.actor, 'human:kewk');
+    assert.strictEqual(ev.actor, 'human:robin');
     r = await hcall(url, 'POST', p, { text: 'anonymous' });
     assert.strictEqual(r.data.note.from, 'human');
     assert.strictEqual(board.get(b.id).events.find(e => e.id === r.data.note.id).actor, 'human:human');
 
     // 409: unblock asked but the bounty isn't blocked; the note is still stored and the response says so
-    r = await hcall(url, 'POST', p, { text: 'go ahead', from: 'kewk', unblock: true });
+    r = await hcall(url, 'POST', p, { text: 'go ahead', from: 'robin', unblock: true });
     assert.strictEqual(r.status, 409);
     assert.match(r.data.error, /not blocked; the note is stored/);
     assert.strictEqual(r.data.note_stored, true);
@@ -90,7 +90,7 @@ test('human-notes API: header check, 400/404/409, unblock, list and read marks',
     board.ready(b.id);
     board.start(b.id, 'fake-1');
     board.block(b.id, 'which colour?', 'fake-1');
-    r = await hcall(url, 'POST', p, { text: 'blue. carry on', from: 'kewk', unblock: true });
+    r = await hcall(url, 'POST', p, { text: 'blue. carry on', from: 'robin', unblock: true });
     assert.strictEqual(r.status, 200);
     assert.deepStrictEqual(r.data.bounty, { id: b.id, status: 'ready' });
     assert.strictEqual(r.data.unblocked, true);
@@ -100,7 +100,7 @@ test('human-notes API: header check, 400/404/409, unblock, list and read marks',
     const st = cur.events.filter(e => e.kind === 'status').pop();
     assert.strictEqual(st.from_status, 'blocked');
     assert.strictEqual(st.to_status, 'ready');
-    assert.strictEqual(st.actor, 'human:kewk');
+    assert.strictEqual(st.actor, 'human:robin');
     assert.match(st.note, /unblocked by the human \(kewk\)/);
     // unblock works even while a live worker record exists for the blocked bounty
     board.start(b.id, 'fake-1');
@@ -120,7 +120,7 @@ test('human-notes API: header check, 400/404/409, unblock, list and read marks',
 
     // GET /human-notes: newest first, with bounty id, title, project, text, from, created_at, read
     const other = board.create({ title: 'second', project: 'scratch', criteria: CRIT });
-    await hcall(url, 'POST', `/bounties/${other.id}/human-notes`, { text: 'newest', from: 'kewk' });
+    await hcall(url, 'POST', `/bounties/${other.id}/human-notes`, { text: 'newest', from: 'robin' });
     r = await call('GET', '/human-notes?unread=1');
     assert.strictEqual(r.status, 200);
     const all = r.data;
@@ -128,7 +128,7 @@ test('human-notes API: header check, 400/404/409, unblock, list and read marks',
     assert.strictEqual(all[0].bounty_id, other.id);
     assert.strictEqual(all[0].title, 'second');
     assert.strictEqual(all[0].project, 'scratch');
-    assert.strictEqual(all[0].from, 'kewk');
+    assert.strictEqual(all[0].from, 'robin');
     assert.ok(all[0].created_at);
     assert.strictEqual(all[0].read, false);
     for (let i = 1; i < all.length; i++) assert.ok(all[i - 1].id > all[i].id, 'newest first');
@@ -171,7 +171,7 @@ test('human notes reach workers: live inbox/progress and the prompt of a later w
     assert.strictEqual(r.code, 0, r.err);
 
     // a live worker sees it on its next inbox, under its own header
-    await hcall(url, 'POST', `/bounties/${b.id}/human-notes`, { text: 'ship the small version first', from: 'kewk' });
+    await hcall(url, 'POST', `/bounties/${b.id}/human-notes`, { text: 'ship the small version first', from: 'robin' });
     await cli(url, ['note', String(b.id), 'orchestrator says hi']);
     r = await cli(url, ['inbox'], w);
     assert.strictEqual(r.code, 0, r.err);
@@ -184,13 +184,13 @@ test('human notes reach workers: live inbox/progress and the prompt of a later w
     assert.match(r.out, /no unread notes/);
 
     // and on its next progress
-    await hcall(url, 'POST', `/bounties/${b.id}/human-notes`, { text: 'also add a test', from: 'kewk' });
+    await hcall(url, 'POST', `/bounties/${b.id}/human-notes`, { text: 'also add a test', from: 'robin' });
     r = await cli(url, ['progress', 'did a thing'], w);
     assert.match(r.out, /progress noted[\s\S]*FROM THE HUMAN[\s\S]*also add a test/);
     assert.doesNotMatch(r.out, /FROM THE ORCHESTRATOR/);
 
     // peek shows it labelled
-    await hcall(url, 'POST', `/bounties/${b.id}/human-notes`, { text: 'peeked', from: 'kewk' });
+    await hcall(url, 'POST', `/bounties/${b.id}/human-notes`, { text: 'peeked', from: 'robin' });
     r = await cli(url, ['inbox', String(b.id), '--peek']);
     assert.match(r.out, /FROM THE HUMAN kewk\] peeked/);
 
@@ -229,7 +229,7 @@ test('bounty replies: prints unread human notes and marks them read; --peek and 
     assert.strictEqual(r.code, 0, r.err);
     assert.match(r.out, /no unread messages from the human/);
 
-    await hcall(url, 'POST', `/bounties/${a.id}/human-notes`, { text: 'older reply', from: 'kewk' });
+    await hcall(url, 'POST', `/bounties/${a.id}/human-notes`, { text: 'older reply', from: 'robin' });
     await hcall(url, 'POST', `/bounties/${b.id}/human-notes`, { text: 'newer reply\nsecond line' });
 
     // --peek: printed, still unread
@@ -250,7 +250,7 @@ test('bounty replies: prints unread human notes and marks them read; --peek and 
     assert.match(r.out, /no unread messages from the human/);
 
     // --all: read ones too (no "(new)" mark); a new unread one is shown as new and marked read
-    await hcall(url, 'POST', `/bounties/${a.id}/human-notes`, { text: 'third', from: 'kewk' });
+    await hcall(url, 'POST', `/bounties/${a.id}/human-notes`, { text: 'third', from: 'robin' });
     r = await cli(url, ['replies', '--all', '--peek']);
     assert.match(r.out, /3 messages from the human, newest first \(peek/);
     assert.match(r.out, /\(new\)  first bounty\n    third/);
