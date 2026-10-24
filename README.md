@@ -11,6 +11,7 @@ Run a few AI agents in parallel and you hit the same problems fast: they say "do
 - **Stalled agents get caught.** A watchdog kills workers that go quiet, blocks the bounty with the log attached, and retries on a stronger model.
 - **You stop babysitting.** Workers spawn on their own when a bounty is ready, one fresh agent per task, so you plan the work and the board runs it.
 - **You can see everything.** A live dashboard shows what every agent is doing, what it costs, and what is stuck.
+- **Check in from your phone.** Put the machine on Tailscale and open the board from your phone anywhere, with live updates and no port forwarding or public exposure.
 - **It's fun to watch.** Each project gets its own themed board, and agents earn loot on a leaderboard for verified work only.
 
 AI agent orchestration with teeth. Spawn workers, track bounties, verify work, ship code.
