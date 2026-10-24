@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Status · It's not a Kanban</title>
+<link rel="icon" href="/img/favicon.png" type="image/png"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script src="/op-theme.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="/op.css" rel="stylesheet"/>
+<link href="/status.css" rel="stylesheet"/>
+</head>
+<body class="bg-background-dark min-h-screen text-gray-100 font-display">
+<header class="op-header px-3 md:px-6 py-3 flex flex-wrap items-center gap-x-5 gap-y-3 justify-between">
+  <a class="op-brand" href="/" title="Back to the board">
+    <span class="op-mark" aria-hidden="true"></span>
+    <div class="min-w-0">
+      <h1 class="op-title"><span class="t">Status</span></h1>
+      <div class="op-sub">goals, the orchestrator's note, and what is moving · <span id="st-updated">loading</span></div>
+    </div>
+  </a>
+  <div class="st-stats" id="st-stats"></div>
+</header>
+<main class="st-wrap">
+  <section><h2>From the orchestrator <small id="st-notewhen"></small></h2><div id="st-note"></div></section>
+  <section><h2>Goals <small>a goal is reached only when its exit test is recorded</small></h2><div id="st-goals" class="st-goals"></div></section>
+  <section class="st-two">
+    <div><h2>Working now</h2><div id="st-running" class="st-list"></div></div>
+    <div><h2>Needs attention <small>review, approved, blocked</small></h2><div id="st-attention" class="st-list"></div></div>
+  </section>
+  <section><h2>Finished, last 24 h <small id="st-mcount"></small></h2><div id="st-recent"></div></section>
+</main>
+<nav class="op-dock-wrap" aria-label="Pages">
+  <div class="op-dock">
+    <a href="/" title="Board"><span class="material-icons">grid_view</span>Board</a>
+    <a href="/live" title="Live: what every agent is doing now"><span class="material-icons">phonelink_ring</span>Live</a>
+    <a href="/status.html" class="on" title="Status: goals and progress"><span class="material-icons">flag</span>Status</a>
+    <a href="/roster" title="Roster: the slots"><span class="material-icons">palette</span>Roster</a>
+    <a href="/leaderboard" title="Leaderboard: loot from verified work"><span class="material-icons">emoji_events</span>Loot</a>
+  </div>
+</nav>
+<script src="/status.js"></script>
+</body></html>

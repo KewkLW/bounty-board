@@ -1,0 +1,59 @@
+/* Status page. A themed board sets these variables in its own status.html to match its theme. */
+:root {
+  --st-panel: rgba(255, 255, 255, .04);
+  --st-border: rgba(255, 255, 255, .14);
+  --st-fg: #e8e4df;
+  --st-muted: #9a938c;
+  --st-accent: #f59e0b;
+  --st-ok: #4ade80;
+  --st-warn: #fbbf24;
+  --st-bad: #f87171;
+  --st-run: #60a5fa;
+}
+.st-wrap { position: relative; z-index: 10; max-width: 72rem; margin: 0 auto; padding: 16px 16px 112px; display: grid; gap: 24px; color: var(--st-fg); }
+.st-wrap h2 { margin: 0 0 8px; font-size: 14px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--st-accent); }
+.st-wrap h2 small { margin-left: 6px; font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--st-muted); }
+.st-wrap code { font-size: .9em; padding: 0 3px; border-radius: 3px; background: rgba(255, 255, 255, .08); }
+.st-panel { padding: 12px 14px; border: 1px solid var(--st-border); border-radius: 6px; background: var(--st-panel); overflow-wrap: anywhere; }
+.st-empty { color: var(--st-muted); font-size: 13px; }
+.st-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+.st-stat { padding: 4px 10px; border: 1px solid var(--st-border); border-radius: 999px; font-size: 12px; color: var(--st-muted); }
+.st-stat b { color: var(--st-fg); }
+.st-note p { margin: 8px 0 0; font-size: 14px; line-height: 1.5; }
+.st-headline { font-size: 16px; font-weight: 700; line-height: 1.45; }
+.st-stale { margin-bottom: 8px; color: var(--st-warn); font-size: 12px; font-weight: 700; }
+.st-goals { display: grid; gap: 12px; }
+.st-goal-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.st-goal-id { font-family: ui-monospace, monospace; font-weight: 800; color: var(--st-accent); }
+.st-goal-name { font-size: 16px; font-weight: 800; }
+.st-goal-goal { margin-top: 6px; font-size: 14px; }
+.st-goal-test, .st-goal-ev { margin-top: 6px; font-size: 13px; color: var(--st-muted); line-height: 1.45; }
+.st-goal-ev { color: var(--st-ok); }
+.st-goal-reached { border-color: color-mix(in srgb, var(--st-ok) 50%, transparent); }
+.st-goal-closed { opacity: .55; }
+.st-now { border-color: var(--st-accent); box-shadow: 0 0 0 1px var(--st-accent); }
+.st-badge { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; border: 1px solid var(--st-border); color: var(--st-muted); }
+.st-badge-reached { color: var(--st-ok); border-color: var(--st-ok); }
+.st-badge-now { color: #111; background: var(--st-accent); border-color: var(--st-accent); }
+.st-bar { margin-top: 10px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.st-bar span { display: block; height: 100%; background: var(--st-ok); }
+.st-road-meta { margin-top: 6px; font-size: 12px; color: var(--st-muted); }
+.st-road { margin-top: 8px; display: grid; gap: 3px; }
+.st-step { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.st-step span { flex: 1; min-width: 0; }
+.st-step i { font-style: normal; font-size: 11px; color: var(--st-muted); white-space: nowrap; }
+.st-step.st-done span { color: var(--st-muted); text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, .25); }
+.st-chip { display: inline-block; min-width: 3.2em; padding: 0 5px; border-radius: 4px; font: 700 11px/1.6 ui-monospace, monospace; text-align: center; text-decoration: none; color: #111; background: var(--st-muted); }
+.st-chip.st-done { background: var(--st-ok); }
+.st-chip.st-in_progress { background: var(--st-run); }
+.st-chip.st-review, .st-chip.st-approved { background: var(--st-warn); }
+.st-chip.st-blocked, .st-chip.st-failed { background: var(--st-bad); }
+.st-chip.st-ready { background: var(--st-fg); }
+.st-bad { color: var(--st-bad); }
+.st-two { display: grid; gap: 16px; grid-template-columns: 1fr; }
+@media (min-width: 900px) { .st-two { grid-template-columns: 1fr 1fr; } }
+.st-list { display: grid; gap: 8px; }
+.st-row { font-size: 14px; }
+.st-sub { margin-top: 3px; font-size: 12px; color: var(--st-muted); }
+.st-line { display: flex; align-items: baseline; gap: 8px; font-size: 13px; padding: 2px 0; }
+.st-line .st-sub { margin: 0 0 0 auto; white-space: nowrap; }

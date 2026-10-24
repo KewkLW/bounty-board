@@ -348,6 +348,33 @@ The theme files:
 
 See the "A board per project" philosophy: every new board must get its own themed UI. This is mandatory, not polish.
 
+## The Status page: goals and the orchestrator's note
+
+`/status.html` is the page to check instead of asking. It shows the project's goals with the bounties that lead to each one, the orchestrator's latest note, what is running, what needs attention, and what finished in the last 24 hours. It refreshes every 30 seconds and reads the board API live, plus two files the orchestrator keeps in the board's public folder:
+
+`status-goals.json`:
+```json
+{ "goals": [
+  { "id": "M1", "name": "Walk around town", "goal": "what it is, in a sentence",
+    "test": "the exit test, in words someone can check",
+    "state": "open", "when": null, "evidence": null,
+    "gate": 43, "road_prefix": "M1." }
+] }
+```
+- `road` (a list of bounty ids) or `road_prefix` (every bounty whose title starts with it) is the path to the goal.
+- `state` is `open`, `reached` or `closed` (not opened yet). A goal shows as reached only when the orchestrator records it (`state: "reached"` with `when` and `evidence`) or its `gate` bounty (the acceptance run) is done. A road that is all done without that shows as "road done, exit test not recorded".
+- The first open goal is marked **Now**.
+
+`status-notes.json`:
+```json
+{ "written_at": "2026-10-24T11:00:00-07:00",
+  "headline": "one line: where things stand",
+  "body": ["paragraphs, **bold** and `code` allowed"] }
+```
+The orchestrator rewrites this every round. A note older than three hours is flagged as stale on the page.
+
+A themed board copies `status.html` from its own `live.html` (header, fonts and nav) and symlinks `status.js` and `status.css` from the default `public/`.
+
 ## A board per project
 
 Each project gets its own board instance, never a shared one: its own config directory, port, systemd user unit (`Environment=BOUNTY_CONFIG=...` and `BOUNTY_NO_SEED=1`), CLI wrapper exporting `BOUNTY_URL`, and project entry.
