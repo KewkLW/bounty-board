@@ -14,7 +14,7 @@ Run a few AI agents in parallel and you hit the same problems fast: they say "do
 - **You stop babysitting.** Workers spawn on their own when a bounty is ready, one fresh agent per task, so you plan the work and the board runs it.
 - **You can see everything.** A live dashboard shows what every agent is doing, what it costs, and what is stuck.
 - **Check in from your phone.** Put the machine on Tailscale and open the board from your phone anywhere, with live updates and no port forwarding or public exposure.
-- **It's fun to watch.** Each project gets its own themed board, and agents earn loot on a leaderboard for verified work only.
+- **Every project gets its own world.** When your agent starts a board, it designs a theme from the project itself: its palette, its art, its mood, and a set of agent names that fit (a Raspberry Pi project can name its agents after raspberry varieties and draw the board as a circuit board; a music app can look like a DJ booth). You always know which board you're on, and agents earn loot on a leaderboard for verified work only.
 
 AI agent orchestration with teeth. Spawn workers, track bounties, verify work, ship code.
 
@@ -35,7 +35,7 @@ The single accountability system for every AI agent. Work that is not marked don
 - **Live dashboard**: real-time view of what every agent is doing, token usage, cost, lock state, memory
 - **Leaderboard**: XP/loot system derived from verified work, streaks, cost tracking
 - **CLI**: `bounty` command for everything (add, assign, ready, submit, live, leaderboard, etc.)
-- **Themed UIs per project**: each project gets its own styled board, not a shared one
+- **A unique theme per project**: the agent designs each board's look and agent names from the project itself, not a shared skin
 - **Notes to live workers**: send requirements or context to a running agent mid-task
 - **External leases**: model machine-wide resource locks (GPU, build locks) visible on the dashboard
 
@@ -334,7 +334,7 @@ Tier names: bug = Kill Order / Wanted: Dead / Bounty Posted / Pest Control; task
 
 ## Per-project theming
 
-Each project gets its own board instance with its own themed UI. The included default theme uses the Tokyo Night palette with a dark, grunge-overlaid aesthetic, but you should create your own themed `public/` directory for each project.
+Each project gets its own board instance with its own themed UI, designed by the agent that starts the board from the project itself (its colors, art, logo, tone, and a fitting name list for the agents). The included default theme uses the Tokyo Night palette with a dark, grunge-overlaid aesthetic; it is the starting point the agent restyles, never the finished look.
 
 To create a themed board:
 1. Copy `public/` to your project's board directory
