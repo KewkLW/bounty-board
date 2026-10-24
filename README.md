@@ -17,7 +17,7 @@ AI agent orchestration with teeth. Spawn workers, track bounties, verify work, s
 
 The single accountability system for every AI agent. Work that is not marked done on this board is a known gap. Workers are spawned by the board, one fresh agent per bounty, and a bounty only reaches **done** when its commits are on the project's main branch.
 
-![Kanban board](screenshots/kanban.jpg)
+![Board view](screenshots/kanban.jpg)
 
 ![Leaderboard](screenshots/leaderboard.jpg)
 
