@@ -50,6 +50,22 @@ Do this before any work on the project starts. Never file a project's work on an
 - **Rewrite `status-notes.json`** (it is flagged stale after 3 hours) and keep `status-goals.json` true. A goal is reached only when its exit test is captured: set `state: "reached"` with `when` and `evidence`, or mark its gate bounty done. A road that is all done without that stays "exit test not recorded" on purpose.
 - When the user asks "where are we at", answer from the Status page and point them to it.
 
+## Names, everywhere
+
+Every agent has a specific, stable name plus the project tag for the project's whole life, so the user can tell agents apart on the board, in telemetry and in their terminals.
+
+- **Board slots**: the `name` in `board.json` (the board refuses an unnamed slot). It shows on every page and rides on telemetry as `agent.name` next to `project` and `bounty.id`. Slot workers run headless, so the board is where their name shows.
+- **Hand-launched agents and the orchestrator** (interactive sessions in a terminal): launch with `AGENT_NAME=<name> AGENT_PROJECT=<project> AGENT_ROLE=agent|orchestrator` in the environment and have the terminal's status line print them, one color for agents and another for orchestrators. A Claude Code status line (`statusLine` in `settings.json`) can do it:
+  ```bash
+  #!/usr/bin/env bash
+  # Claude Code status line: show the agent's name and project, purple for orchestrators, green for agents.
+  cat >/dev/null   # the session JSON on stdin is not needed here
+  [ -z "$AGENT_NAME" ] && exit 0
+  color=32; [ "$AGENT_ROLE" = orchestrator ] && color=35
+  printf '\033[1;%sm%s\033[0m %s' "$color" "$AGENT_NAME" "${AGENT_PROJECT:+· $AGENT_PROJECT}"
+  ```
+- A bare, unnamed agent is a bug: name it before it does any work. Pick the project's name list when you start its board (a theme that fits the project) and take new names from it.
+
 ## Rules
 
 - You orchestrate; workers write the task code. Doing the work yourself skips the gates that make "done" mean something.
