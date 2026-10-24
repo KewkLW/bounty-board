@@ -21,6 +21,10 @@ Orchestrator
   bounty edit ID [--title T] [--desc TEXT|--brief FILE] [--criteria "..."]... [--tier] [--priority] [--type] [--project P] [--depends 3,4] [--file TASK.md]
   bounty note ID "text"            tell the live worker (and every later attempt) something new
   bounty inbox ID --peek           the notes that worker has not read yet (without marking them read)
+  bounty replies [--all] [--peek] [--json]
+                                   messages from the human (the hub's reply box): bounty, project, time, text.
+                                   Prints the unread ones and marks them read; --all shows read ones too (and
+                                   marks the unread among them read); --peek marks nothing read
   bounty assign ID SLOT|none       bounty ready ID...        bounty backlog ID
   bounty approve ID ["notes"]      bounty reject ID "notes"  bounty done ID   (only if the commits are on main)
   bounty fail ID "reason"          bounty kill ID ["reason"]
@@ -35,7 +39,7 @@ Orchestrator
   bounty project list | bounty project add ID --repo PATH [--main main] [--wt-cmd CMD] [--wt-path TPL] [--verify CMD]
 Workers (BOUNTY_ID / BOUNTY_SLOT from the environment)
   bounty start                     bounty progress "note" [--check N]...     (both print unread notes)
-  bounty inbox                     unread orchestrator notes; marks them read. Check it often.
+  bounty inbox                     unread orchestrator notes and messages from the human; marks them read. Check it often.
   bounty block "reason"            bounty split "<title>" [--desc TEXT] [--criteria "..."]...
   bounty submit [--branch B] [--no-wait]
   bounty next                      bounty lease gpu [--ttl MIN] [--no-wait]    bounty release gpu
@@ -61,7 +65,7 @@ async function api(method, p, body) {
   let res;
   try {
     res = await fetch(URL_BASE + '/api' + p, {
-      method, headers: { 'content-type': 'application/json', 'x-bounty-actor': ACTOR },
+      method, headers: { 'content-type': 'application/json', 'x-bounty-actor': ACTOR, 'x-board-request': '1' },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (e) {
@@ -78,12 +82,27 @@ function idOf(pos, i = 0) {
   if (!id || !/^\d+$/.test(String(id))) die('which bounty? pass an ID or set BOUNTY_ID');
   return Number(id);
 }
+// Orchestrator notes (kind 'message') and messages from the human (kind 'human'), each under its own header.
 function printNotes(notes, { header = true } = {}) {
   if (!notes || !notes.length) return false;
-  if (header) console.log(`\n=== ${notes.length} NEW NOTE${notes.length > 1 ? 'S' : ''} FROM THE ORCHESTRATOR (act on ${notes.length > 1 ? 'these' : 'this'} before you continue; ${notes.length > 1 ? 'they win' : 'it wins'} over the brief) ===`);
-  for (const n of notes) console.log(`[${String(n.at).slice(0, 16).replace('T', ' ')} ${n.actor || 'orchestrator'}] ${n.note}`);
-  if (header) console.log('=== end of notes ===');
+  const line = n => console.log(`[${String(n.at).slice(0, 16).replace('T', ' ')} ${n.actor || 'orchestrator'}] ${n.note}`);
+  const orch = notes.filter(n => n.kind !== 'human'), human = notes.filter(n => n.kind === 'human');
+  if (!header) { notes.forEach(n => (n.kind === 'human' ? console.log(`[${String(n.at).slice(0, 16).replace('T', ' ')} FROM THE HUMAN ${humanName(n)}] ${n.note}`) : line(n))); return true; }
+  if (orch.length) {
+    console.log(`\n=== ${orch.length} NEW NOTE${orch.length > 1 ? 'S' : ''} FROM THE ORCHESTRATOR (act on ${orch.length > 1 ? 'these' : 'this'} before you continue; ${orch.length > 1 ? 'they win' : 'it wins'} over the brief) ===`);
+    orch.forEach(line);
+    console.log('=== end of notes ===');
+  }
+  if (human.length) {
+    console.log(`\n=== ${human.length} NEW MESSAGE${human.length > 1 ? 'S' : ''} FROM THE HUMAN (the person running this board wrote ${human.length > 1 ? 'these' : 'this'} themselves; act on ${human.length > 1 ? 'them' : 'it'} before you continue) ===`);
+    for (const n of human) console.log(`[${String(n.at).slice(0, 16).replace('T', ' ')} ${humanName(n)}] ${n.note}`);
+    console.log('=== end of messages ===');
+  }
   return true;
+}
+const humanName = n => String(n.actor || n.from || '').replace(/^human:/, '') || 'human';
+function fmtReply(n) {
+  return `#${n.bounty_id} ${n.project || '-'}  ${String(n.created_at).slice(0, 16).replace('T', ' ')}  from ${n.from}${n.read ? '' : '  (new)'}  ${n.title}\n    ${String(n.text).replace(/\n/g, '\n    ')}`;
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -110,6 +129,11 @@ function show(b) {
     b.criteria.forEach((c, i) => L.push(`  ${i + 1}. [${c.done ? 'x' : ' '}] ${c.text}${c.note ? `  (${c.note})` : ''}`));
   }
   if (b.review_notes) L.push('', 'Review:', b.review_notes);
+  const human = (b.events || []).filter(e => e.kind === 'human');
+  if (human.length) {
+    L.push('', 'Messages from the human:');
+    for (const e of human) L.push(`  ${e.at.slice(0, 16).replace('T', ' ')} ${humanName(e)}${e.orch_read_at ? '' : ' (unread by the orchestrator)'}: ${e.note}`);
+  }
   const atts = b.attempts_detail || [];
   if (atts.length) {
     L.push('', 'Attempts:');
@@ -158,7 +182,7 @@ async function main() {
   const cmd = pos.shift();
   if (!cmd || cmd === 'help' || opt.help) { console.log(HELP); return; }
   const worker = !!SLOT;
-  const orchOnly = ['add', 'edit', 'note', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'close-merged', 'pause', 'resume', 'import'];
+  const orchOnly = ['add', 'edit', 'note', 'replies', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'close-merged', 'pause', 'resume', 'import'];
   if (worker && orchOnly.includes(cmd)) die(`'${cmd}' is an orchestrator command; you are worker ${SLOT}`);
 
   switch (cmd) {
@@ -201,6 +225,12 @@ async function main() {
     case 'log': {
       const b = await api('GET', `/bounties/${idOf(pos)}`);
       const a = [...b.attempts].reverse().find(x => !opt.review || x.kind === 'review');
+      const human = (b.events || []).filter(e => e.kind === 'human');
+      if (human.length && !opt.raw) {
+        console.log(`=== messages from the human on #${b.id} ===`);
+        for (const e of human) console.log(`[${e.at.slice(0, 16).replace('T', ' ')} ${humanName(e)}] ${e.note}`);
+        console.log('=== end of messages ===\n');
+      }
       if (!a) die('no attempts yet');
       const res = await fetch(`${URL_BASE}/api/attempts/${a.id}/log${opt.raw ? '?format=raw' : ''}`, { headers: { 'x-bounty-actor': ACTOR } });
       process.stdout.write(await res.text());
@@ -253,6 +283,16 @@ async function main() {
       if (!text) die('note ID "text"');
       const e = await api('POST', `/bounties/${id}/notes`, { text });
       console.log(`note #${e.id} on bounty #${id}: the worker sees it on its next 'bounty inbox' / progress, and every later attempt gets it in its prompt`);
+      return;
+    }
+    case 'replies': {
+      const notes = await api('GET', `/human-notes${opt.all ? '' : '?unread=1'}`);
+      const fresh = notes.filter(n => !n.read).map(n => n.id);
+      if (!opt.peek && fresh.length) await api('POST', '/human-notes/read', { ids: fresh });
+      if (opt.json) { console.log(JSON.stringify(notes, null, 2)); return; }
+      if (!notes.length) { console.log(`no ${opt.all ? '' : 'unread '}messages from the human.`); return; }
+      console.log(`${notes.length} message${notes.length > 1 ? 's' : ''} from the human${opt.all ? '' : ' (unread)'}, newest first${opt.peek ? ' (peek; nothing marked read)' : fresh.length ? `; ${fresh.length} marked read` : ''}:`);
+      for (const n of notes) console.log(fmtReply(n));
       return;
     }
     case 'inbox': {

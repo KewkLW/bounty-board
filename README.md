@@ -241,7 +241,7 @@ Each worker's prompt is assembled from:
 1. The bounty title, description, and acceptance criteria
 2. Notes from all prior attempts (what failed, reviewer feedback)
 3. Machine rules from `config/board.json`
-4. Orchestrator notes sent via `bounty note`
+4. Orchestrator notes sent via `bounty note`, and messages from the human (the hub reply box, `POST /api/bounties/:id/human-notes`) in their own section
 5. The CLI protocol (how to report progress, submit, block)
 
 The full prompt is saved alongside each attempt's log for debugging.
@@ -298,6 +298,25 @@ Workers take and release the lock via the configured script. The dashboard shows
 
 `bounty note ID "text"` (API `POST /api/bounties/:id/notes {text}`, or the note box in the dashboard drawer) tells a running worker something new: a changed requirement, a machine rule. Notes are `message` events in the bounty history with a read mark. The worker gets unread ones from `bounty inbox`, and in the output of `bounty start` and `bounty progress`; each gets marked read by whoever received it. Every later attempt gets all notes in its prompt. `bounty inbox ID --peek` (`GET /api/bounties/:id/inbox`) shows what a worker hasn't read yet without marking it; `bounty inbox ID --all` lists all notes with read state.
 
+## Messages from the human
+
+The person running the board can answer a worker or the orchestrator without a terminal: the hub's "Needs you" list has a reply box and a Done button on every item, and both call this API on the item's board. A message from the human is an event of kind `human` (actor `human:<from>`) in the bounty history. It shows in the dashboard drawer in its own "From the human" block (apart from orchestrator notes), in `bounty show` and at the top of `bounty log`. The live worker gets it like an orchestrator note (`bounty inbox`, `start`, `progress`, under a `FROM THE HUMAN` header), and every later worker gets all of them in its prompt under "Messages from the human". The orchestrator has its own read mark, so a worker reading a message doesn't hide it from `bounty replies`.
+
+| Endpoint | Body | Result |
+|---|---|---|
+| `POST /api/bounties/:id/human-notes` | `{ "text": "1..4000 chars", "from": "name (default human)", "unblock": true }` | `{ note, bounty: {id, status} }`. With `unblock: true` a `blocked` bounty moves to `ready` (the status event's actor is `human:<from>`). 400 empty or too long text, 404 unknown bounty, 409 when unblock is asked but the bounty is not blocked (or its worker is still live): the note is still stored, and the 409 body says so (`note_stored: true`, plus `note` and `bounty`) |
+| `GET /api/human-notes[?unread=1]` | | the human notes, newest first: `id, bounty_id, title, project, text, from, created_at, read` (`read` = the orchestrator has seen it) |
+| `POST /api/human-notes/read` | `{ "ids": [noteId, ...] }` | `{ marked }`: marks those read for the orchestrator |
+
+Both writes need the header `X-Board-Request: 1` and `Content-Type: application/json`, or they get 403. A page on another origin can't send either without a CORS preflight, and the board answers no preflight, so a random web page can't post as the human. Worker slots get 403 too. `allow_cidrs` applies as for the rest of the API.
+
+```bash
+bounty replies            # unread messages from the human (bounty, project, time, from, text); marks them read
+bounty replies --peek     # the same, nothing marked read
+bounty replies --all      # read ones too (marks the unread among them read; add --peek to mark nothing)
+bounty replies --json
+```
+
 ## Orchestrator day to day
 
 ```bash
@@ -307,6 +326,7 @@ bounty add "Title" --desc "..." --criteria "..." --type bug --tier B --slot opus
 bounty add --file task.md              # "# Title", "## Acceptance criteria" with - [ ] lines
 bounty edit 12 --criteria "..."        # criteria are required before ready; --project P moves it
 bounty note 12 "new requirement"       # reaches the live worker and later attempts
+bounty replies                         # what the human answered from the hub (marks it read)
 bounty assign 12 opus-2 && bounty ready 12
 bounty show 12 / bounty log 12         # history, attempts, logs, review notes
 bounty approve 12 | bounty reject 12 "what to fix"

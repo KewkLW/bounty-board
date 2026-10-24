@@ -316,6 +316,8 @@ async function openBounty(id) {
   const slots = S.state.slots;
   const crit = b.criteria || [];
   const notes = b.events.filter(e => e.kind === 'message');
+  const human = b.events.filter(e => e.kind === 'human');
+  const readMark = n => (n.read_at ? `<span class="text-green-400">read ${esc(n.read_at.slice(11, 16))} by ${esc(n.read_by || '?')}</span>` : '<span class="text-warning font-bold">UNREAD</span>');
   const act = (label, fn, cls = 'bg-gray-700') => `<button onclick="${fn}" class="${cls} font-bold text-xs uppercase py-1.5 px-3 cel shadow-comic-sm">${label}</button>`;
   const slotOpt = s => `<option value="${esc(s.id)}" ${s.id === b.assignee_slot ? 'selected' : ''}>${esc(slotName(s.id, s.name))} (${esc(s.id)})</option>`;
   const actions = [];
@@ -338,8 +340,12 @@ async function openBounty(id) {
       <label class="block text-xs font-bold uppercase text-warning">Note to the worker${b.worker_alive ? ' (live now)' : ''}: it sees it on its next inbox/progress; later attempts get it in their prompt</label>
       <div class="flex gap-2 mt-1"><textarea id="e-note" class="flex-1 p-2 cel font-mono h-16" placeholder="changed requirement, machine rule..."></textarea><button onclick="sendNote(${id})" class="bg-warning text-black font-bold px-3 cel shadow-comic-sm uppercase text-xs">Send</button></div>
       <span id="note-err" class="text-danger text-xs font-mono"></span>
-      ${notes.length ? `<div class="text-[11px] font-mono mt-2 space-y-1">${notes.map(n => `<div><span class="text-gray-500">${esc(n.at.slice(5, 16).replace('T', ' '))}</span> ${n.read_at ? `<span class="text-green-400">read ${esc(n.read_at.slice(11, 16))} by ${esc(n.read_by || '?')}</span>` : '<span class="text-warning font-bold">UNREAD</span>'} ${esc(n.note)}</div>`).join('')}</div>` : ''}
+      ${notes.length ? `<div class="text-[11px] font-mono mt-2 space-y-1">${notes.map(n => `<div><span class="text-gray-500">${esc(n.at.slice(5, 16).replace('T', ' '))}</span> ${readMark(n)} ${esc(n.note)}</div>`).join('')}</div>` : ''}
     </div>
+    ${human.length ? `<div id="human-notes" class="mt-3 bg-sky-950/60 p-2 border-2 border-sky-400">
+      <div class="text-xs font-bold uppercase text-sky-300"><span class="material-icons text-sm align-middle">person</span> From the human (${human.length})</div>
+      <div class="text-xs font-mono mt-1 space-y-2">${human.map(n => `<div class="human-note border-l-4 border-sky-400 pl-2"><div class="text-[11px]"><span class="text-gray-400">${esc(n.at.slice(5, 16).replace('T', ' '))}</span> <b class="text-sky-300">${esc(String(n.actor || '').replace(/^human:/, '') || 'human')}</b> · worker ${readMark(n)} · orchestrator ${n.orch_read_at ? `<span class="text-green-400">read</span>` : '<span class="text-warning font-bold">UNREAD</span>'}</div><div class="whitespace-pre-wrap text-white">${esc(n.note)}</div></div>`).join('')}</div>
+    </div>` : ''}
     <div class="grid grid-cols-2 md:grid-cols-5 gap-2 mt-4 text-xs">
       <label>Project<select id="e-project" class="w-full p-1 cel">${S.projects.map(p => `<option ${p.id === b.project_id ? 'selected' : ''}>${esc(p.id)}</option>`).join('')}</select></label>
       <label>Assignee<select id="e-slot" class="w-full p-1 cel"><option value="">unassigned</option>${slots.map(slotOpt).join('')}</select></label>
