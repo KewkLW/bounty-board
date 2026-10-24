@@ -1,4 +1,4 @@
-# It's not a Kanban
+# Totally not a Kanban >_<
 
 > **TLDR:** Just tell your AI to clone and set it up and then your next project tell the agent to start a board for it, if it didnt already.
 
