@@ -101,7 +101,7 @@ test('human-notes API: header check, 400/404/409, unblock, list and read marks',
     assert.strictEqual(st.from_status, 'blocked');
     assert.strictEqual(st.to_status, 'ready');
     assert.strictEqual(st.actor, 'human:robin');
-    assert.match(st.note, /unblocked by the human \(kewk\)/);
+    assert.match(st.note, /unblocked by the human \(robin\)/);
     // unblock works even while a live worker record exists for the blocked bounty
     board.start(b.id, 'fake-1');
     board.block(b.id, 'still stuck', 'fake-1');
@@ -176,7 +176,7 @@ test('human notes reach workers: live inbox/progress and the prompt of a later w
     r = await cli(url, ['inbox'], w);
     assert.strictEqual(r.code, 0, r.err);
     assert.match(r.out, /NEW NOTE FROM THE ORCHESTRATOR[\s\S]*orchestrator says hi/);
-    assert.match(r.out, /NEW MESSAGE FROM THE HUMAN[\s\S]*kewk\] ship the small version first/);
+    assert.match(r.out, /NEW MESSAGE FROM THE HUMAN[\s\S]*robin\] ship the small version first/);
     assert.strictEqual(board.notes(b.id, { unread: true }).length, 0);
     // the worker reading it doesn't mark it read for the orchestrator
     assert.strictEqual(board.humanNotes({ unread: true }).length, 1);
@@ -192,12 +192,12 @@ test('human notes reach workers: live inbox/progress and the prompt of a later w
     // peek shows it labelled
     await hcall(url, 'POST', `/bounties/${b.id}/human-notes`, { text: 'peeked', from: 'robin' });
     r = await cli(url, ['inbox', String(b.id), '--peek']);
-    assert.match(r.out, /FROM THE HUMAN kewk\] peeked/);
+    assert.match(r.out, /FROM THE HUMAN robin\] peeked/);
 
     // a worker spawned later gets every human note in its prompt, labelled, separate from orchestrator notes
     const prompt = workerPrompt(board, { ...board.need(b.id), attempts: 2 }, board.slot('fake-2'), { worktree: t.repo, branch: 'x' });
     assert.match(prompt, /## Orchestrator notes[^\n]*\n- [^\n]*orchestrator says hi/);
-    assert.match(prompt, /## Messages from the human[^\n]*\n[\s\S]*\(from the human, kewk\): ship the small version first[\s\S]*also add a test[\s\S]*peeked/);
+    assert.match(prompt, /## Messages from the human[^\n]*\n[\s\S]*\(from the human, robin\): ship the small version first[\s\S]*also add a test[\s\S]*peeked/);
     const orchSection = prompt.split('## Orchestrator notes')[1].split('## Messages from the human')[0];
     assert.doesNotMatch(orchSection, /ship the small version/);
     // a bounty with no human notes has no human section
@@ -206,13 +206,13 @@ test('human notes reach workers: live inbox/progress and the prompt of a later w
 
     // bounty show and bounty log list them
     r = await cli(url, ['show', String(b.id)]);
-    assert.match(r.out, /Messages from the human:[\s\S]*kewk \(unread by the orchestrator\): ship the small version first/);
+    assert.match(r.out, /Messages from the human:[\s\S]*robin \(unread by the orchestrator\): ship the small version first/);
     const logPath = path.join(t.dir, 'attempt.log');
     require('fs').writeFileSync(logPath, 'worker transcript line\n');
     board.db.prepare("INSERT INTO attempts (bounty_id, slot, kind, log_path, started_at) VALUES (?, 'fake-1', 'worker', ?, ?)").run(b.id, logPath, new Date().toISOString());
     r = await cli(url, ['log', String(b.id)]);
     assert.strictEqual(r.code, 0, r.err);
-    assert.match(r.out, /messages from the human on #\d+[\s\S]*kewk\] also add a test[\s\S]*end of messages[\s\S]*worker transcript line/);
+    assert.match(r.out, /messages from the human on #\d+[\s\S]*robin\] also add a test[\s\S]*end of messages[\s\S]*worker transcript line/);
     r = await cli(url, ['log', String(b.id), '--raw']);
     assert.doesNotMatch(r.out, /messages from the human/);
   } finally { await t.s.close(); }
@@ -237,7 +237,7 @@ test('bounty replies: prints unread human notes and marks them read; --peek and 
     assert.strictEqual(r.code, 0, r.err);
     assert.match(r.out, /2 messages from the human \(unread\), newest first \(peek; nothing marked read\)/);
     assert.match(r.out, new RegExp(`#${b.id} scratch  \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d  from human  \\(new\\)  second bounty\\n    newer reply\\n    second line`));
-    assert.match(r.out, new RegExp(`#${a.id} scratch  [^\\n]*from kewk[^\\n]*first bounty\\n    older reply`));
+    assert.match(r.out, new RegExp(`#${a.id} scratch  [^\\n]*from robin[^\\n]*first bounty\\n    older reply`));
     assert.ok(r.out.indexOf('newer reply') < r.out.indexOf('older reply'), 'newest first');
     assert.strictEqual(board.humanNotes({ unread: true }).length, 2);
 
@@ -254,7 +254,7 @@ test('bounty replies: prints unread human notes and marks them read; --peek and 
     r = await cli(url, ['replies', '--all', '--peek']);
     assert.match(r.out, /3 messages from the human, newest first \(peek/);
     assert.match(r.out, /\(new\)  first bounty\n    third/);
-    assert.match(r.out, /from kewk  first bounty\n    older reply/);
+    assert.match(r.out, /from robin  first bounty\n    older reply/);
     assert.strictEqual(board.humanNotes({ unread: true }).length, 1);
     r = await cli(url, ['replies', '--all']);
     assert.match(r.out, /3 messages from the human, newest first; 1 marked read/);
