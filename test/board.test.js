@@ -317,10 +317,10 @@ test('external gpu lease mirrors the UE render flock and its holder file; the pr
     assert.strictEqual(st.held, false);
     fs.writeFileSync(lock, '');
     holder = spawn('flock', [lock, 'sleep', '30'], { stdio: 'ignore', detached: true });
-    fs.writeFileSync(holderFile, `pid=${holder.pid}\nowner=portal-real-test\nwhat=T40 rendered client\n`);
+    fs.writeFileSync(holderFile, `pid=${holder.pid}\nowner=feat-branch\nwhat=render pass\n`);
     await waitFor(() => board.externalStatus('gpu').held);
     st = board.externalStatus('gpu');
-    assert.strictEqual(st.holder.owner, 'portal-real-test');
+    assert.strictEqual(st.holder.owner, 'feat-branch');
     assert.strictEqual(st.holder.pid_alive, true);
     const r = await call('POST', '/leases/gpu', { bounty_id: null, slot: 'fake-1' }, 'fake-1');
     assert.strictEqual(r.data.external, true); assert.strictEqual(r.data.granted, false); assert.strictEqual(r.data.held, true);

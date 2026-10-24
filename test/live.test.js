@@ -93,7 +93,7 @@ test('ci.sh logs: current stage, position in the plan, lock waits, summary and e
   const log = [
     '$ Scripts/ci.sh --quick', '# cwd /tmp/wt/b87', '# started 2026-09-29T23:07:03.927Z', '',
     '==> [lfs]', 'Content repo present', '', '==> [rules]', 'Rule scan passed', '', '==> [render-lock]', '== syntax', '  ok   bash -n x',
-    '==> [editor-build]', '==> Running ShardPortal automation tests',
+    '==> [editor-build]', '==> Running automation tests',
   ];
   let st = live.parseCiLog(log.join('\n'));
   assert.strictEqual(st.cmd, 'Scripts/ci.sh --quick');
@@ -126,7 +126,7 @@ full_stages=("\${all_stages[@]}")
   assert.strictEqual(v.finished, false);
   // a lock wait inside a stage, then the acquisition
   live.feedCiLine(st, '==> [hop-e2e]');
-  live.feedCiLine(st, 'ue-stack-gate: waiting for the Unreal stack gate, held by b98 (agent): test-creatures.sh');
+  live.feedCiLine(st, 'ue-stack-gate: waiting for the Unreal stack gate, held by b98 (agent): test-integration.sh');
   assert.deepStrictEqual(live.ciView(st, null).waiting.lock, 'stack');
   live.feedCiLine(st, 'ue-stack-gate: acquired after 40s');
   assert.strictEqual(live.ciView(st, null).waiting, null);
