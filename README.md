@@ -314,10 +314,10 @@ bounty agents register --pid 12000 --name Marshal --kind orchestrator          #
 
 **When the board stops a process**
 - **Done or failed**: when a bounty reaches done (merge check, `bounty done`, `close-merged`) or failed (`bounty fail`, attempt cap), its board worker and every agent registered with `--bounty` for it are stopped. Orchestrator entries never are.
-- **Idle shutdown**: when no bounty has been in `in_progress`, `review` or `approved` for `idle_shutdown_minutes` (default 120; `0` disables), every registered non-orchestrator agent older than that is stopped and a board event says which. A paused board counts as idle.
+- **Idle shutdown**: when no bounty has been in `in_progress`, `review` or `approved` for `idle_shutdown_minutes` (default 120; `0` disables), every registered non-orchestrator agent is stopped, including one registered while the board was already idle, and a board event says which. A paused board counts as idle.
 - **`bounty cleanup --kill`** (below).
 
-**How it stops one**: SIGTERM (to the process group when the process leads one, as board workers do; otherwise to that pid alone), then SIGKILL after `stop_grace_seconds` (default: `watchdog.kill_grace_seconds`, 15). Before each signal the board re-reads the pid's start time from `/proc` and compares it with the recorded one, so a pid the kernel has handed to another process is never signalled. Each stop is logged on the bounty.
+**How it stops one**: SIGTERM (to the process group when the process leads one, as board workers do; otherwise to that pid alone), then SIGKILL after `stop_grace_seconds` (default: `watchdog.kill_grace_seconds`, 15). Before each signal the board re-reads the pid's start time from `/proc` and compares it with the recorded one, so a pid the kernel has handed to another process is never signalled. If a group leader exits during the grace period, the SIGKILL goes only to the group members recorded at SIGTERM time that still run with their recorded start time, never to the group id itself, which may have been reused. Each stop is logged on the bounty.
 
 **`bounty cleanup`** lists every manifest process: pid, name, kind, bounty and its status, age, RSS (the process and its children) and whether it is stale (its bounty is done or failed, or the board has been idle past `idle_shutdown_minutes`). Bridge sessions get their own section with their RSS total.
 

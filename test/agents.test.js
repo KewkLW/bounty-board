@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
 const { startBoard, waitFor, sh, ROOT } = require('./helpers');
-const { procStat } = require('../lib/agents');
+const { procStat, groupMembers, killLeftovers } = require('../lib/agents');
 
 const CRIT = ['math.js exports mul(a, b) returning the product', 'a node:test covers mul'];
 const alive = pid => !!procStat(pid);
@@ -115,6 +115,49 @@ test('identity check: a recorded pid whose start time no longer matches is never
     assert.strictEqual(JSON.parse(r.stdout).agents.length, 0);
     await new Promise(r2 => setTimeout(r2, 1200));
     assert.ok(alive(victim));
+  } finally { killMine(); await t.s.close(); }
+});
+
+test('group leader exits on SIGTERM: only the recorded group members still running as themselves get SIGKILL', async () => {
+  const t = await startBoard('agents-group', { dispatch: false });
+  try {
+    const { board } = t;
+    const b = board.create({ title: 'x', project: 'scratch', criteria: CRIT });
+    // the leader dies on TERM; its child ignores TERM and stays in the group
+    const leader = child('(trap "" TERM; exec sleep 600) & wait');
+    await waitFor(() => groupMembers(leader).length === 2, 5000);
+    const kid = groupMembers(leader).find(m => m.pid !== leader).pid;
+    mine.push(kid);
+    board.agents.register({ pid: leader, name: 'Lead', kind: 'worker', bounty: b.id });
+    board.fail(b.id, 'over');
+    await waitFor(() => !alive(leader), 5000);
+    assert.ok(alive(kid), 'the TERM-ignoring child outlives the leader inside the grace period');
+    await waitFor(() => !alive(kid), 5000);
+    assert.match(notes(t, b.id), /worker 'Lead' \(pid \d+\) exited; sent SIGKILL to 1 process\(es\) left in its group/);
+
+    // a recorded member whose pid was reused (start time differs) or that is in another group now is never hit
+    const other = child('sleep 600');
+    const st = procStat(other);
+    assert.deepStrictEqual(killLeftovers([{ pid: other, start_time: st.start_time - 777 }], other), []);
+    assert.deepStrictEqual(killLeftovers([{ pid: other, start_time: st.start_time }], leader), []);
+    await new Promise(r => setTimeout(r, 200));
+    assert.ok(alive(other), 'a reused pid / pgid is not signalled');
+  } finally { killMine(); await t.s.close(); }
+});
+
+test('idle shutdown: an agent registered on a board that is already idle past the threshold is stopped too', async () => {
+  const t = await startBoard('agents-idle-late', { dispatch: false, over: { idle_shutdown_minutes: 0.02 } });
+  try {
+    const { board } = t;
+    await new Promise(r => setTimeout(r, 1500)); // the board is idle past the threshold
+    const late = child('sleep 600'), o = child('sleep 600');
+    board.agents.register({ pid: late, name: 'Late', kind: 'bridge' });
+    board.agents.register({ pid: o, name: 'Boss', kind: 'orchestrator' });
+    const row = board.agents.list().find(e => e.name === 'Late');
+    assert.ok(row.stale && /board idle/.test(row.stale_why), 'cleanup marks it stale');
+    assert.deepStrictEqual(board.agents.sweep().map(x => x.name), ['Late']);
+    await waitFor(() => !alive(late), 5000);
+    assert.ok(alive(o));
   } finally { killMine(); await t.s.close(); }
 });
 

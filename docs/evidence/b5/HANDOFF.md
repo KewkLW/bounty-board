@@ -11,9 +11,21 @@
 
 ## Decisions to review
 - `--all` does not touch orchestrator entries unless `--orchestrators` is also given, so an orchestrator can't kill itself by accident. Orchestrators are never stale.
-- Idle: the clock is in memory and starts when the board starts, so a restart doesn't mass-kill. Paused counts as idle. Only entries registered longer ago than the threshold are stopped, so an agent registered a minute ago on an idle board survives.
+- Idle: the clock is in memory and starts when the board starts, so a restart doesn't mass-kill. Paused counts as idle. Every non-orchestrator entry is stopped once the board has been idle past the threshold, however recently it was registered (attempt 2: the attempt-1 age exemption is gone, per review).
 - RSS is the process plus all its descendants (an agent's shells and MCP servers).
-- The personal orchestrator skill (`~/.claude/skills/orchestrator/`) is outside this repo, so I did not edit it. It needs the same rule (register every spawned agent and bridge; `bounty cleanup` each round). Tracked as a split bounty. The `omarchy-agent` launcher could call `bounty agents register` itself.
+- The personal orchestrator skill (`~/.claude/skills/orchestrator/`, outside this repo, not under git) is updated in place (attempt 2). Added to `SKILL.md` "Standing rules", verbatim:
+
+  > **Every agent you spawn is registered and stopped when its bounty is done (must do, Kewk 2026-10-24: 74 zombie claude processes, 11.5 GB RAM, 44 GB swap).** Board workers are tracked by the board itself. Anything you launch by hand (an `omarchy-agent` worker, a subagent terminal, a remote-control or cloud bridge, ~200 MB each) goes in the board's manifest right after launch: `bounty agents register --pid <claude pid> --name <Name> --bounty <id> --kind worker|bridge` (the pid is the agent process itself, e.g. the `<pid>` in `omarchy-agent-list`'s `claude-<pid>`, never a sub-shell's `$$`). Register yourself with `--kind orchestrator` (never auto-stopped). The board then SIGTERMs (then SIGKILLs after `stop_grace_seconds`) a bounty's worker and its registered agents the moment the bounty is done/merged or failed, and every non-orchestrator agent once nothing has been in progress/review/approved for `idle_shutdown_minutes` (120). Every round run `bounty cleanup` and `bounty cleanup --kill` the stale rows; when you go idle for 2+ hours with no active bounty, `bounty cleanup --kill --all`. Never kill by pattern (`pkill claude`) and never touch a process that is not in the manifest: Kewk's own terminal sessions are not, and must survive.
+
+  and to `operating.md`, the hourly round:
+
+  > Agent cleanup: `bounty cleanup` (dry run), then `bounty cleanup --kill` for every stale row (bounty done/failed, or board idle past `idle_shutdown_minutes`). Register any agent or bridge you launched by hand since last round (`bounty agents register ...`). No active bounty for 2+ hours: `bounty cleanup --kill --all`. Only manifest processes are ever signalled; never pkill by pattern.
+
+## Attempt 2: review fixes
+- **#1, SIGKILL after the leader is gone.** `stop()` snapshots the group's members as (pid, start time) right before SIGTERM (`groupMembers`). At grace expiry: if the leader is still the recorded process (same start time) and still leads its group, the group SIGKILL is safe (a live leader pins its pgid). If the leader is gone, nothing is sent to `-pid`; `killLeftovers` SIGKILLs only snapshotted members whose start time still matches and that are still in that group. A reused pid or pgid is never signalled.
+- **#4, idle exemption.** The `registered_at` age check is removed from `sweep()` and `staleWhy()`: on a board idle past `idle_shutdown_minutes`, a just-registered worker or bridge is stopped (and listed stale by `bounty cleanup`).
+- New tests: `group leader exits on SIGTERM: only the recorded group members ...` (a TERM-ignoring child left behind by its leader gets SIGKILL; `killLeftovers` refuses a member with a different start time or in another group, and the process survives) and `idle shutdown: an agent registered on a board that is already idle past the threshold is stopped too`.
+- The orchestrator skill rule (requirement 4), see above.
 
 ## Tests (test/agents.test.js, real child processes)
 - worker stopped on done: a lingering fake worker (`mode:linger`) is approved, merged, goes done, and its process group dies. The event log and manifest are checked.
@@ -22,7 +34,7 @@
 - idle shutdown: an in_progress bounty keeps the board busy. Paused means idle, and the worker and bridge are stopped while the orchestrator is kept. The timer also runs inside the dispatcher, and 0 disables it.
 - cleanup: the dry run stops nothing; `--kill` stops only the stale entry; `--kill --all` stops the rest, including a non-group-leader entry. An **unregistered process survives `--kill --all`**, and so does the test runner.
 
-`npm ci && npm test`: 49 pass, 0 fail.
+`npm ci && npm test`: 51 pass, 0 fail (attempt 2).
 
 ## CLI on a scratch board (ephemeral port)
 ```
