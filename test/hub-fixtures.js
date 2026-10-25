@@ -92,6 +92,8 @@ async function fakeBoard(fixture) {
     res.status(201).json({ note, bounty: { id: b.id, status: b.status } });
   });
   app.get('/api/state', (req, res) => res.json(fixture.state));
+  // Orchestrator presence (bounty #7): the same object as /api/state's "orchestrator".
+  app.get('/api/orchestrator', (req, res) => (fixture.state && fixture.state.orchestrator ? res.json(fixture.state.orchestrator) : res.status(404).json({ error: 'no presence on this board' })));
   app.get('/status-goals.json', (req, res) => (fixture.goals ? res.json(fixture.goals) : res.status(404).end()));
   app.get('/status-notes.json', (req, res) => (fixture.notes ? res.json(fixture.notes) : res.status(404).end()));
   const server = http.createServer(app);
@@ -123,4 +125,10 @@ async function startHub(dir, over = {}) {
   return { hub, port, url: `http://127.0.0.1:${port}`, close: () => hub.close() };
 }
 
-module.exports = { busyBoard, quietBoard, floodBoard, fakeBoard, deadPort, registerFake, startHub, hoursAgo };
+// A presence object as a board's /api/state and /api/orchestrator return it.
+function presence(over = {}) {
+  return { name: 'Conductor', expected_name: 'Conductor', online: true, pid: 4242, since: hoursAgo(2), last_seen: new Date().toISOString(),
+    start_time: 1, registered: true, required: false, pending: 2, warning: null, ...over };
+}
+
+module.exports = { presence, busyBoard, quietBoard, floodBoard, fakeBoard, deadPort, registerFake, startHub, hoursAgo };
