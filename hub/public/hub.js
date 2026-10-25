@@ -53,7 +53,8 @@
     const sent = s ? `<div class="hub-sent" tabindex="-1"><b>You:</b> <span class="hub-sent-text">${esc(s.text)}</span>
         <span class="st-sub">· ${esc(clock(s.at))}${s.unblocked ? ' · unblocked, leaves Needs you on the next refresh' : ''}${s.delivered ? ' · delivered' : ''}</span>
         ${s.delivered === false ? `<div class="hub-undelivered" title="${esc(s.delivery_error || '')}">saved on the board, not delivered live</div>` : ''}
-        ${s.warn ? `<div class="hub-undelivered">${esc(s.warn)}</div>` : ''}</div>` : '';
+        ${s.warn ? `<div class="hub-undelivered">${esc(s.warn)}</div>` : ''}
+        ${s.unread ? `<div class="hub-nobody">${esc(s.unread)}</div>` : ''}</div>` : '';
     return `<div class="hub-reply-wrap" data-k="${k}">${sent}<form class="hub-reply" data-port="${port}" data-id="${id}"${s && s.unblocked ? ' hidden' : ''}>
       <input type="text" class="hub-reply-text" name="text" value="${esc(r.draft)}" placeholder="Reply to the agent" maxlength="4000"
         autocomplete="off" enterkeyhint="send" aria-label="Reply to #${id} ${esc(title)}"${r.sending ? ' disabled' : ''}>
@@ -96,7 +97,8 @@
     r.sending = false;
     if (body && body.saved) {
       r.sent = { text: body.text || text || 'Done', at: (body.note && body.note.created_at) || new Date().toISOString(), delivered: body.delivered,
-        delivery_error: body.delivery_error || null, unblocked: unblock && status < 300, warn: status === 409 ? `Saved, but ${body.error || 'it was not blocked'}.` : null };
+        delivery_error: body.delivery_error || null, unblocked: unblock && status < 300, warn: status === 409 ? `Saved, but ${body.error || 'it was not blocked'}.` : null,
+        unread: body.orchestrator && !body.orchestrator.online ? `Saved on the board. ${body.orchestrator.name || body.orchestrator.expected_name || 'Its orchestrator'} is offline, so nobody is reading it live yet.` : null };
       r.draft = '';
       if (r.sent.unblocked) setTimeout(load, 2500);
     } else {
@@ -104,6 +106,47 @@
       r.error = `Not sent: ${why.replace(/\.$/, '')}. Your text is kept; try again.`;
     }
     paintReply(k, port, id, title, hadFocus && (r.error || !r.sent.unblocked ? 'input' : 'sent'));
+  }
+
+  // ---------- the orchestrator ----------
+  // Green dot when its pid is alive, grey when not; "since" when it came online or was last seen.
+  // Start orchestrator (hub config spawn_orchestrator) shows only when it is offline and configured.
+  const starts = new Map(); // port -> { busy, msg, error }
+  function orchLine(b) {
+    const o = b.orchestrator || {};
+    const st = starts.get(b.port) || {};
+    const name = o.name || o.expected_name;
+    let text;
+    if (!o.registered) text = `<span class="hub-orch-name">No orchestrator ever registered</span>${o.expected_name ? ` <span class="st-sub">(expected ${esc(o.expected_name)})</span>` : ''}`;
+    else if (o.online) text = `<span class="hub-orch-name">${esc(o.name)}</span> <span class="st-sub">online since ${esc(ago(o.since))}</span>`;
+    else text = `<span class="hub-orch-name">${esc(o.name)}</span> <span class="st-sub">offline${o.since ? ` since ${esc(ago(o.since))}` : ''}</span>`;
+    const btn = !o.online && data && data.spawn_orchestrator
+      ? `<button type="button" class="op-btn hub-start-orch" data-port="${b.port}"${st.busy ? ' disabled' : ''} title="Runs the hub's spawn_orchestrator command${name ? ' for ' + esc(name) : ''}">${st.busy ? 'Starting...' : 'Start orchestrator'}</button>` : '';
+    const warn = o.alarm && o.warning ? `<div class="hub-orch-warn">${esc(o.warning)}</div>` : '';
+    const msg = st.error ? `<div class="hub-orch-msg hub-reply-err">${esc(st.error)}</div>` : st.msg ? `<div class="hub-orch-msg st-sub">${esc(st.msg)}</div>` : '';
+    return `<div class="hub-orch${o.alarm ? ' hub-orch-alarm' : ''}" data-port="${b.port}" title="${o.pid ? `pid ${o.pid}` : ''}${o.last_seen ? ` · last seen ${esc(o.last_seen)}` : ''}">
+      <span class="hub-dot hub-orch-dot ${o.online ? 'on' : 'off'}" aria-hidden="true"></span><span class="hub-orch-label">Orchestrator:</span> ${text} ${btn}${warn}${msg}</div>`;
+  }
+  async function startOrch(port) {
+    const st = starts.get(port) || {};
+    if (st.busy) return;
+    starts.set(port, { busy: true });
+    paintOrch(port);
+    let status = 0, body = null;
+    try {
+      const r = await fetch('/api/orchestrator/start', { method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-request': '1' }, body: JSON.stringify({ port }) });
+      status = r.status; body = await r.json().catch(() => null);
+    } catch {}
+    starts.set(port, body && body.started
+      ? { msg: `Started${body.pid ? ` (pid ${body.pid})` : ''}. It shows online once it registers itself.` }
+      : { error: `Not started: ${(body && body.error) || (status ? `the hub answered HTTP ${status}` : 'the hub did not answer')}` });
+    paintOrch(port);
+    if (body && body.started) setTimeout(load, 5000);
+  }
+  function paintOrch(port) {
+    const b = data && data.boards.find(x => x.port === port);
+    if (!b) return;
+    for (const el of document.querySelectorAll(`.hub-orch[data-port="${port}"]`)) el.outerHTML = orchLine(b);
   }
 
   const empty = t => `<div class="st-panel st-empty">${t}</div>`;
@@ -131,6 +174,7 @@
         ${blocked ? `<span class="hub-blocked" title="${blocked} waiting on you">${blocked} on you</span>` : ''}
         ${other ? `<span class="hub-blocked-other" title="${other} blocked for other reasons (crashes, agent notes)">${other} blocked</span>` : ''}</div>
       <div class="hub-card-state">${state}</div>
+      ${orchLine(b)}
       ${b.note?.headline ? `<div class="hub-card-headline hub-clamp">${md(b.note.headline)}</div>` : b.online ? '<div class="hub-card-headline st-empty">No note from the orchestrator yet.</div>' : ''}
       ${g ? `<div class="hub-card-goal"><b>Now:</b> ${esc(g.id)} ${esc(g.name)}</div>
         <div class="st-bar"><span style="width:${g.pct}%"></span></div>
@@ -192,12 +236,12 @@
     const url = boardUrl(b);
     const links = `<div class="hub-links"><a class="op-btn" href="${url}/">Open the board</a><a class="op-btn ghost" href="${url}/status.html">Its status page</a><a class="op-btn ghost" href="${url}/live">Live</a></div>`;
     if (!b.online) {
-      return `<section><h2>${esc(b.name)}</h2>${links}${empty(`This board does not answer on port ${b.port}${b.offline_reason ? ` (${esc(b.offline_reason)})` : ''}.`)}</section>`;
+      return `<section><h2>${esc(b.name)}</h2>${orchLine(b)}${links}${empty(`This board does not answer on port ${b.port}${b.offline_reason ? ` (${esc(b.offline_reason)})` : ''}.`)}</section>`;
     }
     const s = b.stats || {};
     const stats = [['done', s.done], ['working', s.in_progress], ['ready', s.ready], ['review', (s.review || 0) + (s.approved || 0)], ['blocked', s.blocked], ['backlog', s.backlog]]
       .filter(([, v]) => v != null).map(([k, v]) => `<span class="st-stat"><b>${esc(v)}</b> ${k}</span>`).join('');
-    return `<section class="hub-board-head"><h2>${esc(b.name)} <small>port ${b.port}${b.paused ? ' · paused' : ''}</small></h2><div class="st-stats">${stats}</div>${links}</section>
+    return `<section class="hub-board-head"><h2>${esc(b.name)} <small>port ${b.port}${b.paused ? ' · paused' : ''}</small></h2><div class="st-stats">${stats}</div>${orchLine(b)}${links}</section>
       <section><h2>From the orchestrator <small>${esc(ago(b.note?.written_at))}</small></h2>${renderNote(b.note, b.port)}</section>
       <section><h2>Goals <small>a goal is reached only when its exit test is recorded</small></h2><div class="st-goals">${renderGoals(b)}</div></section>
       <section class="st-two">
@@ -261,6 +305,8 @@
     select(list[(j + list.length) % list.length].dataset.tab, true);
   });
   $('hub-panels').addEventListener('click', e => {
+    const start = e.target.closest('.hub-start-orch');
+    if (start) { e.preventDefault(); startOrch(Number(start.dataset.port)); return; }
     const more = e.target.closest('.hub-more');
     if (more) {
       const k = more.dataset.ck;
@@ -298,7 +344,7 @@
   });
   window.addEventListener('resize', () => fitClamps());
   document.fonts?.ready.then(() => fitClamps());
-  $('hub-panels').addEventListener('click', e => { const c = e.target.closest('.hub-card'); if (c) { e.preventDefault(); select(c.dataset.tab, true); } });
+  $('hub-panels').addEventListener('click', e => { const c = !e.target.closest('.hub-start-orch') && e.target.closest('.hub-card'); if (c) { e.preventDefault(); select(c.dataset.tab, true); } });
   window.addEventListener('hashchange', () => { const k = location.hash.slice(1); if (k && k !== selected && document.getElementById('tab-' + k)) select(k); });
 
   async function load() {

@@ -5,7 +5,7 @@
 const express = require('express');
 const fs = require('fs');
 const http = require('http');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const path = require('path');
 const { allowList } = require('../lib/allow');
 const registry = require('../lib/registry');
@@ -36,6 +36,10 @@ function loadHubConfig(file) {
     // Replies from the Needs you boxes: signed with human_name; on_reply (argv array, no shell) delivers them live.
     human_name: typeof cfg.human_name === 'string' && cfg.human_name.trim() ? cfg.human_name.trim() : 'human',
     on_reply: Array.isArray(cfg.on_reply) && cfg.on_reply.length && cfg.on_reply.every(a => typeof a === 'string') ? cfg.on_reply : null,
+    // "Start orchestrator" on a board whose orchestrator is offline: argv array, no shell, run detached.
+    spawn_orchestrator: Array.isArray(cfg.spawn_orchestrator) && cfg.spawn_orchestrator.length && cfg.spawn_orchestrator.every(a => typeof a === 'string') ? cfg.spawn_orchestrator : null,
+    // true: every board with work and no live orchestrator shows red (a board's own board.json can say so too).
+    require_orchestrator: !!cfg.require_orchestrator,
     reply_timeout_ms: cfg.reply_timeout_ms ?? 5000,
     hook_timeout_ms: cfg.hook_timeout_ms ?? 15000,
     human_markers: [...new Set(HUMAN_MARKERS.concat(cfg.human_markers || []).map(m => String(m).toLowerCase().trim()).filter(Boolean))],
@@ -61,13 +65,31 @@ function waitsOnHuman(reason, markers = HUMAN_MARKERS) {
   return !!r && markers.some(m => r.includes(String(m).toLowerCase()));
 }
 
+// A board's orchestrator presence for the page: the board's live answer (re-checked by the board on
+// every read), else its registry entry (online re-checked from pid + start time by registry.list),
+// else only the expected name a board from before presence existed has. alarm: required and work
+// waits with no live orchestrator.
+function presenceOf(e, fromBoard, cfg = {}) {
+  let p = fromBoard && typeof fromBoard === 'object' ? fromBoard : e.presence && typeof e.presence === 'object' ? e.presence : null;
+  if (!p) {
+    const expected = typeof e.orchestrator === 'string' && e.orchestrator.trim() ? e.orchestrator.trim() : null;
+    p = { name: null, expected_name: expected, online: false, pid: null, since: null, last_seen: null, registered: false, required: false, pending: null, warning: null };
+  }
+  p = { ...p, registered: p.registered ?? !!p.pid };
+  const required = !!(p.required || cfg.require_orchestrator);
+  return { ...p, required, alarm: required && !p.online && (p.pending == null || p.pending > 0) };
+}
+
+// The orchestrator's name for hooks: the registered one, else the board's expected one.
+const orchName = (e, p) => (p && p.name) || (p && p.expected_name) || (typeof e.orchestrator === 'string' ? e.orchestrator : '') || '';
+
 // One board's summary for the hub: everything its own Status page shows, in one object.
 async function boardView(e, cfg, now = Date.now()) {
   const base = apiBase(e);
   const view = {
     name: e.name, port: e.port, default_project: e.default_project || null, accent: e.accent || registry.DEFAULT_ACCENT,
     api: base, started_at: e.started_at || null, stopped_at: e.stopped_at || null,
-    online: false, offline_reason: null, idle: true, paused: false,
+    online: false, offline_reason: null, idle: true, paused: false, orchestrator: presenceOf(e, null, cfg),
     stats: null, note: null, goals: null, now_goal: null, working: [], attention: [], needs_human: [], blocked_other: [], recent: [], open: 0,
   };
   if (e.stopped) { view.offline_reason = e.stopped_at ? 'stopped' : 'process gone'; return view; }
@@ -82,6 +104,7 @@ async function boardView(e, cfg, now = Date.now()) {
   view.online = true;
   view.stats = stats.data;
   view.paused = !!(state.data && state.data.paused);
+  view.orchestrator = presenceOf(e, state.data && state.data.orchestrator, cfg);
   view.note = noteView(notes.data, now);
   view.goals = computeGoals(goals.data && goals.data.goals, bounties);
   const nowGoal = view.goals && view.goals.find(g => g.now);
@@ -112,7 +135,7 @@ async function boardView(e, cfg, now = Date.now()) {
 // Active boards first, then idle ones, then offline; by name within each.
 // on_reply: each argv element gets its placeholders filled in one pass (a {text} holding "{id}" stays
 // literal) and runs with execFile, never a shell. Resolves {ok, error}; never rejects.
-const PLACEHOLDER = /\{(board|project|port|id|title|text|unblock|orchestrator)\}/g;
+const PLACEHOLDER = /\{(board|project|port|id|title|text|unblock|orchestrator|name|board_dir)\}/g;
 const fillArgv = (argv, vals) => argv.map(a => a.replace(PLACEHOLDER, (m, k) => String(vals[k] ?? '')));
 
 function runHook(argv, ms) {
@@ -159,17 +182,50 @@ async function reply(cfg, body) {
   const saved = (status >= 200 && status < 300) || (status === 409 && !!(out && out.note));
   const res = { ...(out && typeof out === 'object' ? out : {}), saved, delivered: null, text, unblock };
   if (!saved) return [status, res];
+  // Is anyone reading it live? The page says so when the board's orchestrator is offline.
+  const o = await getJson(`${base}/api/orchestrator`, cfg.fetch_timeout_ms);
+  const presence = presenceOf(entry, o.ok ? o.data : null, cfg);
+  res.orchestrator = { name: presence.name, expected_name: presence.expected_name, online: !!presence.online, registered: !!presence.registered };
   if (cfg.on_reply) {
     const b = await getJson(`${base}/api/bounties/${id}`, cfg.fetch_timeout_ms);
     const argv = fillArgv(cfg.on_reply, {
       board: entry.name, project: (b.data && b.data.project_id) || entry.default_project, port, id,
-      title: b.data && b.data.title, text, unblock: String(unblock), orchestrator: entry.orchestrator,
+      title: b.data && b.data.title, text, unblock: String(unblock), orchestrator: orchName(entry, presence),
     });
     const h = await runHook(argv, cfg.hook_timeout_ms);
     res.delivered = h.ok;
     if (!h.ok) res.delivery_error = h.error;
   }
   return [status, res];
+}
+
+// POST /api/orchestrator/start {port}: run spawn_orchestrator for a registered board whose
+// orchestrator is offline. Detached and unwaited (an orchestrator runs for hours); placeholders
+// {board} {project} {port} {name} {board_dir}, filled per argument, no shell. Returns [status, body].
+async function startOrchestrator(cfg, body) {
+  if (!cfg.spawn_orchestrator) return [404, { error: 'spawn_orchestrator is not configured in the hub config' }];
+  const port = Number(body && body.port);
+  if (!Number.isInteger(port) || port <= 0) return [400, { error: 'port must be a positive integer' }];
+  const entry = registry.list(cfg.registry_dir).find(e => e.port === port);
+  if (!entry) return [404, { error: `no board is registered on port ${port}` }];
+  const o = entry.stopped ? { ok: false } : await getJson(`${apiBase(entry)}/api/orchestrator`, cfg.fetch_timeout_ms);
+  const presence = presenceOf(entry, o.ok ? o.data : null, cfg);
+  if (presence.online) return [409, { error: `${presence.name} is already online (pid ${presence.pid})`, orchestrator: presence }];
+  const argv = fillArgv(cfg.spawn_orchestrator, {
+    board: entry.name, project: entry.default_project || '', port, name: orchName(entry, presence), board_dir: entry.board_dir || '',
+  });
+  const r = await spawnDetached(argv);
+  if (!r.ok) return [500, { error: `could not start the orchestrator: ${r.error}`, argv }];
+  return [202, { started: true, pid: r.pid, argv, name: orchName(entry, presence) || null }];
+}
+
+function spawnDetached(argv) {
+  return new Promise(resolve => {
+    let c;
+    try { c = spawn(argv[0], argv.slice(1), { detached: true, stdio: 'ignore' }); } catch (e) { return resolve({ ok: false, error: e.message }); }
+    c.once('spawn', () => { c.unref(); resolve({ ok: true, pid: c.pid }); });
+    c.once('error', e => resolve({ ok: false, error: e.code === 'ENOENT' ? `${argv[0]}: not found` : e.message }));
+  });
 }
 
 const rank = b => (!b.online ? 2 : b.idle ? 1 : 0);
@@ -206,7 +262,7 @@ function createHub(cfg = loadHubConfig()) {
       // Links the browser follows: the board's port on whatever host the page was opened on.
       const host = req.hostname && req.hostname.includes(':') ? `[${req.hostname}]` : req.hostname || '127.0.0.1';
       const boards = data.boards.map(b => ({ ...b, url: `${req.protocol}://${host}:${b.port}` }));
-      res.set('cache-control', 'no-store').json({ ...data, boards });
+      res.set('cache-control', 'no-store').json({ ...data, boards, spawn_orchestrator: !!cfg.spawn_orchestrator });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   // The page's reply boxes post here, never to a board: a custom header and a JSON body, so a
@@ -217,6 +273,14 @@ function createHub(cfg = loadHubConfig()) {
   }, express.json({ limit: '64kb' }), async (req, res) => {
     const [status, body] = await reply(cfg, req.body);
     if (body.saved) cached = null;
+    res.status(status).json(body);
+  }, (err, req, res, next) => res.status(400).json({ error: 'bad JSON: ' + err.message }));
+  app.post('/api/orchestrator/start', (req, res, next) => {
+    if (req.get('x-hub-request') !== '1' || !req.is('application/json')) return res.status(403).json({ error: 'needs X-Hub-Request: 1 and a JSON body' });
+    next();
+  }, express.json({ limit: '4kb' }), async (req, res) => {
+    const [status, body] = await startOrchestrator(cfg, req.body);
+    if (body.started) cached = null;
     res.status(status).json(body);
   }, (err, req, res, next) => res.status(400).json({ error: 'bad JSON: ' + err.message }));
   app.get('/health', (req, res) => res.json({ ok: true }));
@@ -234,7 +298,7 @@ function createHub(cfg = loadHubConfig()) {
   };
 }
 
-module.exports = { createHub, loadHubConfig, aggregate, boardView, apiBase, waitsOnHuman, fillArgv, reply, HUMAN_MARKERS };
+module.exports = { createHub, loadHubConfig, aggregate, boardView, apiBase, waitsOnHuman, fillArgv, reply, startOrchestrator, presenceOf, HUMAN_MARKERS };
 
 if (require.main === module) {
   const cfg = loadHubConfig();
