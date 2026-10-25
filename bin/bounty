@@ -36,6 +36,14 @@ Orchestrator
   bounty live [--json] [--watch [SEC]]  what every slot is doing now: bounty, pipeline stage, verify/CI stage,
                                    last actions, progress note, lock waits/holders, tester, queue, last 24 h
   bounty leaderboard [--json]      the slots' loot, dones, failures, streak and $ cost (verified work only)
+  bounty agents register --pid PID --name NAME [--bounty ID] [--kind worker|orchestrator|bridge]
+                                   put a process you started (an agent, a cloud/remote bridge) in the board's
+                                   manifest (run/agents.json): stopped when its bounty is done or failed, and
+                                   on idle shutdown (orchestrators never are)
+  bounty cleanup [--kill] [--all] [--orchestrators] [--json]
+                                   every manifest process: pid, name, kind, bounty, age, RSS, stale or not.
+                                   Dry run by default; --kill stops the stale ones, --all also the live
+                                   non-orchestrator ones (--orchestrators adds those). Only manifest pids.
   bounty project list | bounty project add ID --repo PATH [--main main] [--wt-cmd CMD] [--wt-path TPL] [--verify CMD]
 Workers (BOUNTY_ID / BOUNTY_SLOT from the environment)
   bounty start                     bounty progress "note" [--check N]...     (both print unread notes)
@@ -52,7 +60,7 @@ function parse(argv) {
     if (a.startsWith('--')) {
       const k = a.slice(2);
       const nxt = argv[i + 1];
-      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help', 'peek'].includes(k);
+      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help', 'peek', 'kill', 'orchestrators'].includes(k);
       const v = flag || nxt === undefined || nxt.startsWith('--') ? true : (i++, nxt);
       if (opt[k] === undefined) opt[k] = v; else opt[k] = [].concat(opt[k], v);
     } else pos.push(a);
@@ -428,11 +436,43 @@ async function main() {
       const every = Math.max(2, Number(opt.watch === true ? 5 : opt.watch) || 5) * 1000;
       for (;;) { const t = await once(); process.stdout.write('\x1b[2J\x1b[H' + t); await new Promise(r => setTimeout(r, every)); }
     }
-    case 'leaderboard': case 'agents': {
+    case 'agents':
+      if (pos[0] === 'register') {
+        if (!opt.pid || opt.pid === true) die('usage: bounty agents register --pid PID --name NAME [--bounty ID] [--kind worker|orchestrator|bridge]');
+        const body = { pid: Number(opt.pid), name: opt.name === true ? '' : opt.name, kind: opt.kind || 'worker' };
+        if (opt.bounty) body.bounty = Number(opt.bounty);
+        const e = await api('POST', '/agents/spawned', body);
+        console.log(`registered ${e.kind} '${e.name}' pid ${e.pid}${e.bounty ? ` for #${e.bounty}` : ''}`);
+        return;
+      }
+      if (pos[0] === 'list') { console.log(JSON.stringify(await api('GET', '/agents/spawned'), null, 2)); return; }
+      // fall through: `bounty agents` is the leaderboard
+    case 'leaderboard': {
       const rows = await api('GET', '/agents/leaderboard');
       if (opt.json) { console.log(JSON.stringify(rows, null, 2)); return; }
       console.log('slot            loot     done  failed  streak  cost');
       for (const a of rows) console.log(`${a.id.padEnd(14)} ${String(a.total_loot).padStart(6)}  ${String(a.missions_completed).padStart(5)}  ${String(a.missions_failed).padStart(6)}  ${String(a.streak).padStart(6)}  $${a.cost_usd.toFixed(2)}`);
+      return;
+    }
+    case 'cleanup': {
+      const r = await api('POST', '/agents/cleanup', { kill: !!opt.kill, all: !!opt.all, orchestrators: !!opt.orchestrators });
+      if (opt.json) { console.log(JSON.stringify(r, null, 2)); return; }
+      const age = s => (s == null ? '?' : s >= 86400 ? `${(s / 86400).toFixed(1)}d` : s >= 3600 ? `${(s / 3600).toFixed(1)}h` : `${Math.round(s / 60)}m`);
+      const mb = kb => `${(kb / 1024).toFixed(0)} MB`;
+      const row = a => `${String(a.pid).padEnd(8)} ${String(a.name).slice(0, 18).padEnd(18)} ${a.kind.padEnd(12)} ${(a.bounty ? `#${a.bounty} ${a.bounty_status || '?'}` : '-').padEnd(16)} ${age(a.age_seconds).padStart(6)} ${mb(a.rss_kb).padStart(8)}  ${(a.stale ? `STALE: ${a.stale_why}` : 'ok').padEnd(30)} ${a.action}`;
+      const head = 'pid      name               kind         bounty              age      RSS  state                          action';
+      const groups = [['Agents', r.agents.filter(a => a.kind !== 'bridge')], ['Bridge sessions', r.agents.filter(a => a.kind === 'bridge')]];
+      console.log(`board idle ${r.idle_minutes} min (idle shutdown ${r.idle_shutdown_minutes ? `after ${r.idle_shutdown_minutes} min` : 'off'})`);
+      for (const [title, rows] of groups) {
+        const total = rows.reduce((n, a) => n + a.rss_kb, 0);
+        console.log(`\n${title} (${rows.length}, ${mb(total)})`);
+        if (!rows.length) { console.log('  none'); continue; }
+        console.log(head);
+        for (const a of rows) console.log(row(a));
+      }
+      const picked = r.agents.filter(a => a.action !== 'keep').length;
+      console.log(r.kill ? `\nstopped ${picked} (SIGTERM now, SIGKILL after the grace period)` : `\ndry run: ${picked} would be stopped. Add --kill to stop them${r.all ? '' : ' (--all for every non-orchestrator entry)'}.`);
+      console.log('Only processes in the manifest are listed or signalled; register yours with `bounty agents register`.');
       return;
     }
     case 'import': {

@@ -72,4 +72,5 @@ Every agent has a specific, stable name plus the project tag for the project's w
 - You orchestrate; workers write the task code. Doing the work yourself skips the gates that make "done" mean something.
 - Never mark a bounty done or a goal reached without evidence on main or a recorded run.
 - One board per project, its own port, unit, CLI, theme and goals.
+- **Every agent you start is registered, and nothing outlives its bounty.** Board workers are tracked for you. Anything you launch by hand (a worker, a remote-control or cloud bridge) goes in the manifest right away: `bounty agents register --pid PID --name NAME --bounty ID --kind worker|bridge`; register yourself with `--kind orchestrator`. The board stops a bounty's worker and registered agents when it is done or failed, and every non-orchestrator agent after `idle_shutdown_minutes` with nothing active. Check `bounty cleanup` each round and `bounty cleanup --kill` the stale ones. Never kill by pattern (`pkill claude`): the user's own sessions are not in the manifest and must survive.
 - Keep secrets, signing material and real user data out of bounties, evidence and the board's public files.

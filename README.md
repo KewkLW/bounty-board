@@ -317,6 +317,39 @@ bounty replies --all      # read ones too (marks the unread among them read; add
 bounty replies --json
 ```
 
+## Agent lifecycle: nothing outlives its bounty
+
+Agents that finish and never exit add up (a Claude session is a few hundred MB; a cloud or remote bridge is ~200 MB). The board stops every process it is responsible for once its work is over, and never touches anything else.
+
+**The manifest.** `<board dir>/run/agents.json` (config `run_dir`, default `run/` next to `board.json`) lists every process the board may stop: each board worker (`pid`, `start_time`, `slot`, `bounty`, `attempt`) and every agent registered by hand. It is rewritten atomically (temp file + rename), and an entry is dropped once its process is gone.
+
+```bash
+bounty agents register --pid 12345 --name Rook --bounty 12 --kind worker      # an agent you launched for #12
+bounty agents register --pid 12399 --name Rook-bridge --bounty 12 --kind bridge # its remote-control / cloud bridge
+bounty agents register --pid 12000 --name Marshal --kind orchestrator          # yourself: the agent process pid, not a sub-shell $$ (never auto-stopped)
+```
+
+(`POST /api/agents/spawned` with `{pid, name, kind, bounty}`. A worker slot may register only for a bounty, and never an orchestrator.)
+
+**When the board stops a process**
+- **Done or failed**: when a bounty reaches done (merge check, `bounty done`, `close-merged`) or failed (`bounty fail`, attempt cap), its board worker and every agent registered with `--bounty` for it are stopped. Orchestrator entries never are.
+- **Idle shutdown**: when no bounty has been in `in_progress`, `review` or `approved` for `idle_shutdown_minutes` (default 120; `0` disables), every registered non-orchestrator agent is stopped, including one registered while the board was already idle, and a board event says which. A paused board counts as idle.
+- **`bounty cleanup --kill`** (below).
+
+**How it stops one**: SIGTERM (to the process group when the process leads one, as board workers do; otherwise to that pid alone), then SIGKILL after `stop_grace_seconds` (default: `watchdog.kill_grace_seconds`, 15). Before each signal the board re-reads the pid's start time from `/proc` and compares it with the recorded one, so a pid the kernel has handed to another process is never signalled. If a group leader exits during the grace period, the SIGKILL goes only to the group members recorded at SIGTERM time that still run with their recorded start time, never to the group id itself, which may have been reused. Each stop is logged on the bounty.
+
+**`bounty cleanup`** lists every manifest process: pid, name, kind, bounty and its status, age, RSS (the process and its children) and whether it is stale (its bounty is done or failed, or the board has been idle past `idle_shutdown_minutes`). Bridge sessions get their own section with their RSS total.
+
+```bash
+bounty cleanup                    # dry run: what would be stopped
+bounty cleanup --kill             # stop the stale ones
+bounty cleanup --kill --all       # also every live non-orchestrator entry
+bounty cleanup --kill --all --orchestrators   # orchestrator entries too (only ever by name, never automatically)
+bounty cleanup --json
+```
+
+It never signals a process that is not in the manifest: your own terminal sessions, and anything nobody registered, are safe.
+
 ## Orchestrator day to day
 
 ```bash
@@ -332,6 +365,8 @@ bounty show 12 / bounty log 12         # history, attempts, logs, review notes
 bounty approve 12 | bounty reject 12 "what to fix"
 # merge the approved branch into main yourself; the board marks it done
 bounty close-merged 59 --commit 8ae0fb5 "evidence"   # external work, no submit/review
+bounty agents register --pid PID --name N [--bounty ID] [--kind worker|orchestrator|bridge]
+bounty cleanup [--kill] [--all]        # agents the board started or you registered: stale ones, RSS
 ```
 
 Without `--project`, `bounty add` uses `default_project` from config, or the only non-legacy project if there is exactly one.
