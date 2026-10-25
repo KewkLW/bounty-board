@@ -22,6 +22,15 @@
     "{project}",
     "[{board} #{id} {title}] {text}"
   ],
+  "spawn_orchestrator": [
+    "/path/to/your/agent-launcher",
+    "--name",
+    "{name}",
+    "--project",
+    "{project}",
+    "--cwd",
+    "{board_dir}"
+  ],
   "reply_timeout_ms": 5000,
   "hook_timeout_ms": 15000
 }

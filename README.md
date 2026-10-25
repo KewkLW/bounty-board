@@ -350,10 +350,49 @@ bounty cleanup --json
 
 It never signals a process that is not in the manifest: your own terminal sessions, and anything nobody registered, are safe.
 
+## Orchestrator
+
+Every board has one orchestrator: the agent that files the work, answers blocks and merges. The board knows who it is and whether it is running, so a reply from the hub never goes to nobody without the page saying so.
+
+**Registered by name, online from its pid.** The orchestrator registers itself as the first thing it does in every session:
+
+```bash
+bounty orchestrator register                  # name from $AGENT_NAME, else board.json "orchestrator"; pid: your agent process
+bounty orchestrator register --name Marshal --pid 12000
+bounty orchestrator                           # Marshal ONLINE (pid 12000, since 3m ago)
+bounty orchestrator --json
+```
+
+Without `--pid` the CLI walks up from itself to the first ancestor that is not a shell (`bash`, `sh`, `zsh`, `dash`, `fish`, `env`, `timeout`, ..., or a `<prefix>-bounty` wrapper script) and registers that: the agent process that ran the command. An agent runs each command in a shell, often a shell inside a shell, so `$$` and `$PPID` are sub-shells that exit right away; never register those. The CLI prints the process name it picked (e.g. `claude`). To check or pick it by hand: `ps -o pid,ppid,comm -p $PPID` and follow `ppid` up until `comm` is your agent, then pass `--pid`. Worker slots cannot register an orchestrator.
+
+`bounty agents register --kind orchestrator` does the same (it is the manifest route from "Agent lifecycle"); both write the agent manifest (`run/agents.json`) and `run/orchestrator.json`, which keeps the name, pid, start time and when it was last seen after the process is gone.
+
+- **One orchestrator per board.** Registering a new one replaces the previous entry; the previous process is not signalled (it may still be finishing a handoff). A board event records the change.
+- **Online** = the recorded pid runs and its start time (from `/proc/<pid>/stat`) is the recorded one. It is re-checked on every read, so a dead pid, or a pid the kernel gave to another process, is offline immediately; nothing has to report in. While online `since` is when it registered; once offline `since` is when it was last seen alive (`last_seen`).
+- **The board's orchestrator** is the newest live manifest entry of kind orchestrator (`run/orchestrator.json` records it; a manifest from before this existed is read too). `board.json` `"orchestrator"` (optional) is only the expected name: the default for `register` and what the hub shows before anyone registered.
+
+| Where | What |
+|---|---|
+| `GET /api/orchestrator` | `{name, expected_name, online, pid, since, last_seen}` plus `start_time`, `registered` (ever), `required`, `pending` (bounties ready, in progress or blocked) and `warning` |
+| `POST /api/orchestrator` | `{pid, name}`: register (name defaults to `board.json` `orchestrator`); 403 for worker slots, 404 for a pid that is not running |
+| `GET /api/state`, `GET /api/live` | the same object under `orchestrator`; `bounty status` and `bounty live` print it |
+| hub registry entry (`<registry dir>/<port>.json`) | the same object under `presence`, rewritten by the board whenever it changes, plus `board_dir`. The hub re-checks `online` from `pid` + `start_time` when it reads the file, so a board that is down still shows the truth |
+
+**Nobody orchestrating.** When the board has bounties in `ready`, `in_progress` or `blocked` and no live orchestrator, `warning` says so, the board logs `[orchestrator] WARNING: ...` at startup (and when it happens later), and `bounty status` shows it. With `"require_orchestrator": true` in `board.json` (or in `config/hub.json` for every board) the hub shows that board's orchestrator line in red.
+
+**On the hub.** Every card and project tab has an orchestrator line: the name with a green dot and "online since ..." or a grey dot and "offline since ...", and "No orchestrator ever registered" (with the expected name) when nobody has. When it is offline and `config/hub.json` has `spawn_orchestrator`, a **Start orchestrator** button runs that command; without it there is no button. A reply sent from the hub while the orchestrator is offline is still saved on the board (the worker reads it in its inbox, the orchestrator in `bounty replies` once it is back), and the page says nobody is reading it live yet.
+
+```json
+"spawn_orchestrator": ["/path/to/your/agent-launcher", "--name", "{name}", "--project", "{project}", "--cwd", "{board_dir}", "--board-url", "http://127.0.0.1:{port}"]
+```
+
+An argv array, run without a shell (placeholders filled per argument: `{board}` board name, `{project}` default project, `{port}`, `{name}` the registered name, else the expected one, `{board_dir}` the board's config directory). The hub starts it detached and does not wait for it; the new orchestrator shows online once it runs `bounty orchestrator register`. The button posts `POST /api/orchestrator/start {port}` with `X-Hub-Request: 1` (403 without it, 404 when not configured or not a registered board, 409 when the orchestrator is already online).
+
 ## Orchestrator day to day
 
 ```bash
-bounty status                          # slots, locks, counts
+bounty orchestrator register           # first, every session: you are this board's orchestrator
+bounty status                          # slots, locks, counts, orchestrator
 bounty list [--project P] [--status ready,blocked]
 bounty add "Title" --desc "..." --criteria "..." --type bug --tier B --slot opus-1 [--ready]
 bounty add --file task.md              # "# Title", "## Acceptance criteria" with - [ ] lines
@@ -454,7 +493,7 @@ node hub/server.js          # http://localhost:3770
 - Then one tab per project with that board's full status (note, goals with their roads, working, needs attention, finished in 24 h) in the board's accent color, and links to the board, its Status page and Live. Tabs work with the arrow keys, Home and End.
 - The page refreshes every 30 seconds and fits a phone.
 
-**How boards are found.** Every board writes `$XDG_STATE_HOME/totally-not-a-kanban/boards/<port>.json` (default `~/.local/state/...`) when it starts: name, port, default project, public dir, accent, pid. The write is atomic (temp file and rename). A clean exit marks the file stopped. The hub reads that directory on every request, so a board started later shows up without restarting the hub; a board that does not answer, or whose process is gone, shows as offline. Stopped boards drop off after 7 days. Existing board configs need no changes. Optional keys in `board.json`: `name` (else the default project's name, else the project id title-cased, `my-garden` as "My Garden"), `accent` (else `--accent` or `--blue` from the board's `op.css`) and `orchestrator` (the name of the agent orchestrating this board, for `on_reply`). `BOUNTY_REGISTRY_DIR` moves the directory for boards and hub alike.
+**How boards are found.** Every board writes `$XDG_STATE_HOME/totally-not-a-kanban/boards/<port>.json` (default `~/.local/state/...`) when it starts: name, port, default project, public dir, accent, pid. The write is atomic (temp file and rename). A clean exit marks the file stopped. The hub reads that directory on every request, so a board started later shows up without restarting the hub; a board that does not answer, or whose process is gone, shows as offline. Stopped boards drop off after 7 days. Existing board configs need no changes. Optional keys in `board.json`: `name` (else the default project's name, else the project id title-cased, `my-garden` as "My Garden"), `accent` (else `--accent` or `--blue` from the board's `op.css`) and `orchestrator` (the expected name of the agent orchestrating this board, for `on_reply`; see "Orchestrator" for presence). The entry also carries the orchestrator's presence (`presence`) and the board's config dir (`board_dir`). `BOUNTY_REGISTRY_DIR` moves the directory for boards and hub alike.
 
 The hub server fetches each board's `/api/bounties`, `/api/bounties/stats`, `/api/state`, `status-goals.json` and `status-notes.json` over loopback (a browser could not read the other ports) and serves one aggregated JSON at `GET /api/hub`.
 
@@ -466,7 +505,7 @@ The hub server fetches each board's `/api/bounties`, `/api/bounties/stats`, `/ap
 "on_reply": ["/path/to/your/relay", "--to", "{orchestrator}", "[{board} #{id} {title}] {text}"]
 ```
 
-Placeholders, filled in each argument in one pass (a `{id}` typed in the text stays as typed): `{board}` (board name), `{project}` (the bounty's project, else the board's default), `{port}`, `{id}`, `{title}`, `{text}`, `{unblock}` (`true` or `false`), `{orchestrator}` (`orchestrator` from that board's `board.json`, copied into its registry entry; empty when unset). The hook runs after the board stored the note, and the hub waits for it up to `hook_timeout_ms` (default 15000, then it is killed). A non-zero exit, a timeout or a missing program never fails the reply: the page shows "saved on the board, not delivered live". No `on_reply` means save only. `reply_timeout_ms` (default 5000) bounds the call to the board.
+Placeholders, filled in each argument in one pass (a `{id}` typed in the text stays as typed): `{board}` (board name), `{project}` (the bounty's project, else the board's default), `{port}`, `{id}`, `{title}`, `{text}`, `{unblock}` (`true` or `false`), `{orchestrator}` (the board's registered orchestrator, else `orchestrator` from its `board.json`; empty when neither). When the orchestrator is offline the reply is still saved and the page says nobody is reading it live yet. The hook runs after the board stored the note, and the hub waits for it up to `hook_timeout_ms` (default 15000, then it is killed). A non-zero exit, a timeout or a missing program never fails the reply: the page shows "saved on the board, not delivered live". No `on_reply` means save only. `reply_timeout_ms` (default 5000) bounds the call to the board.
 
 **Config.** Port from `HUB_PORT`, `PORT`, or `port` in `config/hub.json` (copy `config/hub.example.json`; `HUB_CONFIG` points elsewhere), default 3770. `allow_cidrs` works as on the boards: loopback and Tailscale ranges by default.
 

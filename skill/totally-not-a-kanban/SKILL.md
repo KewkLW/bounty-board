@@ -9,6 +9,17 @@ A board per project. Workers are spawned by the board, one fresh agent per bount
 
 Repo: `https://github.com/KewkLW/bounty-board`. Its `README.md` is the reference for every config key, CLI verb and gate; read the sections named below before acting.
 
+## 0. Every orchestrator session starts here
+
+The first thing you do in every session where you orchestrate a board, before reading the board or filing anything: register yourself.
+
+```bash
+<prefix>-bounty orchestrator register --name <your name>   # pid: your agent process, found for you
+<prefix>-bounty orchestrator                               # check: "<your name> ONLINE (pid ..., since ...)"
+```
+
+Without `--pid` the CLI registers the first non-shell process above it, which is you, the agent; never pass `$$` or `$PPID` (sub-shells that exit at once). The board then shows you online from your pid alone, and offline the moment your process is gone. It replaces the previous orchestrator's entry without signalling it, so a handoff is: the new session registers, then the old one finishes. Until someone registers, the hub says the board has no orchestrator and replies from the hub reach nobody live (README, "Orchestrator").
+
 ## 1. First-time install (once per machine)
 
 1. Clone the repo somewhere stable (e.g. `~/bounty-board`), `npm install`, `npm test`.
@@ -24,6 +35,7 @@ Do this before any work on the project starts. Never file a project's work on an
 2. **Config** `board.json` from `config/board.example.json`:
    - a free `port` (check with `ss -ltn`; every board needs its own),
    - `default_project`, `concurrency_cap`, `db_path`, `logs_dir`, `public_dir` (step 4),
+   - `orchestrator`: the name you go by on this board (the expected name the hub shows), and `require_orchestrator: true` if the user wants a board without a live orchestrator shown in red,
    - `slots`: each slot gets a stable, unique `name` from a theme that fits the project. Names never change for the project's life.
    - `machine_rules`: the project's hard rules (private repo, no secrets, ports to avoid, how to run tests, where evidence goes). Every worker prompt carries them.
 3. **Service**: a user unit per board from `systemd/bounty-board.service` with `Environment=BOUNTY_CONFIG=<board dir>/board.json` and `Environment=BOUNTY_NO_SEED=1`. Keep `KillMode=process` so a restart never kills workers. Enable it, then `pause` dispatch until work is filed.
@@ -45,6 +57,7 @@ Do this before any work on the project starts. Never file a project's work on an
 
 ## 4. Every round while work is running
 
+- `bounty orchestrator` still says you are ONLINE (after a restart or handoff, register again first).
 - Answer blocks and questions in workers' progress notes with `note`.
 - Read every reject; fix criteria drift on your side, let real faults re-run.
 - Merge through the verify gate; never mark done by hand what is not on main.
@@ -72,5 +85,5 @@ Every agent has a specific, stable name plus the project tag for the project's w
 - You orchestrate; workers write the task code. Doing the work yourself skips the gates that make "done" mean something.
 - Never mark a bounty done or a goal reached without evidence on main or a recorded run.
 - One board per project, its own port, unit, CLI, theme and goals.
-- **Every agent you start is registered, and nothing outlives its bounty.** Board workers are tracked for you. Anything you launch by hand (a worker, a remote-control or cloud bridge) goes in the manifest right away: `bounty agents register --pid PID --name NAME --bounty ID --kind worker|bridge`; register yourself with `--kind orchestrator`. The board stops a bounty's worker and registered agents when it is done or failed, and every non-orchestrator agent after `idle_shutdown_minutes` with nothing active. Check `bounty cleanup` each round and `bounty cleanup --kill` the stale ones. Never kill by pattern (`pkill claude`): the user's own sessions are not in the manifest and must survive.
+- **Every agent you start is registered, and nothing outlives its bounty.** Board workers are tracked for you. Anything you launch by hand (a worker, a remote-control or cloud bridge) goes in the manifest right away: `bounty agents register --pid PID --name NAME --bounty ID --kind worker|bridge`; register yourself with `bounty orchestrator register` (section 0) at the start of every session. The board stops a bounty's worker and registered agents when it is done or failed, and every non-orchestrator agent after `idle_shutdown_minutes` with nothing active. Check `bounty cleanup` each round and `bounty cleanup --kill` the stale ones. Never kill by pattern (`pkill claude`): the user's own sessions are not in the manifest and must survive.
 - Keep secrets, signing material and real user data out of bounties, evidence and the board's public files.
