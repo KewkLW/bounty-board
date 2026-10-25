@@ -40,6 +40,12 @@ Orchestrator
                                    put a process you started (an agent, a cloud/remote bridge) in the board's
                                    manifest (run/agents.json): stopped when its bounty is done or failed, and
                                    on idle shutdown (orchestrators never are)
+  bounty orchestrator [--json]     who orchestrates this board: name, online (from its pid), since, last seen
+  bounty orchestrator register [--name N] [--pid P]
+                                   register yourself as this board's orchestrator (replaces the previous one,
+                                   which is not signalled). --name defaults to $AGENT_NAME, else board.json
+                                   "orchestrator". --pid defaults to your agent process: the first ancestor
+                                   of this command that is not a shell (bash, sh, zsh, ...), never a sub-shell $$
   bounty cleanup [--kill] [--all] [--orchestrators] [--json]
                                    every manifest process: pid, name, kind, bounty, age, RSS, stale or not.
                                    Dry run by default; --kill stops the stale ones, --all also the live
@@ -84,6 +90,22 @@ async function api(method, p, body) {
   if (!res.ok) die(`${res.status}: ${data && data.error ? data.error : text}`);
   return data;
 }
+const { procStat } = require(require('path').join(__dirname, '..', 'lib', 'proc'));
+const { orchLine } = require(require('path').join(__dirname, '..', 'lib', 'live'));
+// The agent that runs this command: the first ancestor that is not a shell. An agent runs its tool
+// commands in a shell (often a shell in a shell), so $$ and $PPID are sub-shells, not the agent.
+const SHELLS = ['bash', 'sh', 'zsh', 'dash', 'fish', 'ksh', 'tcsh', 'csh', 'env', 'timeout', 'nohup', 'setsid', 'stdbuf', 'xargs', 'bounty'];
+function agentPid() {
+  let pid = process.ppid;
+  for (let i = 0; i < 32 && pid > 1; i++) {
+    const st = procStat(pid);
+    if (!st) return null;
+    if (!SHELLS.includes(st.comm) && !/-bounty$/.test(st.comm)) return pid; // also skip a <prefix>-bounty wrapper script
+    pid = st.ppid;
+  }
+  return null;
+}
+const procComm = pid => (procStat(pid) || {}).comm || null;
 function die(msg) { console.error(`bounty: ${msg}`); process.exit(1); }
 function idOf(pos, i = 0) {
   const id = pos[i] || ENV_ID;
@@ -411,6 +433,7 @@ async function main() {
       const s = await api('GET', '/state');
       if (opt.json) { console.log(JSON.stringify(s, null, 2)); return; }
       console.log(`dispatcher ${s.paused ? 'PAUSED' : 'running'} | ${s.running}/${s.cap} workers | stall limit ${s.stall_minutes} min`);
+      if (s.orchestrator) console.log(`orchestrator: ${orchLine(s.orchestrator)}`);
       for (const sl of s.slots) {
         const w = sl.bounty ? `#${sl.bounty.id} ${sl.bounty.title} (since ${sl.attempt?.started_at?.slice(11, 19)}, pid ${sl.attempt?.pid})` : sl.next ? `next: #${sl.next.id} ${sl.next.title}` : '';
         console.log(`  ${sl.id.padEnd(14)} ${sl.state.padEnd(9)} ${String(sl.model || sl.runner).padEnd(7)} ${w}`);
@@ -452,6 +475,23 @@ async function main() {
       if (opt.json) { console.log(JSON.stringify(rows, null, 2)); return; }
       console.log('slot            loot     done  failed  streak  cost');
       for (const a of rows) console.log(`${a.id.padEnd(14)} ${String(a.total_loot).padStart(6)}  ${String(a.missions_completed).padStart(5)}  ${String(a.missions_failed).padStart(6)}  ${String(a.streak).padStart(6)}  $${a.cost_usd.toFixed(2)}`);
+      return;
+    }
+    case 'orchestrator': {
+      if (pos[0] === 'register') {
+        if (worker) die(`'orchestrator register' is for the orchestrator; you are worker ${SLOT}`);
+        if (opt.pid === true) die('usage: bounty orchestrator register [--name N] [--pid P]');
+        const pid = opt.pid ? Number(opt.pid) : agentPid();
+        if (!pid) die('could not find your agent process above this command; pass --pid P (the pid of your agent, e.g. from `ps -o pid,ppid,comm -p $PPID`)');
+        const name = opt.name && opt.name !== true ? opt.name : process.env.AGENT_NAME || undefined;
+        const o = await api('POST', '/orchestrator', { pid, name });
+        console.log(`registered orchestrator '${o.name}' pid ${o.pid}${opt.pid ? '' : ` (${procComm(o.pid) || 'your agent process'})`}: ${o.online ? 'online' : 'NOT online'}`);
+        return;
+      }
+      if (pos[0]) die('usage: bounty orchestrator [--json] | bounty orchestrator register [--name N] [--pid P]');
+      const o = await api('GET', '/orchestrator');
+      if (opt.json) { console.log(JSON.stringify(o, null, 2)); return; }
+      console.log(`orchestrator: ${orchLine(o)}`);
       return;
     }
     case 'cleanup': {

@@ -59,14 +59,22 @@ function createServer(cfg, { dispatch = true, seed = true } = {}) {
       if (cfg.registry_dir) {
         try {
           const proj = board.project(board.defaultProject()) || {};
-          registry.register(cfg.registry_dir, registry.entryFor(cfg, cfg.port, { name: proj.name, defaultProject: board.defaultProject(), publicDir: pub }));
+          registry.register(cfg.registry_dir, registry.entryFor(cfg, cfg.port, { name: proj.name, defaultProject: board.defaultProject(), publicDir: pub, presence: board.presence.status() }));
+          // The registry entry follows the orchestrator's presence (registered, online, offline).
+          board.presence.onChange(st => { try { registry.update(cfg.registry_dir, cfg.port, { presence: st }); } catch (e) { console.error('[registry]', e.message); } });
         } catch (e) { console.error('[registry]', e.message); }
       }
+      // No orchestrator while work waits: say so at startup (and later when it happens; see lib/orchestrator.js).
+      board.presence.startupCheck();
+      presenceTimer = setInterval(() => { try { board.presence.status(); } catch (e) { console.error('[orchestrator]', e.message); } }, (cfg.watchdog?.check_seconds || 30) * 1000);
+      presenceTimer.unref?.();
       if (dispatch) { dispatcher.start(); reviewer.start(); }
       resolve(server.address().port);
     }));
   }
+  let presenceTimer = null;
   function close() {
+    clearInterval(presenceTimer);
     dispatcher.stop(); reviewer.stop();
     if (cfg.registry_dir) { try { registry.unregister(cfg.registry_dir, cfg.port); } catch {} }
     for (const c of wss.clients) c.terminate();
