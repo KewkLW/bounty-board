@@ -60,14 +60,27 @@ test('register, online from the pid; the same object in /api/orchestrator, /api/
     const e = manifest(t).find(x => x.pid === c.pid);
     assert.deepStrictEqual([e.kind, e.name], ['orchestrator', 'Conductor'], 'it is in the agent manifest too');
 
-    // The same object everywhere (online, name, pid, since).
-    const pick = x => ({ name: x.name, expected_name: x.expected_name, online: x.online, pid: x.pid, since: x.since });
-    const state = (await call('GET', '/state')).data.orchestrator;
-    const live = (await call('GET', '/live')).data.orchestrator;
-    assert.deepStrictEqual(pick(state), pick(o));
-    assert.deepStrictEqual(pick(live), pick(o));
-    await waitFor(() => regEntry(t).presence && regEntry(t).presence.online === true, 5000);
-    assert.deepStrictEqual(pick(regEntry(t).presence), pick(o), 'the board rewrote its hub registry entry');
+    // The same object everywhere: every field, last_seen included.
+    const FULL = [...KEYS, 'start_time', 'registered', 'required', 'pending', 'warning'];
+    const pick = x => Object.fromEntries(FULL.map(k => [k, x[k]]));
+    const same = async (why) => {
+      const a = pick((await call('GET', '/orchestrator')).data);
+      assert.deepStrictEqual(pick((await call('GET', '/state')).data.orchestrator), a, `/api/state ${why}`);
+      assert.deepStrictEqual(pick((await call('GET', '/live')).data.orchestrator), a, `/api/live ${why}`);
+      await waitFor(() => regEntry(t).presence && JSON.stringify(pick(regEntry(t).presence)) === JSON.stringify(a), 5000).catch(() => {});
+      assert.deepStrictEqual(pick(regEntry(t).presence), a, `the hub registry entry ${why}`);
+      return a;
+    };
+    const first = await same('right after registering');
+    assert.deepStrictEqual(pick(o), first);
+    // last_seen advances while online (written at most every seenWriteMs): the registry follows.
+    t.board.presence.seenWriteMs = 100;
+    await new Promise(res => setTimeout(res, 250));
+    const fresh = pick((await call('GET', '/orchestrator')).data);
+    t.board.presence.seenWriteMs = 60000;
+    assert.ok(Date.parse(fresh.last_seen) > Date.parse(first.last_seen), 'last_seen was refreshed');
+    assert.deepStrictEqual(await same('after last_seen advanced'), fresh);
+    o = fresh;
     const text = await (await fetch(t.url + '/api/live?format=text')).text();
     assert.match(text, new RegExp(`orchestrator: Conductor ONLINE \\(pid ${c.pid}, since`));
     const st = await cli(t.url, ['orchestrator']);
@@ -86,6 +99,7 @@ test('register, online from the pid; the same object in /api/orchestrator, /api/
     assert.strictEqual((await call('GET', '/live')).data.orchestrator.online, false);
     assert.match((await cli(t.url, ['orchestrator'])).stdout, new RegExp(`Conductor OFFLINE \\(pid ${c.pid} gone, last seen`));
     await waitFor(() => regEntry(t).presence.online === false, 5000);
+    assert.deepStrictEqual(await same('once offline'), pick(o));
     assert.match(boardNotes(t), /orchestrator 'Conductor' registered, pid \d+[\s\S]*orchestrator 'Conductor' \(pid \d+\) is offline: its process is gone/);
   } finally { killMine(); await t.s.close(); }
 });

@@ -30,3 +30,7 @@
 - `hub-orchestrator-cards.png`: four cards: online (green), offline + required (red, Start button, warning), never registered (grey, Start), and a stopped board with a live registry presence.
 - `hub-orchestrator-tab-offline.png`, `hub-orchestrator-reply-offline.png`: a project tab with an offline orchestrator, and the reply note.
 - `hub-orchestrator-phone.png`: 390 px, no spawn configured, no Start button.
+
+## Attempt 2 (review: registry presence was not the same object)
+- `lib/orchestrator.js` `status()` builds the snapshot only from the persisted record: `last_seen` is `run/orchestrator.json` `last_seen` (refreshed by a read that finds the pid alive, at most every `seenWriteMs`, 15 s), no longer a fresh timestamp per read. `transition()` runs the listeners (the registry rewrite) whenever the serialized snapshot changes, a new `last_seen`, `pending` or `warning` included, not only on registered/online/pid/name. The WebSocket `changed('orchestrator')` still fires on state changes only.
+- `test/orchestrator.test.js`: compares every field (`name, expected_name, online, pid, since, last_seen, start_time, registered, required, pending, warning`) across `/api/orchestrator`, `/api/state`, `/api/live` and the registry entry right after registering, again after `last_seen` advances (the test lowers `seenWriteMs` to make it advance and checks that it did), and once offline.

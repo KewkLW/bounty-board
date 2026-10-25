@@ -368,7 +368,7 @@ Without `--pid` the CLI walks up from itself to the first ancestor that is not a
 `bounty agents register --kind orchestrator` does the same (it is the manifest route from "Agent lifecycle"); both write the agent manifest (`run/agents.json`) and `run/orchestrator.json`, which keeps the name, pid, start time and when it was last seen after the process is gone.
 
 - **One orchestrator per board.** Registering a new one replaces the previous entry; the previous process is not signalled (it may still be finishing a handoff). A board event records the change.
-- **Online** = the recorded pid runs and its start time (from `/proc/<pid>/stat`) is the recorded one. It is re-checked on every read, so a dead pid, or a pid the kernel gave to another process, is offline immediately; nothing has to report in. While online `since` is when it registered; once offline `since` is when it was last seen alive (`last_seen`).
+- **Online** = the recorded pid runs and its start time (from `/proc/<pid>/stat`) is the recorded one. It is re-checked on every read, so a dead pid, or a pid the kernel gave to another process, is offline immediately; nothing has to report in. While online `since` is when it registered; once offline `since` is when it was last seen alive (`last_seen`). `last_seen` is the last read that found the pid alive, persisted at most every 15 s, so every place below returns the same object, field for field.
 - **The board's orchestrator** is the newest live manifest entry of kind orchestrator (`run/orchestrator.json` records it; a manifest from before this existed is read too). `board.json` `"orchestrator"` (optional) is only the expected name: the default for `register` and what the hub shows before anyone registered.
 
 | Where | What |
@@ -376,7 +376,7 @@ Without `--pid` the CLI walks up from itself to the first ancestor that is not a
 | `GET /api/orchestrator` | `{name, expected_name, online, pid, since, last_seen}` plus `start_time`, `registered` (ever), `required`, `pending` (bounties ready, in progress or blocked) and `warning` |
 | `POST /api/orchestrator` | `{pid, name}`: register (name defaults to `board.json` `orchestrator`); 403 for worker slots, 404 for a pid that is not running |
 | `GET /api/state`, `GET /api/live` | the same object under `orchestrator`; `bounty status` and `bounty live` print it |
-| hub registry entry (`<registry dir>/<port>.json`) | the same object under `presence`, rewritten by the board whenever it changes, plus `board_dir`. The hub re-checks `online` from `pid` + `start_time` when it reads the file, so a board that is down still shows the truth |
+| hub registry entry (`<registry dir>/<port>.json`) | the same object under `presence`, rewritten by the board whenever any field of it changes (a refreshed `last_seen` included), plus `board_dir`. The hub re-checks `online` from `pid` + `start_time` when it reads the file, so a board that is down still shows the truth |
 
 **Nobody orchestrating.** When the board has bounties in `ready`, `in_progress` or `blocked` and no live orchestrator, `warning` says so, the board logs `[orchestrator] WARNING: ...` at startup (and when it happens later), and `bounty status` shows it. With `"require_orchestrator": true` in `board.json` (or in `config/hub.json` for every board) the hub shows that board's orchestrator line in red.
 
