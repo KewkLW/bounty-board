@@ -17,6 +17,8 @@
 - `since`: while online it is when the orchestrator registered. Once offline it is when it was last seen alive (`last_seen`, persisted at most every 15 s while online, and at every read).
 - The registry key is `presence`, not `orchestrator`. The existing `orchestrator` string (expected name, used by on_reply and by already running boards) keeps its meaning.
 - Red covers both "never registered" and "registered but offline", when work is waiting and `require_orchestrator` is set (board.json, or hub.json for every board).
+- A replaced orchestrator leaves the manifest (one orchestrator per board), so `bounty cleanup --kill --all --orchestrators` no longer lists it; it is never signalled by the board after that.
+- Default pid: checked from inside a real agent session: the chain is `bash -> claude`, so the CLI registers `claude`. Known sandbox/tool wrappers (`bwrap`, `unshare`, `sudo`, `nice`, `flock`, ...) are skipped too.
 - The startup warning is a console line, which reaches the journal under systemd. The same text is in `warning` on the API, in `bounty status` and on the hub.
 
 ## Tests (`npm ci && npm test`: 70 pass, 0 fail)

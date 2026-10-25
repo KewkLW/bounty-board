@@ -359,11 +359,11 @@ Every board has one orchestrator: the agent that files the work, answers blocks 
 ```bash
 bounty orchestrator register                  # name from $AGENT_NAME, else board.json "orchestrator"; pid: your agent process
 bounty orchestrator register --name Marshal --pid 12000
-bounty orchestrator                           # Marshal ONLINE (pid 12000, since 3m ago)
+bounty orchestrator                           # orchestrator: Marshal ONLINE (pid 12000, since 3m ago)
 bounty orchestrator --json
 ```
 
-Without `--pid` the CLI walks up from itself to the first ancestor that is not a shell (`bash`, `sh`, `zsh`, `dash`, `fish`, `env`, `timeout`, ..., or a `<prefix>-bounty` wrapper script) and registers that: the agent process that ran the command. An agent runs each command in a shell, often a shell inside a shell, so `$$` and `$PPID` are sub-shells that exit right away; never register those. The CLI prints the process name it picked (e.g. `claude`). To check or pick it by hand: `ps -o pid,ppid,comm -p $PPID` and follow `ppid` up until `comm` is your agent, then pass `--pid`. Worker slots cannot register an orchestrator.
+Without `--pid` the CLI walks up from itself to the first ancestor that is not a shell (`bash`, `sh`, `zsh`, `dash`, `fish`, `env`, `timeout`, sandbox and tool wrappers such as `bwrap`, `sudo`, `nice`, `flock`, ..., or a `<prefix>-bounty` wrapper script) and registers that: the agent process that ran the command. An agent runs each command in a shell, often a shell inside a shell, so `$$` and `$PPID` are sub-shells that exit right away; never register those. The CLI prints the process name it picked (e.g. `claude`). To check or pick it by hand: `ps -o pid,ppid,comm -p $PPID` and follow `ppid` up until `comm` is your agent, then pass `--pid`. Worker slots cannot register an orchestrator.
 
 `bounty agents register --kind orchestrator` does the same (it is the manifest route from "Agent lifecycle"); both write the agent manifest (`run/agents.json`) and `run/orchestrator.json`, which keeps the name, pid, start time and when it was last seen after the process is gone.
 

@@ -94,7 +94,9 @@ const { procStat } = require(require('path').join(__dirname, '..', 'lib', 'proc'
 const { orchLine } = require(require('path').join(__dirname, '..', 'lib', 'live'));
 // The agent that runs this command: the first ancestor that is not a shell. An agent runs its tool
 // commands in a shell (often a shell in a shell), so $$ and $PPID are sub-shells, not the agent.
-const SHELLS = ['bash', 'sh', 'zsh', 'dash', 'fish', 'ksh', 'tcsh', 'csh', 'env', 'timeout', 'nohup', 'setsid', 'stdbuf', 'xargs', 'bounty'];
+const SHELLS = ['bash', 'sh', 'zsh', 'dash', 'fish', 'ksh', 'tcsh', 'csh', 'env', 'timeout', 'nohup', 'setsid', 'stdbuf', 'xargs', 'bounty',
+  // short-lived wrappers a sandbox or a tool may put between the shell and the agent
+  'bwrap', 'unshare', 'srt', 'sudo', 'doas', 'nice', 'ionice', 'flock', 'script', 'time', 'chronic'];
 function agentPid() {
   let pid = process.ppid;
   for (let i = 0; i < 32 && pid > 1; i++) {
