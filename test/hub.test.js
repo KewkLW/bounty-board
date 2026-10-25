@@ -169,6 +169,19 @@ test('GET /api/hub reads a real board end to end', async () => {
     assert.strictEqual(x.stats.blocked, 1);
     assert.deepStrictEqual(d.needs_you.map(n => [n.id, n.blocked_reason]), [[b.id, 'needs a human login']]);
     assert.ok(x.working.length === 0 && x.idle);
+    // Orchestrator presence end to end: none, then a live process, then gone.
+    assert.deepStrictEqual([x.orchestrator.registered, x.orchestrator.online], [false, false]);
+    const { spawn } = require('child_process');
+    const c = spawn('sleep', ['600'], { stdio: 'ignore' });
+    try {
+      t.board.presence.register({ pid: c.pid, name: 'Marshal' });
+      let o = (await getHub(hub.url)).boards[0].orchestrator;
+      assert.deepStrictEqual([o.name, o.online, o.pid], ['Marshal', true, c.pid]);
+      c.kill('SIGKILL');
+      await new Promise(r => c.once('exit', r));
+      o = (await getHub(hub.url)).boards[0].orchestrator;
+      assert.deepStrictEqual([o.name, o.online], ['Marshal', false]);
+    } finally { try { c.kill('SIGKILL'); } catch {} }
   } finally { await hub.close(); await t.s.close(); }
 });
 
