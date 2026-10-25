@@ -307,7 +307,7 @@ Agents that finish and never exit add up (a Claude session is a few hundred MB; 
 ```bash
 bounty agents register --pid 12345 --name Rook --bounty 12 --kind worker      # an agent you launched for #12
 bounty agents register --pid 12399 --name Rook-bridge --bounty 12 --kind bridge # its remote-control / cloud bridge
-bounty agents register --pid $$ --name Marshal --kind orchestrator             # yourself (never auto-stopped)
+bounty agents register --pid 12000 --name Marshal --kind orchestrator          # yourself: the agent process pid, not a sub-shell $$ (never auto-stopped)
 ```
 
 (`POST /api/agents/spawned` with `{pid, name, kind, bounty}`. A worker slot may register only for a bounty, and never an orchestrator.)
