@@ -12,6 +12,8 @@
   "default_project": "my-project",
   "concurrency_cap": 4,
   "tick_seconds": 5,
+  "idle_shutdown_minutes": 120,
+  "stop_grace_seconds": 15,
   "watchdog": {
     "stall_minutes": 30,
     "check_seconds": 30,

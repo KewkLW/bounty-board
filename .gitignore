@@ -1,6 +1,7 @@
 # Runtime data (DB, worker logs)
 data/
 logs/
+run/
 bounty-board.db
 bounty-board.db-shm
 bounty-board.db-wal
