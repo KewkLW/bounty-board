@@ -299,7 +299,7 @@ Every project's chat room (the separate agent-rooms server, `http://<host>:3396/
 ```
 
 - The outcome is one of `submitted` (in review or later), `submitted, verifying` (exited while its verify runs), `verify failed`, `exited without submitting` (with the signal, if any), `failed (exit N, not submitted)`, `failed (never ran bounty start)`, `blocked: <the worker's reason>` or `failed`.
-- `<Worker> is idle: what's next?` is added when the dispatcher will not hand that slot a ready bounty on its next tick (nothing ready for it, the board paused, the slot benched, or the concurrency cap reached). When it will, the report ends at the outcome.
+- `<Worker> is idle: what's next?` is added when the dispatcher will not hand that slot a ready bounty on its next tick (nothing ready for it, the board paused, the slot benched, or the concurrency cap reached). The check runs the tick's own dispatch plan: slots in `board.json` order up to the cap, each bounty to one slot, so an earlier idle slot that takes the last free place or the same unassigned bounty leaves the finishing slot idle. When it will be dispatched, the report ends at the outcome.
 - Only the orchestrator is @mentioned: an @mention of a worker becomes a note on its bounty.
 - A verify that fails after the worker already exited (its report said `submitted, verifying`) requeues the bounty without a second message.
 - Posts go to the room server's HTTP API (`POST /api/r/<id>/post` with `X-Room-Request: 1`, the same one `roomctl` uses), over loopback on the room's port. If the board is not joined yet, it joins once and retries. A room that is down, refuses (403 not invited, 409 closed) or times out (5 s) is logged as `[room] report to <id> failed: ...` and never blocks the board.

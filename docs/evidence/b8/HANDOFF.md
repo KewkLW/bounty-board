@@ -12,7 +12,7 @@
 ## Acceptance criteria
 1. `room` setting, rule fallback, none: `test/room.test.js` "room resolution"; `/api/room` null case in "no room configured".
 2. Chat tab on all five pages, next to Status; chat.html full height at 1280x900 and 390x844; tailnet host: `test/chat.ui.test.js` (asserts link visible and right after Status on each page, iframe src, frame content, iframe box between bar and dock, dock fits 390 px, `roomSrc` rewrite for a `*.ts.net` name and a 100.x IP; hidden on every page without a room). Screenshots: `chat-desktop.png`, `chat-phone.png` (fake room page), `chat-real-roomd-*.png` (a scratch roomd, below).
-3. One message per ended attempt, from the board's member name, to the orchestrator, idle tail only when nothing will be dispatched; posted through the room HTTP API; failure logged, board unaffected: `test/room.test.js` board tests (crash then a good bounty on one slot: first has no "what's next", second has it; exactly 2 posts; a 500 room leaves the board dispatching and answering).
+3. One message per ended attempt, from the board's member name, to the orchestrator, idle tail only when nothing will be dispatched; posted through the room HTTP API; failure logged, board unaffected: `test/room.test.js` board tests (crash then a good bounty on one slot: first has no "what's next", second has it; exactly 2 posts; a 500 room leaves the board dispatching and answering). Attempt 2 (review fix): the idle check is `Dispatcher.plan()`, the same ordered plan `tick()` dispatches from (slot order, cap, a bounty claimed by an earlier slot is not counted for a later one); regression test "idle tail follows the tick plan" covers an earlier slot taking the last place under the cap, an earlier slot taking the same unassigned bounty, and the not-idle case.
 4. Unit tests with a fake room server: text for every outcome (submitted, verifying, verify failed, exited, exited by signal, failed exit N, never started, blocked with reason, log path stripped, failed), idle/not idle, no room = no request, 500 and unreachable tolerated, join-on-first-post.
 5. README section "Chat tab and worker reports".
 6. Coordination: tested against agent-rooms **4425b36** ("Board Chat tabs: frameable room pages, the board as a room member"). Scratch run (not in `npm test`): roomd from that commit on 127.0.0.1:3497 with a temp rooms dir and delivery stubbed (`AGENT_ROOMS_AGENT_SEND=/bin/true`), `roomctl create` + `theme-done` + `board-sync` on a scratch board.json (it wrote `"room": {"id": "scratch-room", "url": "http://127.0.0.1:3497/r/scratch-room/"}` and joined "Scratch Board"), then a board from that config with the fake worker:
@@ -24,7 +24,7 @@
    phone room page 200 csp: ... (same) | framed page shows the report: true | members incl. Scratch Board: true
    ```
    The scratch roomd was stopped by its recorded pid; no live room was posted to.
-7. `npm ci --silent && npm test`: 80 tests, 80 pass, 0 fail (includes test/room.test.js and test/chat.ui.test.js).
+7. `npm ci --silent && npm test`: 81 tests, 81 pass, 0 fail on attempt 2 (includes test/room.test.js and test/chat.ui.test.js).
 
 ## Decisions
 - A verify that fails after the worker exited already got "submitted, verifying"; the requeue posts nothing more (one message per attempt).

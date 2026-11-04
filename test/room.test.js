@@ -188,3 +188,44 @@ test('board: no room configured, no Chat tab and no post', async () => {
     assert.match(await page.text(), /id="ch-frame"/);
   } finally { await t.s.close(); await fr.close(); }
 });
+
+// Regression (b8 review): "what's next" must follow the tick's real plan. Slots dispatch in board.json
+// order up to the cap, so an earlier idle slot can take the last free place or the same unassigned
+// bounty, and the slot that just finished stays idle.
+test('idle tail follows the tick plan: an earlier slot takes the cap or the shared bounty', () => {
+  const { Dispatcher } = require('../lib/dispatcher');
+  const slots = [{ id: 'early', name: 'Early', autopilot: true }, { id: 'late', name: 'Late', autopilot: true }];
+  const make = ({ cap, live = [], next }) => {
+    const reports = [];
+    const d = Object.create(Dispatcher.prototype);
+    Object.assign(d, {
+      stopped: false, live: new Map(live), spawning: new Set(), spawningBounties: new Set(),
+      cfg: { slots, concurrency_cap: cap },
+      board: {
+        paused: () => false, nextFor: s => next[s.id] || null,
+        slot: id => slots.find(s => s.id === id), raw: id => ({ id, title: 'Add mul()', status: 'in_progress', ci_status: 'running' }),
+        room: { enabled: true, report: r => { reports.push(r); return r; } },
+      },
+    });
+    return { d, reports };
+  };
+  const X = { id: 7, title: 'x' }, Y = { id: 8, title: 'y' };
+  // one free place under the cap: the earlier slot takes it, the finishing one is idle
+  let { d, reports } = make({ cap: 2, live: [[99, { slot: 'other', pid: 1 }]], next: { early: X, late: Y } });
+  assert.deepStrictEqual(d.plan().map(p => [p.slot.id, p.bounty.id]), [['early', 7]]);
+  assert.strictEqual(d.willDispatch(slots[1]), false);
+  d.reportToRoom(5, 'late');
+  assert.strictEqual(reports[0].idle, true);
+  assert.match(room.reportText({ orchestrator: 'Conductor', ...reports[0] }), /Late is idle: what's next\?$/);
+  // both see the same unassigned bounty: the earlier slot gets it, the later one is idle
+  ({ d, reports } = make({ cap: 4, next: { early: X, late: X } }));
+  assert.deepStrictEqual(d.plan().map(p => p.slot.id), ['early']);
+  d.reportToRoom(5, 'late');
+  assert.strictEqual(reports[0].idle, true);
+  // room under the cap and a bounty of its own: the finishing slot gets the next one, no "what's next"
+  ({ d, reports } = make({ cap: 2, next: { early: X, late: Y } }));
+  assert.deepStrictEqual(d.plan().map(p => p.slot.id), ['early', 'late']);
+  d.reportToRoom(5, 'late');
+  assert.strictEqual(reports[0].idle, false);
+  assert.doesNotMatch(room.reportText({ orchestrator: 'Conductor', ...reports[0] }), /what's next/);
+});
