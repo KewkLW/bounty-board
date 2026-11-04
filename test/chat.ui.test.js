@@ -50,6 +50,7 @@ test('chat tab: dock link on every page, the room framed full height on desktop 
       const frame = page.locator('#ch-frame');
       await frame.waitFor({ state: 'visible' });
       assert.strictEqual(await frame.getAttribute('src'), fr.url);
+      assert.strictEqual(await page.locator('.op-dock a[data-chat-tab]').isVisible(), true, 'chat.html: tab shown');
       const inner = page.frameLocator('#ch-frame');
       await inner.locator('#members').waitFor();
       assert.match(await inner.locator('#log').textContent(), /what's next\?/);
@@ -96,5 +97,6 @@ test('chat tab: hidden on every page when the board has no room', { skip, timeou
     await page.goto(t.url + '/chat.html');
     await page.locator('#ch-empty').waitFor({ state: 'visible' });
     assert.strictEqual(await page.locator('#ch-frame').isVisible(), false);
+    assert.strictEqual(await page.locator('.op-dock a[data-chat-tab]').isVisible(), false, '/chat.html: no Chat tab');
   } finally { await browser.close(); await t.s.close(); }
 });
