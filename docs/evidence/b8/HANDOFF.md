@@ -24,7 +24,7 @@
    phone room page 200 csp: ... (same) | framed page shows the report: true | members incl. Scratch Board: true
    ```
    The scratch roomd was stopped by its recorded pid; no live room was posted to.
-7. `npm ci --silent && npm test`: see below.
+7. `npm ci --silent && npm test`: 80 tests, 80 pass, 0 fail (includes test/room.test.js and test/chat.ui.test.js).
 
 ## Decisions
 - A verify that fails after the worker exited already got "submitted, verifying"; the requeue posts nothing more (one message per attempt).
