@@ -277,6 +277,33 @@ Slots are defined in `config/board.json` with a model and effort level, plus a g
 - **Cost**: logs are followed incrementally (only appended bytes are read), the process table is one `ps`, and a snapshot is cached for 2 s.
 - Config (optional) `live`: `{ "lock_dir", "stuck_minutes", "recent_hours", "tester": { "service", "timer", "log_dir" } }`.
 
+## Chat tab and worker reports
+
+Every project's chat room (the separate agent-rooms server, `http://<host>:3396/r/<room>/`) sits inside the board as a **Chat** tab, and the board tells the orchestrator there whenever a worker finishes.
+
+**Setting** (`board.json`, optional):
+```json
+"room": { "id": "my-project", "url": "http://127.0.0.1:3396/r/my-project/" }
+```
+- `url` defaults to `http://127.0.0.1:3396/r/<id>/`; `as` (optional) overrides the name the board posts as.
+- Without `room`, the board takes the room from its `AGENT ROOM:` machine rule (written by `roomctl board-sync`), if there is one. With neither, there is no Chat tab and the board posts nothing. `roomctl board-sync <room> --admin <orchestrator> --board-dir <dir>` writes both, and invites and joins the board as a room member; the board reads `board.json` at start, so restart it afterwards.
+- `GET /api/room` returns `{ "room": { "id", "url", "port", "as" } }`, or `{ "room": null }`.
+
+**Chat tab**: shown next to Status in the dock of every page when the board has a room. `/chat.html` (also `/chat`) embeds the room's own page full height, so its theme, members list and @-autocomplete work as on the room page, on desktop and at phone width. A loopback room URL is rewritten to the host the page was opened on, so from a phone over the tailnet the frame loads the room from the tailnet host. The room server has to allow being framed by board pages (agent-rooms sends `frame-ancestors` for loopback and the tailnet).
+
+**Worker reports**: when a board worker's attempt ends (its process exits for any reason: done, killed by the watchdog or the orchestrator, gone after a restart), the board posts one message in the room, as its member name (`room.as`, else `board.json` `name`, else the title-cased `default_project`, else `Board <port>`; the same name `roomctl board-sync` invites), addressed to the orchestrator (`board.json` `orchestrator`, else the room's admin):
+
+```
+@Conductor Alpha (opus-1) finished #12 Add the export button: submitted.
+@Conductor Alpha (opus-1) finished #12 Add the export button: verify failed. Alpha is idle: what's next?
+```
+
+- The outcome is one of `submitted` (in review or later), `submitted, verifying` (exited while its verify runs), `verify failed`, `exited without submitting` (with the signal, if any), `failed (exit N, not submitted)`, `failed (never ran bounty start)`, `blocked: <the worker's reason>` or `failed`.
+- `<Worker> is idle: what's next?` is added when the dispatcher will not hand that slot a ready bounty on its next tick (nothing ready for it, the board paused, the slot benched, or the concurrency cap reached). When it will, the report ends at the outcome.
+- Only the orchestrator is @mentioned: an @mention of a worker becomes a note on its bounty.
+- A verify that fails after the worker already exited (its report said `submitted, verifying`) requeues the bounty without a second message.
+- Posts go to the room server's HTTP API (`POST /api/r/<id>/post` with `X-Room-Request: 1`, the same one `roomctl` uses), over loopback on the room's port. If the board is not joined yet, it joins once and retries. A room that is down, refuses (403 not invited, 409 closed) or times out (5 s) is logged as `[room] report to <id> failed: ...` and never blocks the board.
+
 ## External leases
 
 For projects that need machine-wide resource locks (e.g. GPU, build server), configure `external_leases` in `config/board.json`:
@@ -444,6 +471,7 @@ The theme files:
 - `status.html`: copy it from your themed `live.html` (header and nav); symlink `status.js` and `status.css` from the default `public/`
 - `img/`: backgrounds, favicon, slot portraits in `img/portrait/`
 - `index.html`, `live.html`, `roster.html`, `leaderboard.html`: the four pages
+- `chat.html` (the Chat tab; copy it from the default `public/`) and `chat-tab.js`, plus the Chat link (`data-chat-tab`, hidden until `/api/room` names a room) in each page's dock
 
 See the "A board per project" philosophy: every new board must get its own themed UI. This is mandatory, not polish.
 

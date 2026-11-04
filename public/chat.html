@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Chat · Totally not a Kanban</title>
+<link rel="icon" href="/img/favicon.png" type="image/png"/>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="/op.css" rel="stylesheet"/>
+<style>
+  /* The room's own page fills everything between the thin bar and the dock. */
+  html, body { height: 100%; margin: 0; overflow: hidden; background: #0b0b10; }
+  .ch-bar { position: fixed; top: 0; left: 0; right: 0; height: 36px; display: flex; align-items: center; gap: 10px;
+    padding: 0 12px; font: 600 12px/1 var(--display, Inter, sans-serif); color: var(--muted, #9aa5ce);
+    border-bottom: 1px solid var(--line-hi, #2f3549); background: #13141c; }
+  .ch-bar a { color: inherit; text-decoration: none; display: flex; align-items: center; gap: 4px; }
+  .ch-bar a:hover { color: var(--fg, #c0caf5); }
+  .ch-bar .ch-id { font-family: var(--mono, monospace); color: var(--fg, #c0caf5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ch-bar .material-icons { font-size: 16px; }
+  .ch-bar .sp { flex: 1; }
+  #ch-frame { position: fixed; top: 36px; left: 0; right: 0; bottom: 84px; width: 100%; height: calc(100% - 120px); border: 0; background: #0b0b10; }
+  #ch-empty { position: fixed; top: 36px; left: 0; right: 0; bottom: 84px; display: none; align-items: center; justify-content: center;
+    padding: 24px; text-align: center; color: var(--muted, #9aa5ce); font: 500 14px/1.5 var(--display, Inter, sans-serif); }
+  #ch-empty code { font-family: var(--mono, monospace); color: var(--fg, #c0caf5); }
+</style>
+</head>
+<body>
+<div class="ch-bar">
+  <a href="/" title="Back to the board"><span class="material-icons">arrow_back</span>Board</a>
+  <span>Chat</span><span class="ch-id" id="ch-id"></span>
+  <span class="sp"></span>
+  <a id="ch-open" href="#" target="_blank" rel="noopener" title="Open the room in its own tab" style="display:none"><span class="material-icons">open_in_new</span>Open</a>
+</div>
+<iframe id="ch-frame" title="Agent room" allow="clipboard-write" hidden></iframe>
+<div id="ch-empty">This board has no agent room. Add <code>"room": { "id": "&lt;room id&gt;" }</code> to board.json, or run <code>roomctl board-sync</code>.</div>
+<nav class="op-dock-wrap" aria-label="Pages">
+  <div class="op-dock">
+    <a href="/" title="Board"><span class="material-icons">grid_view</span>Board</a>
+    <a href="/live" title="Live: what every agent is doing now"><span class="material-icons">phonelink_ring</span>Live</a>
+    <a href="/status.html" title="Status: goals and progress"><span class="material-icons">flag</span>Status</a>
+    <a href="/chat.html" class="on" data-chat-tab title="Chat: the project's agent room"><span class="material-icons">forum</span>Chat</a>
+    <a href="/roster" title="Roster: the slots"><span class="material-icons">palette</span>Roster</a>
+    <a href="/leaderboard" title="Leaderboard: loot from verified work"><span class="material-icons">emoji_events</span>Loot</a>
+  </div>
+</nav>
+<script>
+// A room URL on loopback is rewritten to the host this page was opened on (the tailnet name from a
+// phone), so the embedded room is reachable from wherever the board is.
+function roomSrc(room, loc) {
+  const u = new URL(room.url);
+  const loop = h => h === 'localhost' || h === '::1' || h === '[::1]' || /^127\./.test(h);
+  if (loop(u.hostname) && !loop(loc.hostname)) u.hostname = loc.hostname;
+  return u.toString();
+}
+fetch('/api/room').then(r => r.json()).then(({ room }) => {
+  if (!room) { document.getElementById('ch-empty').style.display = 'flex'; return; }
+  const src = roomSrc(room, location);
+  const f = document.getElementById('ch-frame');
+  f.src = src; f.hidden = false;
+  document.getElementById('ch-id').textContent = room.id;
+  const o = document.getElementById('ch-open'); o.href = src; o.style.display = '';
+  document.title = `Chat · ${room.id}`;
+}).catch(e => {
+  const el = document.getElementById('ch-empty');
+  el.textContent = `Could not read the board's room: ${e.message}`; el.style.display = 'flex';
+});
+</script>
+</body></html>
