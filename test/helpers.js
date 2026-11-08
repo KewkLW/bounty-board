@@ -57,8 +57,9 @@ async function startBoard(tag, { over = {}, dispatch = true, verify = 'pass' } =
   const s = createServer(cfg, { dispatch });
   const port = await s.listen();
   const origClose = s.close;
+  s.closePreservingWorkers = origClose;
   s.close = async () => {
-    for (const w of s.dispatcher.live.values()) { try { process.kill(-w.pid, 'SIGKILL'); } catch {} }
+    for (const w of s.dispatcher.live.values()) { if (w.runner === 't3') { await s.dispatcher.t3.stop(w, 'test cleanup'); continue; } try { process.kill(-w.pid, 'SIGKILL'); } catch {} }
     s.dispatcher.stop(); s.reviewer.stop();
     await new Promise(r => setTimeout(r, 300));
     await origClose();

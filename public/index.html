@@ -275,10 +275,11 @@ function renderSlots() {
         </div>
       </div>
       ${w ? `<div class="mt-1 text-xs leading-tight cursor-pointer hover:text-primary" onclick="openBounty(${s.bounty.id})">#${s.bounty.id} ${esc(s.bounty.title)}</div>
-        <div class="text-[10px] text-gray-400 font-mono mt-1">${ago(s.attempt && s.attempt.started_at)} · hb ${ago(s.bounty.heartbeat_at) || '-'} · tok ${((u.tokens_in || 0) + (u.cache_read || 0) + (u.tokens_out || 0)).toLocaleString()}${u.cost_usd != null ? ' · $' + u.cost_usd.toFixed(2) : ''}</div>
+        <div class="text-[10px] text-gray-400 font-mono mt-1">${ago(s.attempt && s.attempt.started_at)} · hb ${ago(s.bounty.heartbeat_at) || '-'} · tok ${((u.tokens_in || 0) + (s.runner === 't3' ? 0 : u.cache_read || 0) + (u.tokens_out || 0)).toLocaleString()}${u.cost_usd != null ? ' · $' + u.cost_usd.toFixed(2) : ''}</div>
+        ${s.thread_id ? `<div class="text-[10px] text-gray-400 font-mono truncate" title="${esc(s.thread_id)}">thread ${esc(s.thread_state || 'starting')} · tokens ${esc(s.usage_status || 'pending')} · cost unavailable (T3)</div>` : ''}
         ${s.attempt ? `<a class="text-[10px] text-primary underline" target="_blank" href="/api/attempts/${s.attempt.id}/log">live log</a>` : ''}`
       : `<div class="text-[11px] text-gray-500 mt-1">${s.queued ? `${s.queued} ready queued${s.next ? `: next #${s.next.id}` : ''}` : 'idle (nothing ready)'}</div>`}
-      ${s.record ? `<div class="text-[10px] font-mono mt-1 text-gray-400"><span class="text-warning">$${s.record.total_loot.toLocaleString()}</span> loot · ${s.record.missions_completed} done · ${s.record.missions_failed} failed · $${Number(s.record.cost_usd || 0).toFixed(2)} spent</div>` : ''}
+      ${s.record ? `<div class="text-[10px] font-mono mt-1 text-gray-400"><span class="text-warning">$${s.record.total_loot.toLocaleString()}</span> loot · ${s.record.missions_completed} done · ${s.record.missions_failed} failed · $${Number(s.record.cost_usd || 0).toFixed(2)} ${s.runner === 't3' ? 'reported; T3 cost unavailable' : 'spent'}</div>` : ''}
     </div>`;
   }).join('');
   const leases = st.leases.map(l => l.external
