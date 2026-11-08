@@ -194,10 +194,28 @@ that project's id in the slot (or in `runners.t3.defaults.project_id`):
 `provider` is the **T3 provider instance id**, including a custom instance id if
 used, rather than a CLI executable. The title is `Nord #9` for bounty 9. T3 uses
 the board-created bounty worktree and branch (`existing_worktree`); it does not
-create a second worktree. Each retry gets a fresh thread id. Match `project_id`
-to the repository assigned to that slot. `runners.t3.defaults` supplies shared
+create a second worktree. Each retry gets a fresh thread id. `runners.t3.defaults` supplies shared
 `t3` slot fields; explicit slot fields override it. The board copies the T3
 model/effort into its ordinary slot metadata, including existing escalation rules.
+
+A slot that serves several board projects should map each board project to its
+own T3 project in `runners.t3.projects` (board project id → T3 project id), so a
+`bounty-board` bounty's thread starts in the T3 project for /mnt/f/bounty-board
+rather than in the slot's:
+
+```json
+{ "runners": { "t3": { "projects": { "bounty-board": "t3-project-for-bounty-board", "t3kewk": "t3-project-for-t3kewk" } } } }
+```
+
+The T3 project id is resolved per dispatch, first match wins:
+
+1. `runners.t3.projects["<the bounty's board project>"]`
+2. the slot's `t3.project_id`
+3. `runners.t3.defaults.project_id`
+
+An empty string counts as unset. If none resolves, dispatch fails closed: the bounty
+is blocked with `no T3 project for board project '<id>': set runners.t3.projects["<id>"],
+the slot's t3.project_id or runners.t3.defaults.project_id`, and no thread is created.
 
 `runtime` defaults to `full-access`. Supported values are T3's own `full-access`,
 `approval-required`, `auto-accept-edits` and `auto`. **`read-only` is refused**:

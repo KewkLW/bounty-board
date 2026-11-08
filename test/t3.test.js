@@ -384,3 +384,59 @@ test('T3: CLI add/edit set and clear the per-bounty runtime', async () => {
     assert.equal(t.board.raw(b.id).t3_runtime, null);
   } finally { await t.finish(); }
 });
+
+test('T3: board project mapping wins over slot and defaults; slot wins over defaults; defaults last', async () => {
+  const projectFor = async (slotT3, t3Over, tag) => {
+    const { project_id, ...rest } = slot.t3;
+    const t = await setup(tag, { slots: [{ ...slot, t3: { ...rest, ...slotT3 } }] });
+    try {
+      Object.assign(t.cfg.runners.t3, t3Over);
+      const { w, launch } = await t.add('mapped');
+      await waitFor(() => !w.launching);
+      await t.d.t3.stop(w, 'test cleanup');
+      return launch.projectId;
+    } finally { await t.finish(); }
+  };
+  const map = { projects: { scratch: 't3-scratch' }, defaults: { project_id: 't3-default' } };
+  assert.equal(await projectFor({ project_id: 't3-slot' }, map, 't3-proj-map'), 't3-scratch');
+  assert.equal(await projectFor({ project_id: 't3-slot' }, { projects: { other: 't3-other' }, defaults: { project_id: 't3-default' } }, 't3-proj-slot'), 't3-slot');
+  assert.equal(await projectFor({}, { projects: { other: 't3-other' }, defaults: { project_id: 't3-default' } }, 't3-proj-default'), 't3-default');
+  assert.equal(await projectFor({ project_id: '' }, { projects: { scratch: '' }, defaults: { project_id: 't3-default' } }, 't3-proj-empty'), 't3-default');
+});
+
+test('T3: two board projects on one slot start threads in their own T3 projects', async () => {
+  const t = await setup('t3-proj-two');
+  try {
+    t.cfg.runners.t3.projects = { scratch: 't3-scratch', second: 't3-second' };
+    t.board.upsertProject({ ...t.board.project('scratch'), id: 'second', name: 'second' });
+    const a = await t.add('first board project');
+    await waitFor(() => !a.w.launching);
+    assert.equal(a.launch.projectId, 't3-scratch');
+    await t.d.t3.stop(a.w, 'test cleanup');
+    await waitFor(() => !t.d.live.has(a.b.id));
+    const b = t.board.create({ title: 'second board project', project: 'second', assignee_slot: slot.id, criteria: ['own T3 project'] });
+    t.board.ready(b.id); t.d.tick();
+    const w = await waitFor(() => t.d.live.get(b.id));
+    await waitFor(() => !w.launching);
+    const launch = t.f.requests.filter(r => r.tag === 'orchestration.launchThread').at(-1).payload;
+    assert.equal(launch.threadId, w.threadId);
+    assert.equal(launch.projectId, 't3-second');
+    await t.d.t3.stop(w, 'test cleanup');
+  } finally { await t.finish(); }
+});
+
+test('T3: no resolvable T3 project blocks with a clear reason and creates no thread', async () => {
+  const { project_id, ...rest } = slot.t3;
+  const t = await setup('t3-proj-none', { slots: [{ ...slot, t3: rest }] });
+  try {
+    t.cfg.runners.t3.projects = { other: 't3-other', scratch: '' };
+    const b = t.board.create({ title: 'no T3 project', project: 'scratch', criteria: ['safe'], assignee_slot: slot.id });
+    t.board.ready(b.id); t.d.tick();
+    await waitFor(() => t.board.raw(b.id).status === 'blocked' && !t.d.spawning.size);
+    assert.match(t.board.raw(b.id).blocked_reason, /no T3 project for board project 'scratch': set runners\.t3\.projects\["scratch"\], the slot's t3\.project_id or runners\.t3\.defaults\.project_id/);
+    assert.equal(t.f.requests.length, 0);
+    assert.equal(t.f.threads.size, 0);
+    assert.equal(t.d.live.size, 0);
+    assert.equal(t.board.get(b.id).attempts.length, 0);
+  } finally { await t.finish(); }
+});

@@ -1,0 +1,182 @@
+
+> bounty-board@1.0.0 test
+> node --test --test-concurrency=1 test/
+
+✔ board worker: stopped (process group) when its bounty is merged and done; manifest entry recorded then dropped (1366.108685ms)
+✔ registered agents: stopped when their bounty is done (close-merged); orchestrators and other bounties untouched; TERM-ignorers get KILL (2633.765528ms)
+✔ identity check: a recorded pid whose start time no longer matches is never signalled (3084.447189ms)
+✔ group leader exits on SIGTERM: only the recorded group members still running as themselves get SIGKILL (1551.020205ms)
+✔ idle shutdown: an agent registered on a board that is already idle past the threshold is stopped too (1861.618824ms)
+✔ idle shutdown: no active bounty (or paused) for idle_shutdown_minutes stops every non-orchestrator agent (3346.578525ms)
+✔ idle shutdown runs on the dispatcher timer and 0 disables it (4145.367487ms)
+✔ bounty cleanup: dry run lists, --kill stops the stale, --all the rest; an unregistered process survives --kill --all (2402.655129ms)
+✔ config: idle_shutdown_minutes and stop_grace_seconds defaults, run_dir next to the config (0.422104ms)
+✔ status machine: legal edges, illegal edges, guarded edges (334.227439ms)
+✔ API: workers cannot approve, assign, ready or mark done (364.795108ms)
+✔ gates: no branch, empty diff, docs-only diff on a code bounty are refused (604.103669ms)
+✔ gates: verify failure keeps the bounty out of review; with no live worker it goes back to ready with the log (563.174202ms)
+✔ done: refused until the commits are on main; merge (or cherry-pick) makes it done (1159.093048ms)
+✔ leases: exclusive, renewable, released on TTL expiry and when the holder bounty ends (335.738088ms)
+[orchestrator] WARNING: no orchestrator registered and 2 bounties are ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ watchdog: a worker that dies without submitting is blocked; a silent worker is killed and blocked (6753.966728ms)
+[orchestrator] WARNING: no orchestrator registered and 1 bounty is ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ dispatcher e2e with the fake worker: ready -> spawn -> start -> submit -> verify -> review -> approve -> merge -> done (2751.685377ms)
+✔ reviewer reject sends the bounty back to ready with notes; escalation after 2 failures (570.334666ms)
+[orchestrator] WARNING: no orchestrator registered and 1 bounty is ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ pause stops new spawns; resume restarts them (3636.311027ms)
+✔ migration: the Feb-2026 DB keeps its history (6.542179ms)
+✔ external gpu lease mirrors the UE render flock and its holder file; the prompt points at the script (343.631619ms)
+✔ ready needs acceptance criteria (335.231574ms)
+✔ backlog import: tasks + audit + tests from fixture Markdown, deduped, re-runnable (337.99071ms)
+✔ notes: orchestrator -> live worker via inbox, start and progress; later attempts get them in the prompt (932.721806ms)
+✔ default project: the only non-legacy project, or config default_project; no project is refused at creation (582.359729ms)
+✔ close-merged: an external bounty is done once its commit is on main; refused off main and with a live worker (413.524926ms)
+✔ agents: the Feb-2026 and mock agents are purged; bounties keep the names as text; the migration re-runs as a no-op (12.186584ms)
+[orchestrator] WARNING: no orchestrator registered and 1 bounty is ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ leaderboard: loot, dones, streaks come only from verified dones; failures and $ cost from attempts; counters rebuilt to match (1269.973164ms)
+✔ agents API: only configured slots exist; any other id is refused (364.994699ms)
+✔ close-merged: commits a slot submitted and the orchestrator merged credit that slot (593.28539ms)
+[orchestrator] WARNING: no orchestrator registered and 1 bounty is ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ dispatcher: a slot with disabled_until in the future takes no work (1836.046625ms)
+✔ board restart re-queues verifies that were queued or running (331.835297ms)
+✔ dispatcher: a slot with worktree_root builds its worktree there and symlinks the usual path (348.318685ms)
+✔ chat tab: dock link on every page, the room framed full height on desktop and phone (2080.427133ms)
+✔ chat tab: hidden on every page when the board has no room (3874.306242ms)
+✔ drawer: human notes are shown apart from orchestrator notes (931.568952ms)
+✔ GET /api/hub: each board carries its orchestrator presence; a stopped board falls back to its registry entry, re-checked from the pid (115.330787ms)
+✔ POST /api/orchestrator/start: spawn_orchestrator argv with every placeholder, no shell, detached; 403/404/409 (506.392792ms)
+✔ POST /api/reply while the orchestrator is offline: saved, and the answer says nobody reads it live (8.95061ms)
+✔ hub page: orchestrator dot, since, none registered, red when required, Start orchestrator, reply while offline (headless) (1374.471635ms)
+✔ hub config: human_name defaults to "human", on_reply off unless it is an argv array (2.529464ms)
+✔ registry entry carries board.json "orchestrator" (1.288323ms)
+✔ POST /api/reply: headers, unknown port, forwarding, 409, board down, no hook (199.343488ms)
+✔ POST /api/reply: on_reply argv with every placeholder, no shell; failure and timeout never fail the reply (725.710351ms)
+✔ hub page: reply box, Send, Done, errors kept inline, 390 px (3874.028067ms)
+✔ registry: atomic write, list, mark stopped, dead pid, junk files ignored (3.497499ms)
+✔ registry: accent from board.json, else from the board's themed css (0.29932ms)
+✔ a board registers itself on start and is marked stopped on close; configs need no new keys (348.566517ms)
+✔ node server.js registers itself, and SIGTERM marks it stopped (config without registry keys) (403.825259ms)
+✔ goal rules match status.js: gate done = reached, road done = exit test not recorded, first open = Now (7.423984ms)
+✔ GET /api/hub: two fake boards and an offline one; a new board appears without a hub restart (54.098689ms)
+[orchestrator] WARNING: no orchestrator registered and 1 bounty is ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+[orchestrator] WARNING: orchestrator 'Marshal' is offline (pid 533798 gone since 2026-11-08T02:00:31.396Z) and 1 bounty is ready, in progress or blocked
+✔ GET /api/hub reads a real board end to end (345.914379ms)
+✔ Needs you: only blocked reasons with a human marker (case-insensitive), extendable in hub.json (9.591115ms)
+✔ registry names: board.json project name, else the title-cased default project, never a raw id (0.875454ms)
+✔ hub config: default port 3770, loopback + Tailscale ranges, env overrides; outside addresses get 403 (4.510983ms)
+✔ hub page: All tab, Needs you, tabs by click and arrow keys, 390 px phone (941.65901ms)
+✔ hub page: a 2,000-character reason and a flood of blocked items stay in check (688.594037ms)
+✔ human-notes API: header check, 400/404/409, unblock, list and read marks (418.061047ms)
+✔ allow_cidrs applies to the human-notes endpoints (325.493758ms)
+✔ human notes reach workers: live inbox/progress and the prompt of a later worker; the orchestrator read mark is separate (808.316922ms)
+✔ bounty replies: prints unread human notes and marks them read; --peek and --all; documented in help (819.488142ms)
+✔ worker stream-json: last actions, running tool, last text, usage counted once per message (1.674918ms)
+✔ codex --json log: commands, messages, token usage (0.207026ms)
+✔ Follower reads only appended bytes, holds partial lines, restarts on truncate (0.697106ms)
+✔ ci.sh logs: current stage, position in the plan, lock waits, summary and exit (0.923771ms)
+✔ holder files: key=value, JSON, empty; stale when the flock is free, held while flocked (67.540214ms)
+[orchestrator] WARNING: no orchestrator registered and 2 bounties are ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ GET /api/live and bounty live: a working slot with its bounty, actions, progress, unread notes; queue and recent (2801.03525ms)
+✔ register, online from the pid; the same object in /api/orchestrator, /api/state, /api/live and the registry entry; exit -> offline at once (1131.912068ms)
+✔ pid reuse guard: a recorded pid whose start time does not match is offline (board and registry) (338.947644ms)
+✔ a new orchestrator replaces the previous entry, which is not signalled; workers cannot register one (1031.456289ms)
+✔ bounty orchestrator register: pid defaults to the calling agent process (first non-shell ancestor), never a sub-shell; name from $AGENT_NAME (625.659453ms)
+[orchestrator] WARNING: no orchestrator registered and 1 bounty is ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ board startup warns when work waits and no orchestrator is registered; require_orchestrator is reported (337.653861ms)
+✔ room resolution: the board.json setting, else the AGENT ROOM: rule, else none (1.591443ms)
+✔ poster name matches the member roomctl board-sync invites for the board (0.262905ms)
+✔ finish report text for every outcome, and the idle tail (0.332984ms)
+✔ RoomClient: posts with the room headers, joins on the first refused post, asks the room for its admin (37.37533ms)
+✔ RoomClient: a refused, failing or unreachable room is logged and never throws; no room means no request (6.212715ms)
+[orchestrator] WARNING: no orchestrator registered and 2 bounties are ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+[room] report to scratch-room failed: POST http://127.0.0.1:39969/api/r/scratch-room/post: 500 boom
+✔ board: one report per ended attempt, "what's next" only when the slot gets nothing; Chat tab API (9682.228728ms)
+[orchestrator] WARNING: no orchestrator registered and 1 bounty is ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ board: a verify that fails while the worker waits is reported as verify failed (5730.109964ms)
+[orchestrator] WARNING: no orchestrator registered and 1 bounty is ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ board: no room configured, no Chat tab and no post (1534.34005ms)
+✔ idle tail follows the tick plan: an earlier slot takes the cap or the shared bounty (0.543136ms)
+[orchestrator] WARNING: no orchestrator registered and 1 bounty is ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ T3: config, title, worktree, private CLI identity, activity, tokens, logs and turn exit (1177.769682ms)
+[dispatcher] spawn failed Error: T3 orchestration.launchThread failed: [{"_tag":"Fail","error":{"name":"InvalidProjectError"}}]
+    at WebSocket.<anonymous> (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/t3.js:44:32)
+    at WebSocket.emit (node:events:514:20)
+    at Receiver.receiverOnMessage (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/node_modules/ws/lib/websocket.js:1225:20)
+    at Receiver.emit (node:events:514:20)
+    at Receiver.dataMessage (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/node_modules/ws/lib/receiver.js:596:14)
+    at Receiver.getData (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/node_modules/ws/lib/receiver.js:496:10)
+    at Receiver.startLoop (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/node_modules/ws/lib/receiver.js:167:16)
+    at Receiver._write (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/node_modules/ws/lib/receiver.js:94:10)
+    at writeOrBuffer (node:internal/streams/writable:574:12)
+    at _write (node:internal/streams/writable:503:10) {
+  rpcCause: [ { _tag: 'Fail', error: [Object] } ]
+}
+✔ T3: rejected launch with confirmed absence closes attempt and manifest, and the slot can retry (729.056324ms)
+[dispatcher] spawn failed Error: T3 connection closed
+    at WebSocket.<anonymous> (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/t3.js:52:41)
+    at WebSocket.emit (node:events:514:20)
+    at WebSocket.emitClose (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/node_modules/ws/lib/websocket.js:273:10)
+    at Socket.socketOnClose (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/node_modules/ws/lib/websocket.js:1346:15)
+    at Socket.emit (node:events:514:20)
+    at TCP.<anonymous> (node:net:362:12)
+✔ T3: lost launch acknowledgement interrupts the committed thread before releasing ownership (523.611125ms)
+[dispatcher] spawn failed Error: T3 connection closed
+    at WebSocket.<anonymous> (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/t3.js:52:41)
+    at WebSocket.emit (node:events:514:20)
+    at WebSocket.emitClose (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/node_modules/ws/lib/websocket.js:273:10)
+    at Socket.socketOnClose (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/node_modules/ws/lib/websocket.js:1346:15)
+    at Socket.emit (node:events:514:20)
+    at TCP.<anonymous> (node:net:362:12)
+✔ T3: uncertain launch and unavailable reconciliation retain ownership until interrupt retry succeeds (727.014359ms)
+✔ T3: stall interrupts, existing block/requeue/escalation retries into a fresh thread (546.006772ms)
+[orchestrator] WARNING: no orchestrator registered and 3 bounties are ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ T3: done, failed, kill, cleanup and idle shutdown interrupt only owned threads (1408.206533ms)
+[orchestrator] WARNING: no orchestrator registered and 1 bounty is ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ T3: board restart reattaches by thread id and records final usage once (241.270337ms)
+✔ T3: runtime validation fails closed; effort option ids and turn ledger avoid snapshot double counting (0.422822ms)
+[dispatcher] spawn failed Error: T3 does not support runtime 'read-only'; read-only execution is unavailable in installed T3
+    at selection (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/t3.js:97:99)
+    at T3Workers.spawn (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/t3-workers.js:34:18)
+    at Dispatcher.spawn (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/dispatcher.js:252:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+✔ T3: unsupported read-only dispatch blocks with an explicit reason and creates no thread (523.060237ms)
+✔ T3: a reconnect preserves ownership; a failed kill interrupt retries before releasing the slot (961.73546ms)
+✔ T3: a deleted thread ends its attempt; a finished turn frees the slot for queued work (740.725308ms)
+[orchestrator] WARNING: no orchestrator registered and 1 bounty is ready, in progress or blocked; the orchestrator runs `bounty orchestrator register`
+✔ T3: an unacknowledged interrupt survives a board restart (438.114646ms)
+✔ T3: per-bounty runtime persists across restart, overrides slot, and only orchestrator can change it (57.021158ms)
+[dispatcher] spawn failed Error: T3 does not support runtime 'read-only'; read-only execution is unavailable in installed T3
+    at selection (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/t3.js:97:99)
+    at T3Workers.spawn (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/t3-workers.js:34:18)
+    at Dispatcher.spawn (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/dispatcher.js:252:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+✔ T3: per-bounty read-only overrides full-access and blocks without launching (517.962349ms)
+[dispatcher] spawn failed Error: T3 does not support runtime 'unknown-mode'; read-only execution is unavailable in installed T3
+    at selection (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/t3.js:97:99)
+    at T3Workers.spawn (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/t3-workers.js:34:18)
+    at Dispatcher.spawn (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/dispatcher.js:252:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+✔ T3: per-bounty unknown-mode overrides full-access and blocks without launching (519.977402ms)
+[dispatcher] spawn failed Error: T3 does not support runtime ''; read-only execution is unavailable in installed T3
+    at selection (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/t3.js:97:99)
+    at T3Workers.spawn (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/t3-workers.js:34:18)
+    at Dispatcher.spawn (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/dispatcher.js:252:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+✔ T3: per-bounty  overrides full-access and blocks without launching (521.184943ms)
+✔ T3: CLI add/edit set and clear the per-bounty runtime (479.428406ms)
+✔ T3: board project mapping wins over slot and defaults; slot wins over defaults; defaults last (1363.78034ms)
+✔ T3: two board projects on one slot start threads in their own T3 projects (540.978181ms)
+[dispatcher] spawn failed Error: no T3 project for board project 'scratch': set runners.t3.projects["scratch"], the slot's t3.project_id or runners.t3.defaults.project_id
+    at T3Workers.spawn (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/t3-workers.js:37:30)
+    at Dispatcher.spawn (/mnt/f/bounty-board-wt/b12-m0-7-t3-runner-t3-project-per-board/lib/dispatcher.js:252:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+✔ T3: no resolvable T3 project blocks with a clear reason and creates no thread (523.111423ms)
+ℹ tests 101
+ℹ suites 0
+ℹ pass 101
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 102597.640924
+EXIT=0
