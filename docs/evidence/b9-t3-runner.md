@@ -209,3 +209,24 @@ initial implementation passed **78/78** (69.65 s), including eight new T3 tests.
 The additional pending-stop/restart test then passed with **9/9 T3 tests**.
 Final post-commit `npm test` output is recorded below and in the accompanying
 `b9-t3-runner-npm-test.txt`.
+
+Post-commit verification (implementation commit `bb0af95`):
+
+```text
+$ npm test
+> bounty-board@1.0.0 test
+> node --test --test-concurrency=1 test/
+
+ℹ tests 79
+ℹ suites 0
+ℹ pass 79
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 70110.178136
+(exit 0)
+```
+
+Full output: [b9-t3-runner-npm-test.txt](b9-t3-runner-npm-test.txt).
+`git diff --check` also passed. No reviewer code was changed.
