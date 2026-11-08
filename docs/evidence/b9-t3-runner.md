@@ -1,5 +1,43 @@
 # Bounty #9: T3 runner evidence
 
+## Attempt 5: integrate current master after code approval
+
+The orchestrator requested only integration with the four master commits since
+`d660d18`. Ran `git fetch origin`, then `git merge origin/master` at
+`56c8df0` (Chat tab, b8 evidence, room-report dispatch-plan regression, and
+conditional Chat dock link). The sole conflict was the dispatcher imports;
+resolved it by retaining both `T3Workers` and `outcomeOf`.
+
+The merged dispatcher retains master's `plan()` as the common source for tick
+dispatch and room idle reporting, including slot order, concurrency cap and
+shared-bounty reservation. T3 polling, thread-id exit messages, token accounting
+and interruption remain in their existing lifecycle paths. Room reports now
+also run through that shared `onExit` path. No other runner or reviewer behavior
+was changed for this integration.
+
+Verification on the merged tree:
+
+```text
+$ npm test > docs/evidence/b9-t3-runner-attempt5-npm-test.txt 2>&1
+ℹ tests 98
+ℹ suites 0
+ℹ pass 98
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 96826.205733
+(exit 0)
+```
+
+Full output: [b9-t3-runner-attempt5-npm-test.txt](b9-t3-runner-attempt5-npm-test.txt).
+This includes the new room-report tests (including the tick-plan idle-tail
+regression), both Chat UI tests, and all 17 fake-T3 tests. `git diff --check`
+passed. The GPU lease used for the headless UI checks was released. No new
+screenshots were requested or captured. The installed-T3 E2E and cleanup
+transcripts below remain unchanged; this integration neither restarted a live
+board nor changed the installed T3 server, settings, projects or threads.
+
 ## Attempt 4: reconcile rejected launches without leaking slots
 
 The attempt-3 review found that a rejected `orchestration.launchThread` left

@@ -34,6 +34,7 @@ function createServer(cfg, { dispatch = true, seed = true } = {}) {
   app.use(express.static(pub));
   app.get('/roster', (req, res) => res.sendFile(path.join(pub, 'roster.html')));
   app.get('/live', (req, res) => res.sendFile(path.join(pub, 'live.html')));
+  app.get('/chat', (req, res) => res.sendFile(path.join(pub, 'chat.html')));
   app.get('/leaderboard', (req, res) => res.sendFile(path.join(pub, 'leaderboard.html')));
   app.get('/health', (req, res) => res.json({ ok: true, paused: board.paused() }));
 
