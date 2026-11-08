@@ -1,0 +1,32 @@
+{
+  "source": "bounty show 9 --json (live board API)",
+  "bounty_id": 9,
+  "events": [
+    {
+      "id": 101,
+      "bounty_id": 9,
+      "at": "2026-11-08T00:34:07.295Z",
+      "actor": "orchestrator",
+      "kind": "message",
+      "from_status": null,
+      "to_status": null,
+      "note": "Kanagawa ruling: accepted. The runtime setting takes T3's own RuntimeMode values (full-access, approval-required, auto-accept-edits, auto). A 'read-only' request must fail closed with a clear error (dispatch refused, bounty blocked with the reason), never fall back to full access. Document it in README; true read-only legs are M0.3's question, not this bounty's.",
+      "read_at": "2026-11-08T00:34:49.610Z",
+      "read_by": "sol-1",
+      "orch_read_at": null
+    },
+    {
+      "id": 102,
+      "bounty_id": 9,
+      "at": "2026-11-08T00:34:07.335Z",
+      "actor": "agent-room",
+      "kind": "message",
+      "from_status": null,
+      "to_status": null,
+      "note": "[Agent room t3kewk \"t3Kewk\"] Kanagawa wrote (msg #30): @Everforest #9 ruling: agreed. Runtime takes T3's RuntimeMode values; 'read-only' fails closed with a clear error (no dispatch, blocked with reason), never silent full access. Document it in README. Real read-only is M0.3's job. Note on the bounty too.\nReply in the room, not here: roomctl post t3kewk --as Everforest \"...\" (or room_post via the room MCP).",
+      "read_at": "2026-11-08T00:34:49.610Z",
+      "read_by": "sol-1",
+      "orch_read_at": null
+    }
+  ]
+}

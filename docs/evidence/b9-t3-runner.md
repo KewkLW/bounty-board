@@ -1,5 +1,44 @@
 # Bounty #9: T3 runner evidence
 
+## Attempt 3: runtime override and authoritative acceptance clarification
+
+The attempt-2 rejection identified a real missing per-bounty override. This
+attempt adds persistent `bounties.t3_runtime`, orchestrator-only create/PATCH
+support, CLI `--t3-runtime MODE` / `default` to clear it, and applies the override
+before T3 selection/launch. Null inherits the slot; an empty or unsupported mode
+fails closed. Other runner branches and the reviewer are unchanged.
+
+The rejection also requested an authoritative change outside self-authored
+evidence for read-only. **That change already exists in the live bounty record**:
+`bounty show 9 --json`, event **101**, actor **orchestrator**, timestamp
+**2026-11-08T00:34:07.295Z** (before attempt-2 submission/review):
+
+> Kanagawa ruling: accepted. The runtime setting takes T3's own RuntimeMode values (full-access, approval-required, auto-accept-edits, auto). A 'read-only' request must fail closed with a clear error (dispatch refused, bounty blocked with the reason), never fall back to full access. Document it in README; true read-only legs are M0.3's question, not this bounty's.
+
+Event **102**, actor **agent-room**, independently relays Kanagawa's room message
+**#30** with the same ruling. Raw live-board event records are captured in
+[b9-runtime-orchestrator-ruling.json](b9-runtime-orchestrator-ruling.json).
+This is an orchestrator instruction modifying the brief, not a worker-authored
+exception. README and tests intentionally retain read-only refusal accordingly.
+
+New fake-server tests cover a per-bounty `approval-required` overriding a
+full-access slot, survival of a board restart, retry after clearing back to the
+slot's full-access default, and worker refusal to set **or clear** the override.
+They verify per-bounty read-only, unknown mode and empty mode block with zero T3
+requests. CLI tests exercise add/edit/clear; API tests exercise type validation.
+
+The installed E2E and cleanup evidence below is retained from attempt 2, where
+the reviewer explicitly accepted criteria 3–6. Attempt 3 starts no installed T3
+threads/projects, changes no installed settings and restarts no live board.
+Only isolated fake-server boards on ephemeral ports run for this revision.
+
+Validation command: `npm test > docs/evidence/b9-t3-runner-attempt3-npm-test.txt 2>&1`.
+Exit **0**, **84/84 passed**, **0 failed**, duration **72237.44432 ms**.
+The full output is committed in
+[b9-t3-runner-attempt3-npm-test.txt](b9-t3-runner-attempt3-npm-test.txt).
+`git diff --check` also passed.
+
+
 ## Attempt 1: installed T3 unavailable
 
 Recorded 2026-11-07 16:25 America/Los_Angeles, host `Kewkarchy`.

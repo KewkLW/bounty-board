@@ -203,6 +203,19 @@ model/effort into its ordinary slot metadata, including existing escalation rule
 `approval-required`, `auto-accept-edits` and `auto`. **`read-only` is refused**:
 installed T3 has no read-only execution RuntimeMode. Dispatch blocks the bounty
 with an explicit error and creates no thread; it never falls back to write access.
+
+The orchestrator can override runtime for a single bounty with
+`bounty add "Task" --t3-runtime approval-required` or
+`bounty edit ID --t3-runtime approval-required` (API create/PATCH field
+`"t3_runtime": "approval-required"`). It persists in the bounty database and
+applies to each subsequent attempt, including retries after board restarts.
+Precedence is bounty `t3_runtime`, slot `t3.runtime`, runner defaults, then
+`full-access`. `bounty edit ID --t3-runtime default` (API `null`) clears the
+override. Workers cannot set or clear it. Changes do not alter an already running
+thread. Unsupported values, including a per-bounty `read-only`, block dispatch
+without launching a thread. This follows Kanagawa's authoritative 2026-11-08
+00:34 orchestrator note (room message #30); true read-only is deferred to M0.3.
+
 `interaction` defaults to `default` (`plan` is also accepted by T3). `effort`
 becomes a provider option named `reasoningEffort` for the `codex` instance and
 `effort` otherwise; custom instances can set `effort_option`. Additional T3

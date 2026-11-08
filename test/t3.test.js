@@ -250,3 +250,62 @@ test('T3: an unacknowledged interrupt survives a board restart', async () => {
     assert.equal(t.f.requests.filter(r => r.payload?.type === 'thread.stop').length, 2);
   } finally { if (restarted) await restarted.close(); await t.f.close(); }
 });
+
+test('T3: per-bounty runtime persists across restart, overrides slot, and only orchestrator can change it', async () => {
+  const t = await setup('t3-runtime-override'); let restarted;
+  try {
+    const created = await t.call('POST', '/bounties', { title: 'runtime override', project: 'scratch', criteria: ['safe'], assignee_slot: slot.id, t3_runtime: 'approval-required' });
+    assert.equal(created.status, 200);
+    const id = created.data.id;
+    assert.equal(created.data.t3_runtime, 'approval-required');
+    const denied = await t.call('PATCH', `/bounties/${id}`, { t3_runtime: 'full-access' }, slot.id);
+    assert.equal(denied.status, 403);
+    assert.equal((await t.call('PATCH', `/bounties/${id}`, { t3_runtime: null }, slot.id)).status, 403);
+    assert.equal((await t.call('POST', '/bounties', { title: 'worker override', t3_runtime: 'full-access' }, slot.id)).status, 403);
+    assert.equal((await t.call('PATCH', `/bounties/${id}`, { t3_runtime: 42 })).status, 400);
+    t.d.stop(); await t.s.closePreservingWorkers();
+    restarted = createServer(t.cfg, { dispatch: false }); await restarted.listen();
+    assert.equal(restarted.board.raw(id).t3_runtime, 'approval-required');
+    restarted.board.ready(id);
+    await restarted.dispatcher.spawn(t.cfg.slots[0], restarted.board.need(id));
+    assert.equal(t.f.requests.filter(r => r.tag === 'orchestration.launchThread').at(-1).payload.runtimeMode, 'approval-required');
+    const w = restarted.dispatcher.live.get(id);
+    await restarted.dispatcher.t3.stop(w, 'test finished');
+    assert.equal(restarted.board.raw(id).status, 'blocked');
+    restarted.board.update(id, { t3_runtime: null });
+    restarted.board.ready(id);
+    await restarted.dispatcher.spawn(t.cfg.slots[0], restarted.board.need(id));
+    assert.equal(t.f.requests.filter(r => r.tag === 'orchestration.launchThread').at(-1).payload.runtimeMode, 'full-access');
+    await restarted.dispatcher.t3.stop(restarted.dispatcher.live.get(id), 'test cleanup');
+  } finally { if (restarted) await restarted.close(); else await t.s.close(); await t.f.close(); }
+});
+
+for (const runtime of ['read-only', 'unknown-mode', '']) {
+  test(`T3: per-bounty ${runtime} overrides full-access and blocks without launching`, async () => {
+    const t = await setup('t3-bounty-runtime-refused');
+    try {
+      const b = t.board.create({ title: 'fail closed', project: 'scratch', criteria: ['safe'], assignee_slot: slot.id, t3_runtime: runtime });
+      t.board.ready(b.id); t.d.tick();
+      await waitFor(() => t.board.raw(b.id).status === 'blocked');
+      assert.match(t.board.raw(b.id).blocked_reason, /T3 does not support runtime/);
+      assert.equal(t.f.requests.length, 0);
+      assert.equal(t.d.live.size, 0);
+    } finally { await t.finish(); }
+  });
+}
+
+test('T3: CLI add/edit set and clear the per-bounty runtime', async () => {
+  const t = await setup('t3-runtime-cli');
+  try {
+    const cli = args => exec(process.execPath, [require('path').join(__dirname, '../bin/bounty'), ...args], {
+      env: { ...process.env, BOUNTY_URL: t.url, BOUNTY_SLOT: '', BOUNTY_ID: '', BOUNTY_ACTOR: 'orchestrator' }
+    });
+    await cli(['add', 'CLI runtime', '--project', 'scratch', '--t3-runtime', 'auto']);
+    const b = t.board.list()[0];
+    assert.equal(b.t3_runtime, 'auto');
+    await cli(['edit', String(b.id), '--t3-runtime', 'approval-required']);
+    assert.equal(t.board.raw(b.id).t3_runtime, 'approval-required');
+    await cli(['edit', String(b.id), '--t3-runtime', 'default']);
+    assert.equal(t.board.raw(b.id).t3_runtime, null);
+  } finally { await t.finish(); }
+});
