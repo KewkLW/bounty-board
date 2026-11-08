@@ -1,5 +1,46 @@
 # Bounty #9: T3 runner evidence
 
+## Attempt 4: reconcile rejected launches without leaking slots
+
+The attempt-3 review found that a rejected `orchestration.launchThread` left
+an open attempt, live worker and manifest entry when the subsequent interrupt
+also failed because the thread had never existed.
+
+`lib/t3-workers.js` now reconciles the predetermined thread id after the stop
+attempt. An authoritative `ProjectionStoreThreadNotFoundError` closes the
+attempt through the ordinary `onExit` lifecycle, removes the manifest/live
+entry, records the launch error in the exit/block reason and frees the slot.
+An existing projection is processed normally; a running thread retains its
+persisted stop reason for retry. A timeout, connection error or other failed
+projection lookup does not prove absence and retains ownership. The existing
+restart attachment and polling logic can continue the pending interrupt.
+The other runners and reviewer paths are unchanged by this revision.
+
+Three new fake-server regression tests exercise:
+
+- A rejected launch into a nonexistent project, followed by a rejected stop and
+  confirmed absence: ended attempt, no manifest/live entry, idle slot, and a
+  successful retry with a different thread id.
+- A committed launch whose acknowledgement is lost: the board reconnects,
+  interrupts that same thread, closes the attempt and removes ownership.
+- A lost acknowledgement plus failed interrupt and unavailable projection:
+  the running thread keeps its open attempt, manifest and occupied slot until
+  reconciliation recovers and the pending interrupt succeeds. No duplicate
+  launch is issued.
+
+`node --test test/t3.test.js`: **17/17 passed**, exit **0**, duration
+**10246.127878 ms**. Full-suite command:
+`npm test > docs/evidence/b9-t3-runner-attempt4-npm-test.txt 2>&1`.
+Exit **0**, **87/87 passed**, **0 failed**, duration **73771.885083 ms**.
+Full output: [b9-t3-runner-attempt4-npm-test.txt](b9-t3-runner-attempt4-npm-test.txt).
+`git diff --check` also passed.
+
+The installed E2E evidence from attempt 2 remains applicable and was accepted
+by the attempt-3 reviewer for criteria 4–7. This revision uses only isolated
+fake-server boards with their own temporary configs, databases and registries
+on ephemeral ports. It creates no installed T3 threads/projects, changes no
+installed settings, and stops/restarts no live board or installed T3 process.
+
 ## Attempt 3: runtime override and authoritative acceptance clarification
 
 The attempt-2 rejection identified a real missing per-bounty override. This

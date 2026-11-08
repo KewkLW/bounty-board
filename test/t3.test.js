@@ -18,9 +18,15 @@ async function fake() {
     assert.equal(req.url, '/ws?orchestrationProtocol=2');
     socket.on('message', async data => {
       const f = JSON.parse(data); requests.push(f);
+      if (f._tag !== 'Request') return;
       let value;
       const p = f.payload;
-      if ((f.tag === 'orchestration.getThreadProjection' && !threads.has(p.threadId)) || (p.type === 'thread.stop' && faults.interrupt)) {
+      const fail = name => socket.send(JSON.stringify({ _tag: 'Exit', requestId: f.id, exit: { _tag: 'Failure', cause: [{ _tag: 'Fail', error: { name } }] } }));
+      if (f.tag === 'orchestration.launchThread' && faults.launch === 'reject') {
+        fail('InvalidProjectError'); return;
+      }
+      if (f.tag === 'orchestration.getThreadProjection' && faults.projection) { fail('TemporaryFailure'); return; }
+      if ((f.tag === 'orchestration.getThreadProjection' && !threads.has(p.threadId)) || (p.type === 'thread.stop' && (faults.interrupt || !threads.has(p.threadId)))) {
         if (faults.interrupt) faults.interrupt--;
         const error = f.tag === 'orchestration.getThreadProjection' ? { name: 'ProjectionStoreThreadNotFoundError' } : { name: 'TemporaryFailure' };
         socket.send(JSON.stringify({ _tag: 'Exit', requestId: f.id, exit: { _tag: 'Failure', cause: [{ _tag: 'Fail', error }] } }));
@@ -29,6 +35,8 @@ async function fake() {
       if (f.tag === 'orchestration.launchThread') {
         const projection = { thread: { id: p.threadId }, runs: [{ id: 'run-1', status: 'running' }], providerTurns: [], messages: [], visibleTurnItems: [], updatedAt: new Date().toISOString() };
         threads.set(p.threadId, projection); value = { threadId: p.threadId, projection, resumed: false };
+        // Simulate a committed launch whose acknowledgement was lost.
+        if (faults.launch === 'disconnect') { socket.terminate(); return; }
       } else if (f.tag === 'orchestration.getThreadProjection') value = threads.get(p.threadId);
       else if (p.type === 'thread.stop') {
         const t = threads.get(p.threadId); t.runs[0].status = 'interrupted'; t.updatedAt = new Date().toISOString(); value = { sequence: 1 };
@@ -103,6 +111,73 @@ test('T3: config, title, worktree, private CLI identity, activity, tokens, logs 
     assert.equal(a.tokens_in, 100); assert.equal(a.tokens_out, 20); assert.equal(a.cache_read, 30); assert.equal(a.cost_usd, null);
     assert.equal(t.board.raw(b.id).tokens_in, 100);
     assert.ok(!t.board.agents.read().some(e => e.thread_id === w.threadId));
+  } finally { await t.finish(); }
+});
+
+test('T3: rejected launch with confirmed absence closes attempt and manifest, and the slot can retry', async () => {
+  const t = await setup('t3-launch-rejected');
+  try {
+    t.f.faults.launch = 'reject';
+    const b = t.board.create({ title: 'rejected project', project: 'scratch', criteria: ['retry'], assignee_slot: slot.id });
+    t.board.ready(b.id); t.d.tick();
+    await waitFor(() => t.board.raw(b.id).status === 'blocked' && !t.d.spawning.size);
+    const a = t.board.get(b.id).attempts[0];
+    assert.match(t.board.raw(b.id).blocked_reason, /InvalidProjectError/);
+    assert.ok(a.ended_at);
+    assert.equal(a.exit_code, 1);
+    assert.match(a.outcome, /never started/);
+    assert.equal(t.d.live.size, 0);
+    assert.equal(t.board.agents.read().length, 0);
+    assert.equal(t.f.threads.size, 0);
+    assert.equal(t.d.slotsState()[0].state, 'idle');
+    assert.ok(t.f.requests.some(r => r.tag === 'orchestration.getThreadProjection' && r.payload.threadId === a.thread_id));
+    delete t.f.faults.launch;
+    t.board.ready(b.id); t.d.tick();
+    const next = await waitFor(() => t.d.live.get(b.id));
+    await waitFor(() => !next.launching);
+    assert.notEqual(next.threadId, a.thread_id);
+    assert.equal(t.board.get(b.id).attempts.length, 2);
+    await t.d.t3.stop(next, 'test cleanup');
+  } finally { await t.finish(); }
+});
+
+test('T3: lost launch acknowledgement interrupts the committed thread before releasing ownership', async () => {
+  const t = await setup('t3-launch-lost');
+  try {
+    t.f.faults.launch = 'disconnect';
+    const b = t.board.create({ title: 'lost acknowledgement', project: 'scratch', criteria: ['stop'], assignee_slot: slot.id });
+    t.board.ready(b.id); t.d.tick();
+    await waitFor(() => t.board.raw(b.id).status === 'blocked' && !t.d.spawning.size);
+    const a = t.board.get(b.id).attempts[0];
+    assert.equal(t.f.threads.get(a.thread_id).runs[0].status, 'interrupted');
+    assert.ok(a.ended_at);
+    assert.equal(t.d.live.size, 0);
+    assert.equal(t.board.agents.read().length, 0);
+    assert.equal(t.f.requests.filter(r => r.tag === 'orchestration.launchThread').length, 1);
+  } finally { await t.finish(); }
+});
+
+test('T3: uncertain launch and unavailable reconciliation retain ownership until interrupt retry succeeds', async () => {
+  const t = await setup('t3-launch-uncertain');
+  try {
+    t.f.faults.launch = 'disconnect'; t.f.faults.interrupt = 1; t.f.faults.projection = true;
+    const b = t.board.create({ title: 'uncertain launch', project: 'scratch', criteria: ['retain'], assignee_slot: slot.id });
+    t.board.ready(b.id); t.d.tick();
+    await waitFor(() => t.board.raw(b.id).status === 'blocked' && !t.d.spawning.size);
+    const w = t.d.live.get(b.id);
+    assert.ok(w);
+    assert.equal(t.f.threads.get(w.threadId).runs[0].status, 'running');
+    assert.equal(t.board.get(b.id).attempts[0].ended_at, null);
+    assert.equal(t.board.get(b.id).attempts[0].thread_stop_reason, 'T3 launch failed');
+    assert.ok(t.board.agents.read().some(a => a.thread_id === w.threadId));
+    assert.equal(t.d.slotsState()[0].state, 'working');
+    delete t.f.faults.projection;
+    t.d.t3.poll(b.id, w);
+    await waitFor(() => !t.d.live.has(b.id));
+    assert.equal(t.f.threads.get(w.threadId).runs[0].status, 'interrupted');
+    assert.ok(t.board.get(b.id).attempts[0].ended_at);
+    assert.equal(t.board.agents.read().length, 0);
+    assert.equal(t.f.requests.filter(r => r.tag === 'orchestration.launchThread').length, 1);
   } finally { await t.finish(); }
 });
 
