@@ -165,6 +165,96 @@ Codex workers run `codex exec --json`. Configure the runner:
 }
 ```
 
+### T3 workers
+
+Use `runner: "t3"` to run every attempt as a named thread in the **already running**
+T3 installation. The board never starts, restarts, upgrades or signals the T3 server.
+Create/select a T3 project for the repository first (`t3 project add --help`);
+`t3 thread list --project /path/to/repo --json` checks the CLI connection. Put
+that project's id in the slot (or in `runners.t3.defaults.project_id`):
+
+```json
+{
+  "runners": { "t3": { "base_dir": "/home/kewk/.t3", "bin": "t3" } },
+  "slots": [{
+    "id": "kewk-opus-1",
+    "name": "Nord",
+    "runner": "t3",
+    "t3": {
+      "project_id": "the-existing-t3-project-id",
+      "provider": "claudeAgent",
+      "model": "claude-opus-5-5",
+      "effort": "medium",
+      "runtime": "full-access"
+    }
+  }]
+}
+```
+
+`provider` is the **T3 provider instance id**, including a custom instance id if
+used, rather than a CLI executable. The title is `Nord #9` for bounty 9. T3 uses
+the board-created bounty worktree and branch (`existing_worktree`); it does not
+create a second worktree. Each retry gets a fresh thread id. Match `project_id`
+to the repository assigned to that slot. `runners.t3.defaults` supplies shared
+`t3` slot fields; explicit slot fields override it. The board copies the T3
+model/effort into its ordinary slot metadata, including existing escalation rules.
+
+`runtime` defaults to `full-access`. Supported values are T3's own `full-access`,
+`approval-required`, `auto-accept-edits` and `auto`. **`read-only` is refused**:
+installed T3 has no read-only execution RuntimeMode. Dispatch blocks the bounty
+with an explicit error and creates no thread; it never falls back to write access.
+`interaction` defaults to `default` (`plan` is also accepted by T3). `effort`
+becomes a provider option named `reasoningEffort` for the `codex` instance and
+`effort` otherwise; custom instances can set `effort_option`. Additional T3
+option selections can be supplied as `options: [{"id":"...","value":"..."}]`.
+Provider options/models must exist in that installed provider's catalog.
+
+The runner discovers `userdata/server-runtime.json` beneath `base_dir` (default
+`T3CODE_HOME` or `~/.t3`), then talks to the CLI's authenticated server API via
+Effect JSON-RPC v2. `origin` optionally overrides the discovered HTTP origin.
+It issues an expiring, scoped local `t3 auth session`, keeps the bearer only in
+memory, refreshes the connection before expiration, and revokes its sessions on
+close. No API keys or changes to T3 provider settings are needed.
+
+**Worker identity:** shared T3 provider processes do not inherit this board's
+`BOUNTY_*` environment. Each attempt gets a mode-0700 private CLI next to its
+log (`*.bounty`). The prompt substitutes its absolute path into every protocol
+command. It supplies `BOUNTY_URL`, `BOUNTY_ID`, `BOUNTY_SLOT`, and
+`BOUNTY_ATTEMPT`, then invokes this board's CLI. Its requests carry the ordinary
+slot actor header; the existing server restrictions still deny approve, ready,
+done and other orchestrator actions. This is the existing trusted local worker
+identity model, not a sandbox against a malicious local process forging headers.
+Use the supplied CLI for every board operation; the shared `bounty` on PATH may
+point to a different board.
+
+**Activity and usage:** polling follows thread projection state and real event
+timestamps, even while the board is paused. Unchanged polls do not refresh the
+heartbeat or log. Changed messages and tool activity are mirrored into the
+attempt log for `bounty log` and `/live`. Completed/failed/interrupted turns end
+the attempt and free its slot, using the ordinary exit/block/retry/escalation
+paths. Stalls interrupt the thread; blocked work is re-readied by the orchestrator
+as with process workers. A transient T3 outage keeps ownership by thread id and
+retries pending interrupts; it does not spawn a replacement while ownership is
+uncertain.
+
+T3 currently exposes **tokens, not dollar costs**. `cost_usd` stays null on T3
+attempts and `/live` usage; no dollar estimate is invented (the bounty's existing
+aggregate dollar counter starts at zero). Tokens come from `turnTokenUsage`, the
+main-agent turn ledger, including partial counts on interrupted turns. Its input
+count already includes cache reads/writes; those are also reported as separate
+subsets. Context-window `tokenUsage` snapshots are exposed separately as
+`context_usage` in `/live`, never summed as spend. Ledgers often arrive only when
+a turn ends: `usage_status` is `pending`, `partial` or `complete`, and pending
+counts are zero until T3 supplies them. Native subagent costs are not claimed as
+main-agent usage. Tokens update the live slot/attempt, then roll into bounty
+totals once on exit.
+
+To run the opt-in installed-server acceptance test: `node scripts/b9-t3-e2e.js`.
+It creates an isolated scratch repo/board/registry on an ephemeral port, exercises
+submission and a real silent-tool stall, and removes its scratch T3 threads and
+project afterwards. It requires the installed `codex` subscription provider and
+`gpt-6.1-sol`; normal `npm test` uses only a fake T3 server.
+
 ### The worker protocol
 
 Every spawned worker gets a prompt containing the bounty, its acceptance criteria, notes from earlier attempts, project rule docs, and the CLI protocol:
@@ -330,6 +420,15 @@ bounty agents register --pid 12000 --name Marshal --kind orchestrator          #
 ```
 
 (`POST /api/agents/spawned` with `{pid, name, kind, bounty}`. A worker slot may register only for a bounty, and never an orchestrator.)
+
+**T3 entries** have `runner: "t3"` and `thread_id` instead of a PID/start time.
+The attempt stores that id too. On restart the dispatcher reattaches by thread
+id and reconciles its actual run state; it never treats T3's server PID as a
+worker. Terminal bounty stops, `bounty kill`, idle shutdown and `cleanup --kill`
+use T3 `thread.stop` (including delegated work), never OS signals. Normal board
+shutdown leaves threads running for reattachment, just like process workers.
+Manifest entries disappear when the owned turn ends. `/live` includes
+`thread_id` and `thread_state`; `bounty cleanup --json` exposes the manifest id.
 
 **When the board stops a process**
 - **Done or failed**: when a bounty reaches done (merge check, `bounty done`, `close-merged`) or failed (`bounty fail`, attempt cap), its board worker and every agent registered with `--bounty` for it are stopped. Orchestrator entries never are.

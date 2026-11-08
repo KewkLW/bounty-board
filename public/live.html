@@ -133,7 +133,7 @@ function slotCard(s, L) {
       <div class="text-xs text-gray-400 mt-2">${q && q.next ? `next: #${q.next.id} ${esc(q.next.title)}` : 'nothing ready for this slot'}</div></div>`;
   }
   const b = s.bounty || {}, u = s.usage || {};
-  const cost = u.cost_usd != null ? '$' + u.cost_usd.toFixed(2) : s.cost_estimate_usd != null ? '~$' + s.cost_estimate_usd.toFixed(2) : '$ n/a';
+  const cost = s.runner === 't3' ? 'cost unavailable (T3)' : u.cost_usd != null ? '$' + u.cost_usd.toFixed(2) : s.cost_estimate_usd != null ? '~$' + s.cost_estimate_usd.toFixed(2) : '$ n/a';
   const stuck = s.possibly_stuck ? `<span class="pill bg-danger text-black blink">possibly stuck: log silent ${dur(s.log_age_s)}</span>` : '';
   const v = s.pipeline && s.pipeline.verify;
   const waits = (s.waiting || []).map(w => {
@@ -152,7 +152,8 @@ function slotCard(s, L) {
     <div class="flex flex-wrap gap-1 mt-1 items-center"><span class="pill bg-gray-800">${esc(b.type)}</span><span class="pill bg-gray-800">tier ${esc(b.tier)}</span><span class="pill ${b.priority === 'critical' ? 'bg-danger text-black' : b.priority === 'high' ? 'bg-warning text-black' : 'bg-gray-800'}">${esc(b.priority)}</span>
       <span class="pill bg-gray-800">attempt ${s.attempt.number}</span>${s.unread_notes ? `<span class="pill bg-warning text-black">${s.unread_notes} unread note${s.unread_notes > 1 ? 's' : ''}</span>` : ''}${stuck}</div>
     <div class="text-xs text-gray-300 mt-1">${esc(s.pipeline ? s.pipeline.label : b.status)}</div>
-    <div class="text-[11px] mono text-gray-400 mt-1">${tok((u.tokens_in || 0) + (u.cache_read || 0) + (u.cache_write || 0))} in · ${u.cost_usd != null ? tok(u.tokens_out) : '~' + tok(u.tokens_out_est)} out · ${cost} · log ${dur(s.log_age_s)} ago · <a class="text-primary underline" target="_blank" href="/api/attempts/${s.attempt.id}/log">log</a></div>
+    <div class="text-[11px] mono text-gray-400 mt-1">${tok(s.runner === 't3' ? (u.tokens_in || 0) : (u.tokens_in || 0) + (u.cache_read || 0) + (u.cache_write || 0))} in · ${u.cost_usd != null || s.runner === 't3' ? tok(u.tokens_out) : '~' + tok(u.tokens_out_est)} out · ${cost} · log ${dur(s.log_age_s)} ago · <a class="text-primary underline" target="_blank" href="/api/attempts/${s.attempt.id}/log">log</a></div>
+    ${s.thread_id ? `<div class="text-[10px] mono text-gray-400 clip">thread ${esc(s.thread_id)} · ${esc(s.thread_state)} · token ledger ${esc(s.usage_status)}</div>` : ''}
     ${s.progress ? `<div class="mt-2 op-sunk p-2 text-xs clip"><span class="text-[10px] font-black uppercase text-gray-400">progress · ${dur(s.progress.age_s)} ago</span><br>${esc(s.progress.note)}</div>` : '<div class="mt-2 text-xs text-gray-500">no progress note yet</div>'}
     ${verify}${ownCi}${waits}${holds}
     <div class="mt-2">${acts || '<div class="text-xs text-gray-500">no actions yet</div>'}</div>

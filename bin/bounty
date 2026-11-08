@@ -169,7 +169,7 @@ function show(b) {
   const atts = b.attempts_detail || [];
   if (atts.length) {
     L.push('', 'Attempts:');
-    for (const a of atts) L.push(`  ${a.id} ${a.kind} ${a.slot} ${a.model || ''} pid ${a.pid} ${a.started_at} -> ${a.ended_at || 'running'} exit ${a.exit_code ?? '-'} $${a.cost_usd ?? 'n/a'} ${a.outcome || ''}\n     log: ${URL_BASE}/api/attempts/${a.id}/log   (${a.log_path})`);
+    for (const a of atts) L.push(`  ${a.id} ${a.kind} ${a.slot} ${a.model || ''} ${a.thread_id ? 'thread ' + a.thread_id : 'pid ' + a.pid} ${a.started_at} -> ${a.ended_at || 'running'} exit ${a.exit_code ?? '-'} $${a.cost_usd ?? 'n/a'} ${a.outcome || ''}\n     log: ${URL_BASE}/api/attempts/${a.id}/log   (${a.log_path})`);
   }
   L.push('', 'History:');
   for (const e of (b.events || []).slice(-25)) L.push(`  ${e.at.slice(0, 19)} ${String(e.actor || '').padEnd(12)} ${e.kind}${e.to_status ? ` ${e.from_status || ''}->${e.to_status}` : ''} ${e.note ? String(e.note).split('\n')[0].slice(0, 220) : ''}`);
@@ -437,7 +437,7 @@ async function main() {
       console.log(`dispatcher ${s.paused ? 'PAUSED' : 'running'} | ${s.running}/${s.cap} workers | stall limit ${s.stall_minutes} min`);
       if (s.orchestrator) console.log(`orchestrator: ${orchLine(s.orchestrator)}`);
       for (const sl of s.slots) {
-        const w = sl.bounty ? `#${sl.bounty.id} ${sl.bounty.title} (since ${sl.attempt?.started_at?.slice(11, 19)}, pid ${sl.attempt?.pid})` : sl.next ? `next: #${sl.next.id} ${sl.next.title}` : '';
+        const w = sl.bounty ? `#${sl.bounty.id} ${sl.bounty.title} (since ${sl.attempt?.started_at?.slice(11, 19)}, ${sl.attempt?.thread_id ? 'thread ' + sl.attempt.thread_id : 'pid ' + sl.attempt?.pid})` : sl.next ? `next: #${sl.next.id} ${sl.next.title}` : '';
         console.log(`  ${sl.id.padEnd(14)} ${sl.state.padEnd(9)} ${String(sl.model || sl.runner).padEnd(7)} ${w}`);
       }
       for (const l of s.leases) {
@@ -503,7 +503,7 @@ async function main() {
       const mb = kb => `${(kb / 1024).toFixed(0)} MB`;
       const row = a => `${String(a.pid).padEnd(8)} ${String(a.name).slice(0, 18).padEnd(18)} ${a.kind.padEnd(12)} ${(a.bounty ? `#${a.bounty} ${a.bounty_status || '?'}` : '-').padEnd(16)} ${age(a.age_seconds).padStart(6)} ${mb(a.rss_kb).padStart(8)}  ${(a.stale ? `STALE: ${a.stale_why}` : 'ok').padEnd(30)} ${a.action}`;
       const head = 'pid      name               kind         bounty              age      RSS  state                          action';
-      const groups = [['Agents', r.agents.filter(a => a.kind !== 'bridge')], ['Bridge sessions', r.agents.filter(a => a.kind === 'bridge')]];
+      const groups = [['Agents', r.agents.filter(a => a.kind !== 'bridge' && a.runner !== 't3')], ['Bridge sessions', r.agents.filter(a => a.kind === 'bridge')]];
       console.log(`board idle ${r.idle_minutes} min (idle shutdown ${r.idle_shutdown_minutes ? `after ${r.idle_shutdown_minutes} min` : 'off'})`);
       for (const [title, rows] of groups) {
         const total = rows.reduce((n, a) => n + a.rss_kb, 0);
@@ -512,9 +512,14 @@ async function main() {
         console.log(head);
         for (const a of rows) console.log(row(a));
       }
+      const threads = r.agents.filter(a => a.runner === 't3');
+      if (threads.length) {
+        console.log(`\nT3 threads (${threads.length}; stopped through T3 interrupt)`);
+        for (const a of threads) console.log(`  ${a.thread_id} ${a.name} #${a.bounty} ${a.bounty_status || '?'} ${a.stale ? a.stale_why : 'ok'} ${a.action}`);
+      }
       const picked = r.agents.filter(a => a.action !== 'keep').length;
-      console.log(r.kill ? `\nstopped ${picked} (SIGTERM now, SIGKILL after the grace period)` : `\ndry run: ${picked} would be stopped. Add --kill to stop them${r.all ? '' : ' (--all for every non-orchestrator entry)'}.`);
-      console.log('Only processes in the manifest are listed or signalled; register yours with `bounty agents register`.');
+      console.log(r.kill ? `\nstopped ${picked} (${threads.length ? 'T3 interrupt for threads; SIGTERM/SIGKILL for processes' : 'SIGTERM now, SIGKILL after the grace period'})` : `\ndry run: ${picked} would be stopped. Add --kill to stop them${r.all ? '' : ' (--all for every non-orchestrator entry)'}.`);
+      console.log(threads.length ? 'Only owned manifest threads/processes are stopped.' : 'Only processes in the manifest are listed or signalled; register yours with `bounty agents register`.');
       return;
     }
     case 'import': {
