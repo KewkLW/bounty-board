@@ -1,0 +1,322 @@
+#!/usr/bin/env python3
+"""roomctl: the room admin's command line for agent-rooms (same API the room MCP uses).
+
+  roomctl list
+  roomctl create <id> --admin NAME --purpose TEXT [--name TITLE] [--project P] [--brief-file F]
+  roomctl theme-done <id> --admin NAME [--notes TEXT]
+  roomctl invite <id> --admin NAME <member> [--role R] [--model M] [--kind agent|interactive]
+  roomctl invite-text <id> <member>          the invite a member gets (put it in its prompt, or type it into its session)
+  roomctl post <id> --as NAME TEXT...        (TEXT '-' reads stdin)
+  roomctl pin <id> --as NAME (--seq N | TEXT...)      (--admin works as before)
+  roomctl unpin <id> --as NAME PIN_ID
+  roomctl join <id> --as NAME [--agent-id ID|none]
+                                             accept an invite (prints the welcome packet). An interactive session
+                                             with a session relay records its agent id (from
+                                             $OMARCHY_AGENT_ROOM_OUTBOX) so @mentions reach its prompt directly
+  roomctl route <id> --as NAME [--agent-id ID|none] [--board DIR|none]
+                                             set your delivery route (the admin uses this for its own id; --board:
+                                             admin only, the room's bounty board, whose workers get @mentions as notes)
+  roomctl ask <id> --as NAME TEXT...         ask the human to act on cue (desktop notification + page banner)
+  roomctl answer <id> --as NAME SEQ [TEXT]   answer an ask (normally the human does this on the page)
+  roomctl read <id> --as NAME                new messages for NAME (advances its cursor)
+  roomctl tail <id> [-n N] [-f]              print the conversation (follow with -f)
+  roomctl export <id> FILE.md [--since SEQ]  transcript as markdown; --since keeps one run's talk
+  roomctl close <id> --admin NAME [--summary TEXT]
+  roomctl url <id>                           local and tailnet links
+  roomctl board-sync <id> --admin NAME --board-dir DIR [--board-name N] [--dry-run]
+                                             project room + bounty board: invite every slot by its name and the
+                                             board itself (kind board, joined, so it can post finishes), put the
+                                             room rule in the board's machine_rules (restart the board when idle)
+                                             and "room": {id, url} in board.json (its Chat tab frames that page)
+"""
+import argparse
+import json
+import os
+import re
+import shutil
+import socket
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+import rooms_env  # noqa: F401,E402  (config.env into os.environ)
+
+URL = os.environ.get('AGENT_ROOMS_URL', 'http://127.0.0.1:3396')
+
+
+def http(method, path, body=None, timeout=60):
+    req = urllib.request.Request(URL + path, None if body is None else json.dumps(body).encode(), method=method,
+                                 headers={'Content-Type': 'application/json', 'X-Room-Request': '1'})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        sys.exit(f'roomctl: {json.loads(e.read()).get("error", e)}')
+    except urllib.error.URLError as e:
+        sys.exit(f'roomctl: agent-rooms not reachable at {URL} ({e.reason}); systemctl --user start agent-rooms')
+
+
+def act(rid, action, body):
+    return http('POST', f'/api/r/{urllib.parse.quote(rid)}/{action}', body)
+
+
+def line(m):
+    t = m['at'][11:16]
+    if m['kind'] in ('system', 'pin'):
+        return f'{t}  * {m["text"]}'
+    return f'{t}  {m["from"]}: {m["text"]}'
+
+
+def tailnet_host():
+    try:
+        import subprocess
+        st = json.loads(subprocess.run(['tailscale', 'status', '--json'], capture_output=True, text=True, timeout=5).stdout)
+        return st['Self']['DNSName'].rstrip('.')
+    except Exception:
+        return socket.gethostname()
+
+
+def own_agent_id():
+    """This process's omarchy agent id (the relay's outbox name), or None. Board workers never have one: a worker
+    may inherit its orchestrator's environment, and the board reaches them through bounty notes instead."""
+    if os.environ.get('BOUNTY_SLOT') or os.environ.get('BOUNTY_ID'):
+        return None
+    ob = os.environ.get('OMARCHY_AGENT_ROOM_OUTBOX')
+    return os.path.basename(ob.rstrip('/')) if ob else None
+
+
+def agent_id_arg(v):
+    return own_agent_id() if v is None else ('' if v == 'none' else v)
+
+
+def invite_text(v, member):
+    inv = next((m for m in v['members'] if m['name'] == member), None)
+    role = (inv or {}).get('role') or 'member'
+    return (f'You are invited to the agent room "{v["name"]}" (room id `{v["id"]}`) as **{member}**, role: {role}.\n'
+            f'Purpose: {v["purpose"]}\n'
+            f'Accept it: call the `room_join` tool with room="{v["id"]}" and as="{member}". It returns the brief, '
+            f'the members and the recent conversation. Then work your part and talk in the room: `room_post` your '
+            f'findings and ideas as you go (short and concrete, @Name to address someone), `room_read` between work '
+            f'steps and answer what is addressed to you, `room_wait` when you are waiting on a reply, `room_status` '
+            f'to say what you are doing, and `room_status` done when you finish. The human reads and writes in the room too.')
+
+
+RULE_TAG = 'AGENT ROOM:'
+
+
+def board_name(cfg, override=None):
+    """The board's member name: --board-name, else board.json "name", else the hub's fallback (title-cased
+    default_project, else "Board <port>"), cut to what a room name allows."""
+    proj = cfg.get('default_project')
+    n = override or cfg.get('name') or (' '.join(w[:1].upper() + w[1:] for w in re.split(r'[-_\s]+', proj) if w) if proj else '') \
+        or f'Board {cfg.get("port", "")}'.strip()
+    n = re.sub(r'[^A-Za-z0-9 ._-]', '', n).strip(' ._-')[:40]
+    return n or 'Board'
+
+
+def set_room_key(path, room):
+    """Put "room": {...} in board.json without touching any other byte: one line, before the closing brace (or
+    replacing the line written before). Backs up first to board.json.bak-YYYYMMDD-room. Returns True if changed."""
+    text = open(path, encoding='utf-8').read()
+    cfg = json.loads(text)
+    if cfg.get('room') == room:
+        return False
+    line = '"room": ' + json.dumps(room, ensure_ascii=False)
+    if 'room' in cfg:
+        new, n = re.subn(r'(?m)^(\s*)"room": \{[^\n]*\}(,?)[ \t]*$', lambda m: m.group(1) + line + m.group(2), text)
+        if n != 1:
+            sys.exit(f'roomctl: {path} has a "room" key roomctl did not write; set it by hand to {line}')
+    else:
+        end = text.rstrip().rfind('}')
+        body = text[:end].rstrip()
+        indent = re.search(r'\n([ \t]+)"', text)
+        sep = ',' if not body.endswith('{') else ''
+        new = body + sep + '\n' + (indent.group(1) if indent else '  ') + line + '\n' + text[end:]
+    want = dict(cfg, room=room)
+    if json.loads(new) != want:
+        sys.exit(f'roomctl: could not add the room key to {path} cleanly; nothing written')
+    bak = f'{path}.bak-{time.strftime("%Y%m%d")}-room'
+    if not os.path.exists(bak):
+        shutil.copy2(path, bak)
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write(new)
+    os.replace(tmp, path)
+    return True
+
+
+def board_sync(a):
+    """Invite every slot of a bounty board to the project room and keep one machine rule (tagged RULE_TAG) in
+    board.json telling workers how to use it. Workers run headless with Bash, so the rule uses roomctl, which works
+    for every runner (claude allowed_tools lists, codex) without touching their tool permissions."""
+    path = os.path.join(a.board_dir, 'board.json')
+    cfg = json.load(open(path))
+    v = http('GET', f'/api/r/{a.id}')
+    have = {m['name'] for m in v['members']}
+    slots = [(s['id'], s.get('name') or s['id'], s.get('model') or s.get('runner') or '') for s in cfg.get('slots', [])]
+    for sid, name, model in slots:
+        if name in have:
+            print(f'{name}: already invited')
+        elif a.dry_run:
+            print(f'{name}: would invite (slot {sid})')
+        else:
+            act(a.id, 'invite', {'as': a.admin, 'name': name, 'role': f'board worker, slot {sid}', 'model': model, 'kind': 'agent'})
+            print(f'{name}: invited (slot {sid})')
+    bname = board_name(cfg, a.board_name)
+    if a.dry_run:
+        print(f'{bname}: would invite the board itself (kind board), record the board and write "room" into board.json')
+    else:
+        if bname not in have:
+            act(a.id, 'invite', {'as': a.admin, 'name': bname, 'role': 'the bounty board: reports finished work',
+                                 'kind': 'board'})
+            print(f'{bname}: invited (the board itself)')
+        act(a.id, 'join', {'as': bname})        # the board posts without a join step of its own
+        act(a.id, 'route', {'as': a.admin, 'board': os.path.abspath(a.board_dir)})
+        print(f'board recorded: @mentions of a slot name become notes on that slot\'s in-progress bounty')
+    port = urllib.parse.urlparse(URL).port or 3396
+    names = ', '.join(f'{sid} = {name}' for sid, name, _ in slots)
+    rule = (f'{RULE_TAG} this project\'s chat room is `{a.id}` (http://{tailnet_host()}:{port}/r/{a.id}/), shared with the '
+            f'orchestrator ({v["admin"]}), the other workers and the human. Your room name is your slot\'s name ({names}). '
+            f'Right after `bounty start`: `roomctl join {a.id} --as <YourName>` (it prints the brief, pins and recent talk). '
+            f'Post short findings, decisions, blockers and questions for other workers with `roomctl post {a.id} --as <YourName> "..."` '
+            f'(@Name to address someone); `roomctl read {a.id} --as <YourName>` after each major step and answer what is addressed to you. '
+            f'The board stays the record: room talk never replaces `bounty progress`, `bounty block` or `bounty submit`.')
+    rules = [r for r in cfg.get('machine_rules', []) if not r.startswith(RULE_TAG)]
+    rules.append(rule)
+    if a.dry_run:
+        print('would set machine rule:\n' + rule)
+        return
+    if cfg.get('machine_rules') != rules:
+        cfg['machine_rules'] = rules
+        bak = path + '.bak-room'
+        if not os.path.exists(bak):
+            open(bak, 'w').write(open(path).read())
+        tmp = path + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(cfg, f, indent=2, ensure_ascii=False); f.write('\n')
+        os.replace(tmp, path)
+        print(f'machine rule written to {path} (backup {bak}); the board reads it at start: restart it when no worker is busy')
+    else:
+        print('machine rule already current')
+    room = {'id': a.id, 'url': f'{URL.rstrip("/")}/r/{a.id}/'}
+    if set_room_key(path, room):
+        print(f'"room" written to {path}: {json.dumps(room)} (the board\'s Chat tab frames that page)')
+    else:
+        print('"room" key already current')
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sp = ap.add_subparsers(dest='cmd', required=True)
+    sp.add_parser('list')
+    p = sp.add_parser('create'); p.add_argument('id'); p.add_argument('--admin', required=True)
+    p.add_argument('--purpose', required=True); p.add_argument('--name'); p.add_argument('--project'); p.add_argument('--brief-file')
+    p = sp.add_parser('theme-done'); p.add_argument('id'); p.add_argument('--admin', required=True); p.add_argument('--notes')
+    p = sp.add_parser('invite'); p.add_argument('id'); p.add_argument('--admin', required=True); p.add_argument('member')
+    p.add_argument('--role'); p.add_argument('--model'); p.add_argument('--kind', default='agent')
+    p = sp.add_parser('invite-text'); p.add_argument('id'); p.add_argument('member')
+    p = sp.add_parser('post'); p.add_argument('id'); p.add_argument('--as', dest='who', required=True); p.add_argument('text', nargs='+')
+    p = sp.add_parser('pin'); p.add_argument('id'); p.add_argument('--as', '--admin', dest='who', required=True); p.add_argument('--seq', type=int); p.add_argument('text', nargs='*')
+    p = sp.add_parser('unpin'); p.add_argument('id'); p.add_argument('--as', '--admin', dest='who', required=True); p.add_argument('pin', type=int)
+    p = sp.add_parser('join'); p.add_argument('id'); p.add_argument('--as', dest='who', required=True); p.add_argument('--agent-id')
+    p = sp.add_parser('route'); p.add_argument('id'); p.add_argument('--as', '--admin', dest='who', required=True)
+    p.add_argument('--agent-id'); p.add_argument('--board')
+    p = sp.add_parser('ask'); p.add_argument('id'); p.add_argument('--as', dest='who', required=True); p.add_argument('text', nargs='+')
+    p = sp.add_parser('answer'); p.add_argument('id'); p.add_argument('--as', dest='who', required=True); p.add_argument('seq', type=int); p.add_argument('text', nargs='*')
+    p = sp.add_parser('read'); p.add_argument('id'); p.add_argument('--as', dest='who', required=True)
+    p = sp.add_parser('tail'); p.add_argument('id'); p.add_argument('-n', type=int, default=40); p.add_argument('-f', action='store_true')
+    p = sp.add_parser('export'); p.add_argument('id'); p.add_argument('file'); p.add_argument('--since', type=int, default=0)
+    p = sp.add_parser('close'); p.add_argument('id'); p.add_argument('--admin', required=True); p.add_argument('--summary')
+    p = sp.add_parser('url'); p.add_argument('id')
+    p = sp.add_parser('board-sync'); p.add_argument('id'); p.add_argument('--admin', required=True)
+    p.add_argument('--board-dir', required=True); p.add_argument('--dry-run', action='store_true')
+    p.add_argument('--board-name', help='the board\'s member name (default: board.json "name", else the project title)')
+    a = ap.parse_args()
+
+    if a.cmd == 'list':
+        for r in http('GET', '/api/rooms'):
+            print(f'{r["id"]:<24} {"closed" if r["closed"] else str(r["online"]) + "/" + str(r["members"]) + " online":<12} '
+                  f'{"themed" if r["themed"] else "UNTHEMED":<9} {r["purpose"]}')
+    elif a.cmd == 'create':
+        brief = open(a.brief_file).read() if a.brief_file else ''
+        r = http('POST', '/api/rooms', {'id': a.id, 'name': a.name, 'purpose': a.purpose, 'project': a.project,
+                                        'brief': brief, 'admin': a.admin})
+        print(f'created {r["id"]}; theme it in {r["public_dir"]} then: roomctl theme-done {a.id} --admin {a.admin}')
+    elif a.cmd == 'theme-done':
+        print(json.dumps(act(a.id, 'theme_done', {'as': a.admin, 'notes': a.notes})))
+    elif a.cmd == 'invite':
+        act(a.id, 'invite', {'as': a.admin, 'name': a.member, 'role': a.role, 'model': a.model, 'kind': a.kind})
+        print(invite_text(http('GET', f'/api/r/{a.id}'), a.member))
+    elif a.cmd == 'invite-text':
+        print(invite_text(http('GET', f'/api/r/{a.id}'), a.member))
+    elif a.cmd == 'post':
+        text = sys.stdin.read() if a.text == ['-'] else ' '.join(a.text)
+        print(act(a.id, 'post', {'as': a.who, 'text': text}))
+    elif a.cmd == 'pin':
+        print(act(a.id, 'pin', {'as': a.who, 'seq': a.seq, 'text': ' '.join(a.text) or None}))
+    elif a.cmd == 'unpin':
+        print(act(a.id, 'unpin', {'as': a.who, 'id': a.pin}))
+    elif a.cmd == 'join':
+        aid = agent_id_arg(a.agent_id)
+        print(json.dumps(act(a.id, 'join', {'as': a.who} | ({'agent_id': aid} if aid else {})), indent=1, ensure_ascii=False))
+    elif a.cmd == 'route':
+        body = {'as': a.who}
+        aid = agent_id_arg(a.agent_id)
+        if aid is not None:
+            body['agent_id'] = aid
+        if a.board is not None:
+            body['board'] = '' if a.board == 'none' else os.path.abspath(a.board)
+        print(json.dumps(act(a.id, 'route', body)))
+    elif a.cmd == 'ask':
+        print(act(a.id, 'ask', {'as': a.who, 'text': ' '.join(a.text)}))
+    elif a.cmd == 'answer':
+        print(act(a.id, 'answer', {'as': a.who, 'seq': a.seq, 'text': ' '.join(a.text)}))
+    elif a.cmd == 'read':
+        r = act(a.id, 'read', {'as': a.who})
+        for m in r['messages']:
+            print(f'#{m["seq"]} {m["at"][:5]} {m["from"]}: {m["text"]}')
+        if r['more']:
+            print(f'... {r["more"]} more')
+    elif a.cmd == 'tail':
+        msgs = http('GET', f'/api/r/{a.id}/messages?since=0&limit=100000')
+        for m in msgs[-a.n:]:
+            print(line(m))
+        last = msgs[-1]['seq'] if msgs else 0
+        while a.f:
+            w = http('GET', f'/api/r/{a.id}/wait?since={last}&timeout=40', timeout=60)
+            for m in w['messages']:
+                print(line(m), flush=True)
+                last = m['seq']
+    elif a.cmd == 'export':
+        v = http('GET', f'/api/r/{a.id}')
+        msgs = http('GET', f'/api/r/{a.id}/messages?since={a.since}&limit=100000')
+        out = ['---', f'room: {v["id"]}', f'name: "{v["name"]}"', f'admin: {v["admin"]}', f'created: {v["created"]}',
+               f'closed: {v["closed"] or ""}', f'messages: {len(msgs)}', '---', '', f'# {v["name"]}', '', f'**Purpose:** {v["purpose"]}', '']
+        if v.get('summary'):
+            out += [f'**Summary:** {v["summary"]}', '']
+        if v['pins']:
+            out += ['## Pinned', ''] + [f'- {p["text"]} ({p["by"]}, {p["at"]})' for p in v['pins']] + ['']
+        out += ['## Members', ''] + [f'- **{m["name"]}** ({m.get("role") or m["kind"]}{", " + m["model"] if m.get("model") else ""})'
+                                     for m in v['members']] + ['', '## Conversation', '']
+        for m in msgs:
+            if m['kind'] in ('system', 'pin'):
+                out.append(f'*{m["at"][11:16]} {m["text"]}*\n')
+            else:
+                out.append(f'**{m["from"]}** {m["at"][11:16]}\n\n{m["text"]}\n')
+        os.makedirs(os.path.dirname(os.path.abspath(a.file)), exist_ok=True)
+        open(a.file, 'w').write('\n'.join(out))
+        print(f'wrote {a.file} ({len(msgs)} messages)')
+    elif a.cmd == 'close':
+        act(a.id, 'close', {'as': a.admin, 'summary': a.summary})
+        print('closed')
+    elif a.cmd == 'board-sync':
+        board_sync(a)
+    elif a.cmd == 'url':
+        port = urllib.parse.urlparse(URL).port or 3396
+        print(f'http://127.0.0.1:{port}/r/{a.id}/\nhttp://{tailnet_host()}:{port}/r/{a.id}/')
+
+
+if __name__ == '__main__':
+    main()

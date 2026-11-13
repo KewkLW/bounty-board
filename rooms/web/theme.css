@@ -1,0 +1,10 @@
+/* DEFAULT THEME: a room may not open invites with this file unchanged (room_theme_done refuses).
+   Copy of the hooks a theme restyles, every one optional:
+   :root custom properties (--bg --panel --panel-edge --text --muted --accent --admin --agent --human --system
+   --mention --font --font-display --font-mono --radius --members-w), body, .frame, .top, .crest, .titles h1,
+   .panel, .members, .chat, .member, .member .portrait, .msg .portrait, .msg, .msg.system, .msg.pin, #pin-list li,
+   #say, #text, #send. Put the project's real art in art/ and reference it from here (url("art/...")).
+   Portrait art per member: .portrait[data-name="Reviewer"] { background-image: url("art/reviewer.png") } */
+.panel { background: var(--panel); border: 1px solid var(--panel-edge); }
+#pin-list li { background: var(--panel); border-left: 3px solid var(--human); border-radius: 6px; }
+.member:hover { background: rgba(255,255,255,.03); }

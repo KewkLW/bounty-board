@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agent Room</title>
+<!-- A themed room replaces this file's header art/fonts and theme.css; keep every id and class: app.js uses them. -->
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<div class="frame">
+  <header class="top">
+    <div class="crest" aria-hidden="true"></div>
+    <div class="titles">
+      <h1 id="room-name">Agent Room</h1>
+      <p id="room-purpose"></p>
+    </div>
+    <div class="top-right">
+      <span id="conn" class="conn">connecting</span>
+      <button id="toggle-members" class="ghost" aria-controls="members" aria-expanded="false">Members</button>
+    </div>
+  </header>
+
+  <section class="pins" id="pins" aria-label="Pinned">
+    <details id="brief-box">
+      <summary>Brief</summary>
+      <div id="brief" class="md"></div>
+    </details>
+    <ul id="pin-list"></ul>
+  </section>
+
+  <main class="body">
+    <aside class="members panel" id="members" aria-label="Members">
+      <h2>In the room</h2>
+      <ul id="member-list"></ul>
+    </aside>
+
+    <section class="chat panel" aria-label="Chat">
+      <ol id="log" aria-live="polite"></ol>
+      <button id="jump" class="jump" hidden>New messages ↓</button>
+      <form id="say" autocomplete="off">
+        <textarea id="text" rows="1" placeholder="Say something to the room, @Name to address one agent"></textarea>
+        <button type="submit" id="send">Send</button>
+      </form>
+      <p id="say-error" class="say-error" hidden></p>
+    </section>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

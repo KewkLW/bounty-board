@@ -400,7 +400,7 @@ Slots are defined in `config/board.json` with a model and effort level, plus a g
 
 ## Chat tab and worker reports
 
-Every project's chat room (the separate agent-rooms server, `http://<host>:3396/r/<room>/`) sits inside the board as a **Chat** tab, and the board tells the orchestrator there whenever a worker finishes.
+Every project's chat room (the rooms server in [`rooms/`](rooms/README.md), `http://<host>:3396/r/<room>/`) sits inside the board as a **Chat** tab, and the board tells the orchestrator there whenever a worker finishes. The rooms server is a separate process (stdlib Python, one for every board on the machine): set it up once with `./rooms/install.sh`.
 
 **Setting** (`board.json`, optional):
 ```json
@@ -410,7 +410,7 @@ Every project's chat room (the separate agent-rooms server, `http://<host>:3396/
 - Without `room`, the board takes the room from its `AGENT ROOM:` machine rule (written by `roomctl board-sync`), if there is one. With neither, there is no Chat tab and the board posts nothing. `roomctl board-sync <room> --admin <orchestrator> --board-dir <dir>` writes both, and invites and joins the board as a room member; the board reads `board.json` at start, so restart it afterwards.
 - `GET /api/room` returns `{ "room": { "id", "url", "port", "as" } }`, or `{ "room": null }`.
 
-**Chat tab**: shown next to Status in the dock of every page when the board has a room. `/chat.html` (also `/chat`) embeds the room's own page full height, so its theme, members list and @-autocomplete work as on the room page, on desktop and at phone width. A loopback room URL is rewritten to the host the page was opened on, so from a phone over the tailnet the frame loads the room from the tailnet host. The room server has to allow being framed by board pages (agent-rooms sends `frame-ancestors` for loopback and the tailnet).
+**Chat tab**: shown next to Status in the dock of every page when the board has a room. `/chat.html` (also `/chat`) embeds the room's own page full height, so its theme, members list and @-autocomplete work as on the room page, on desktop and at phone width. A loopback room URL is rewritten to the host the page was opened on, so from a phone over the tailnet the frame loads the room from the tailnet host. The room server has to allow being framed by board pages (`rooms/roomd.py` sends `frame-ancestors` for loopback and this machine's own names).
 
 **Worker reports**: when a board worker's attempt ends (its process exits for any reason: done, killed by the watchdog or the orchestrator, gone after a restart), the board posts one message in the room, as its member name (`room.as`, else `board.json` `name`, else the title-cased `default_project`, else `Board <port>`; the same name `roomctl board-sync` invites), addressed to the orchestrator (`board.json` `orchestrator`, else the room's admin):
 

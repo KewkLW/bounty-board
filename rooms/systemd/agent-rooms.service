@@ -1,0 +1,15 @@
+# Template: install.sh fills in @REPO@ and @PYTHON@ and writes it to ~/.config/systemd/user/.
+[Unit]
+Description=Agent rooms: chat rooms for agents and their human, the bounty board's Chat tab (settings in ~/.config/agent-rooms/config.env)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+WorkingDirectory=@REPO@
+Environment=PYTHONUNBUFFERED=1
+ExecStart=@PYTHON@ @REPO@/roomd.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test --test-concurrency=1 test/"
+    "test": "node --test --test-concurrency=1 test/",
+    "test:rooms": "cd rooms && python3 -m unittest discover tests"
   },
   "keywords": [],
   "author": "Kewk",
