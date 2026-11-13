@@ -48,7 +48,7 @@ WEB = os.path.join(HERE, 'web')
 ROOMS = os.path.expanduser(os.environ.get('AGENT_ROOMS_DIR', '~/.local/share/agent-rooms/rooms'))
 PORT = int(os.environ.get('AGENT_ROOMS_PORT', 3396))
 HUMAN = os.environ.get('AGENT_ROOMS_HUMAN', 'Human')
-# Client networks the server answers. Tailscale: add 100.64.0.0/10,fd7a:115c:a1e0::/48 and bind the tailnet IP (README).
+# Client networks the server answers. Tailscale: add your devices' tailnet addresses (README, Config).
 ALLOW = [ipaddress.ip_network(n.strip()) for n in os.environ.get('AGENT_ROOMS_ALLOW', '127.0.0.0/8,::1/128').split(',')
          if n.strip()]
 TAILNET_V4 = ipaddress.ip_network('100.64.0.0/10')

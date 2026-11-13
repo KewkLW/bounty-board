@@ -47,10 +47,12 @@ Rooms data (chat, members, pins, themes and art) lives in `AGENT_ROOMS_DIR`
 One file, `~/.config/agent-rooms/config.env` (or `$AGENT_ROOMS_CONFIG`). Real environment variables win.
 Every key is optional; `config.example.env` lists them with their defaults.
 
-To use rooms from a phone over Tailscale, bind to this machine's own tailnet address
-(`AGENT_ROOMS_HOST=100.x.y.z`, from `tailscale ip -4`) rather than `0.0.0.0`, and add
-`100.64.0.0/10,fd7a:115c:a1e0::/48` to `AGENT_ROOMS_ALLOW`. `100.64.0.0/10` is the whole carrier-grade NAT range, not
-only your tailnet, so with a `0.0.0.0` bind on a CGNAT network your neighbours could reach the server too.
+To use rooms from a phone over Tailscale, set `AGENT_ROOMS_HOST=0.0.0.0` and add your devices to
+`AGENT_ROOMS_ALLOW`. Prefer their own tailnet addresses (`tailscale status` lists them, e.g. `100.101.7.9/32`) over
+the whole `100.64.0.0/10,fd7a:115c:a1e0::/48` ranges: `100.64.0.0/10` is all of carrier-grade NAT, not only your
+tailnet, so on a CGNAT network the wide range would also admit your neighbours. (Binding only the tailnet IP
+works too, but then the board and `roomctl` must use that address in `AGENT_ROOMS_URL` and the board's room url,
+since nothing listens on loopback.)
 The server accepts requests addressed to its own MagicDNS name (read from `tailscale status` at start); if Tailscale
 starts later than the rooms server, list the name in `AGENT_ROOMS_HOSTNAMES`. `roomctl url <id>` prints the local and
 tailnet links.
