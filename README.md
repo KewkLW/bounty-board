@@ -416,10 +416,11 @@ Every project's chat room (the rooms server in [`rooms/`](rooms/README.md), `htt
 
 ```
 @Conductor Alpha (opus-1) finished #12 Add the export button: submitted.
-@Conductor Alpha (opus-1) finished #12 Add the export button: verify failed. Alpha is idle: what's next?
+@Conductor Alpha (opus-1) finished #12 Add the export button: submitted, verifying. Alpha is idle: what's next?
+@Conductor Alpha (opus-1) finished #14 Wire the importer: blocked: needs the API key from the user.
 ```
 
-- The outcome is one of `submitted` (in review or later), `submitted, verifying` (exited while its verify runs), `verify failed`, `exited without submitting` (with the signal, if any), `failed (exit N, not submitted)`, `failed (never ran bounty start)`, `blocked: <the worker's reason>` or `failed`.
+- The outcome is `submitted` (in review or later), `submitted, verifying` (exited while its verify runs) or `blocked: <the worker's own reason>` (it ran `bounty block`). A broken attempt gets its incident line instead (next bullet), without the idle tail.
 - `<Worker> is idle: what's next?` is added when the dispatcher will not hand that slot a ready bounty on its next tick (nothing ready for it, the board paused, the slot benched, or the concurrency cap reached). The check runs the tick's own dispatch plan: slots in `board.json` order up to the cap, each bounty to one slot, so an earlier idle slot that takes the last free place or the same unassigned bounty leaves the finishing slot idle. When it will be dispatched, the report ends at the outcome.
 - Only the orchestrator is @mentioned: an @mention of a worker becomes a note on its bounty.
 - A broken attempt (it exited without submitting or without `bounty start`, the watchdog stopped it, its spawn or worktree failed, its verify failed after it left, or it hit the attempt cap) is reported by its incident line instead (see [Incidents](#incidents)): `@Conductor INCIDENT #3 on #12 Alpha: exited with code 1 without submitting. bounty incident 3`. The finished line above is for attempts that submitted, and for a worker that blocked the bounty itself.
