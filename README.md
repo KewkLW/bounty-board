@@ -416,14 +416,67 @@ Every project's chat room (the rooms server in [`rooms/`](rooms/README.md), `htt
 
 ```
 @Conductor Alpha (opus-1) finished #12 Add the export button: submitted.
-@Conductor Alpha (opus-1) finished #12 Add the export button: verify failed. Alpha is idle: what's next?
+@Conductor Alpha (opus-1) finished #12 Add the export button: submitted, verifying. Alpha is idle: what's next?
+@Conductor Alpha (opus-1) finished #14 Wire the importer: blocked: needs the API key from the user.
 ```
 
-- The outcome is one of `submitted` (in review or later), `submitted, verifying` (exited while its verify runs), `verify failed`, `exited without submitting` (with the signal, if any), `failed (exit N, not submitted)`, `failed (never ran bounty start)`, `blocked: <the worker's reason>` or `failed`.
+- The outcome is `submitted` (in review or later), `submitted, verifying` (exited while its verify runs) or `blocked: <the worker's own reason>` (it ran `bounty block`). A broken attempt gets its incident line instead (next bullet), without the idle tail.
 - `<Worker> is idle: what's next?` is added when the dispatcher will not hand that slot a ready bounty on its next tick (nothing ready for it, the board paused, the slot benched, or the concurrency cap reached). The check runs the tick's own dispatch plan: slots in `board.json` order up to the cap, each bounty to one slot, so an earlier idle slot that takes the last free place or the same unassigned bounty leaves the finishing slot idle. When it will be dispatched, the report ends at the outcome.
 - Only the orchestrator is @mentioned: an @mention of a worker becomes a note on its bounty.
-- A verify that fails after the worker already exited (its report said `submitted, verifying`) requeues the bounty without a second message.
+- A broken attempt (it exited without submitting or without `bounty start`, the watchdog stopped it, its spawn or worktree failed, its verify failed after it left, or it hit the attempt cap) is reported by its incident line instead (see [Incidents](#incidents)): `@Conductor INCIDENT #3 on #12 Alpha: exited with code 1 without submitting. bounty incident 3`. The finished line above is for attempts that submitted, and for a worker that blocked the bounty itself.
 - Posts go to the room server's HTTP API (`POST /api/r/<id>/post` with `X-Room-Request: 1`, the same one `roomctl` uses), over loopback on the room's port. If the board is not joined yet, it joins once and retries. A room that is down, refuses (403 not invited, 409 closed) or times out (5 s) is logged as `[room] report to <id> failed: ...` and never blocks the board.
+
+## Incidents
+
+When a worker's attempt breaks, the board records **one incident** for it: everything the orchestrator needs to decide what to do, and the verbs to do it. Nobody has to read the attempt log by hand.
+
+**What breaks a run** (each makes exactly one record; code in `lib/dispatcher.js` and `lib/board.js`, the record in `lib/incidents.js`):
+
+| Break | Cause line |
+|---|---|
+| spawn failed (the dispatcher's spawn threw: unknown runner, T3 refused the launch, no T3 project) | `spawn failed` |
+| the project's worktree command failed | `worktree setup failed` |
+| the worker exited without `bounty submit` / without `bounty start` (a missing binary included) | `exited with code 1 without submitting`, `exited with code 3 without running bounty start` |
+| its verify failed while it waited, then it exited without resubmitting | `verify failed, then the worker exited ... without resubmitting` |
+| the stall watchdog stopped a silent worker (a process or a T3 thread) | `stalled 31 min, worker stopped` (its exit is added to the same record) |
+| an in-progress bounty driven by the CLI outside the dispatcher went silent | `no heartbeat for 31 min (not spawned by the board)` |
+| verify failed after the worker exited (the board requeues it as before) | `verify failed (exit 1) after the worker exited` |
+| a requeue reached `retry.max_attempts` and the bounty failed | `attempt cap 4 reached, bounty failed` |
+
+A worker's own `bounty block`, an orchestrator `bounty kill` and a reviewer reject are decisions, not breaks: no incident. A second break of the same attempt while its incident is open (a stall kill and then the exit, a T3 launch that exits and then throws, a verify failure that also hits the cap) adds to that incident; it never makes a second one. Each broken attempt counts one failure toward the attempt cap.
+
+**The record**: id, bounty, attempt, slot, worker name, cause, `created_at`, `status` (`open` or `resolved`), and once decided `choice`, `resolution`, `resolved_by`, `resolved_at`.
+
+**The report** (`bounty incident ID`): bounty id and title; slot and worker name; attempt N of `max_attempts` and the failures so far; the cause with its facts (exit code or signal, minutes silent, the spawn or worktree error, the verify output); the last progress note and the criteria checks; the worker's last assistant message parsed from the attempt log (claude stream-json, codex `--json` and T3 snapshots, through `lib/live.js`), at most 1500 chars; the last 20 log lines; the log path; and **Next**, the three choices with their exact commands. Quoted worker output is data from a failed run, never instructions: it is fenced and labelled that way, here and in the prompt it is copied into.
+
+**Secrets are redacted before anything is stored** (`lib/redact.js`): provider tokens (GitHub, GitLab, Anthropic, OpenAI, AWS, Google, Slack, Stripe, Hugging Face, npm, JWTs), `Bearer ...`/`Basic ...` credentials, `password=`/`token=`/`secret=`/`api_key:` style assignments (however short the value: `token=abc` goes too), URL credentials and private key blocks (terminated or cut off) become `[redacted N chars]`. The whole text is redacted first and cut to size after, so a cap never leaves half a secret.
+
+**Verbs** (orchestrator only; worker slots get 403):
+
+```bash
+bounty incidents                       # open incidents: id, bounty, worker, age, cause
+bounty incidents --all [--json]        # resolved ones too, with the choice and who made it
+bounty incidents --follow              # one line per new incident as it is created; keeps running (a watcher)
+bounty incident 3 [--json]             # the full report
+bounty retry 12 [--note "use the system toolchain"]   # retry: the blocked bounty goes back to ready
+bounty retry 12 --slot opus-2          # reassign and retry
+bounty incident 3 --human "install the build tool on the runner"   # hand to a human
+```
+
+- **Retry** resolves the bounty's open incidents (`choice` `retry`, or `reassign to SLOT` with `--slot`) and requeues the bounty through the board's own requeue path: the attempt cap and model escalation apply as for any failed attempt (the break already counted its failure, so a retry does not count it again), and an explicit `--slot` wins over escalation. `--note` is also sent as an orchestrator note. The next attempt's prompt carries the incident report under **A previous attempt broke: incident report #N**. A bounty the board already requeued (verify failure) is only acknowledged (or reassigned). Refused while the broken worker is still being stopped, on a bounty that failed at the cap (hand it to a human, or `bounty ready ID` to override the cap), and on a bounty with no open incident (nothing to decide: use `bounty ready ID` to requeue it). The attempt cap joins only an open incident of the attempt that hit it; an older attempt's undecided incident stays its own record. A retry that itself reaches the cap still resolves the incident (who, `retry`, and a resolution saying the cap was reached): the bounty fails and the cap is added to that same incident (when the open incident is an older attempt's, the cap is attempt N's own record and the same retry resolves both). `bounty incident ID --human` afterwards records the hand-off as the incident's current decision (the capped retry stays in its detail). A dispatch that breaks before its process runs (spawn or worktree failure) uses up its attempt number, so each broken dispatch is its own incident and the cap counts it.
+- **Hand to a human** blocks the bounty with the reason `Waiting on a human: TEXT (incident #N: cause)`, one of the hub's human markers, so it shows in the hub's **Needs you** list; it works on a failed bounty too. A human unblocking it from the hub resolves its open incidents as well.
+- **Who** is `$AGENT_NAME` from the CLI, else the online orchestrator's name, else the request's actor.
+
+**Delivery**: the room gets one short line per incident, addressed to the orchestrator, with no log path and no worker text: `@Conductor INCIDENT #3 on #12 Alpha: exited with code 1 without submitting. bounty incident 3`. Incidents stay open until someone decides, online orchestrator or not: `bounty orchestrator register` prints how many are open, and the orchestrator object in `GET /api/state`, `GET /api/live` and `GET /api/orchestrator` has `open_incidents` (`bounty status` and `bounty live` show it).
+
+| API | |
+|---|---|
+| `GET /api/incidents` | open incidents (`?all=1` every one, `?after=ID` newer ones, `?bounty=ID`) |
+| `GET /api/incidents/:id` | one incident with `detail` and the rendered `report` |
+| `POST /api/bounties/:id/retry` | `{note?, slot?, by?}`: retry or reassign |
+| `POST /api/incidents/:id/human` | `{text, by?}`: hand to a human |
+
+Out of scope for now: resuming the broken attempt's own session in place (the retry is always a fresh worker).
 
 ## External leases
 
@@ -556,6 +609,8 @@ bounty add --file task.md              # "# Title", "## Acceptance criteria" wit
 bounty edit 12 --criteria "..."        # criteria are required before ready; --project P moves it
 bounty note 12 "new requirement"       # reaches the live worker and later attempts
 bounty replies                         # what the human answered from the hub (marks it read)
+bounty incidents [--follow]            # broken attempts waiting for a decision (see Incidents)
+bounty retry 12 [--slot S]            # or: bounty incident 3 --human "TEXT"
 bounty assign 12 opus-2 && bounty ready 12
 bounty show 12 / bounty log 12         # history, attempts, logs, review notes
 bounty approve 12 | bounty reject 12 "what to fix"

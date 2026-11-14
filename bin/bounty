@@ -32,6 +32,16 @@ Orchestrator
                                    done for work merged outside the board (external): each commit must be on main;
                                    refused while a board worker is live. Records commits + evidence; loot only to
                                    a slot whose board attempt submitted those commits (external work credits nobody).
+  bounty incidents [--all] [--json] open incident reports (one per broken attempt): id, bounty, worker, cause, age
+  bounty incidents --follow        print one line per new incident as it is created; keeps running (for a watcher)
+  bounty incident ID [--json]      the full report: cause, attempt N of max, last progress and criteria, the worker's
+                                   last message and log lines (quoted data, secrets redacted), log path, what's next
+  bounty retry BOUNTY [--note TEXT] [--slot SLOT]
+                                   decide an incident: requeue the blocked bounty (attempt cap and escalation apply;
+                                   --slot reassigns). The next worker's prompt carries the incident report
+  bounty incident ID --human "TEXT"
+                                   decide an incident: hand it to a human (block reason "Waiting on a human: TEXT",
+                                   shown in the hub's Needs you list)
   bounty pause | resume            bounty status             bounty import <source>
   bounty live [--json] [--watch [SEC]]  what every slot is doing now: bounty, pipeline stage, verify/CI stage,
                                    last actions, progress note, lock waits/holders, tester, queue, last 24 h
@@ -71,7 +81,7 @@ function parse(argv) {
     if (a.startsWith('--')) {
       const k = a.slice(2);
       const nxt = argv[i + 1];
-      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help', 'peek', 'kill', 'orchestrators', 'check-install'].includes(k);
+      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help', 'peek', 'kill', 'orchestrators', 'check-install', 'follow'].includes(k);
       const v = flag || nxt === undefined || nxt.startsWith('--') ? true : (i++, nxt);
       if (opt[k] === undefined) opt[k] = v; else opt[k] = [].concat(opt[k], v);
     } else pos.push(a);
@@ -241,7 +251,7 @@ async function main() {
   const cmd = pos.shift();
   if (!cmd || cmd === 'help' || opt.help) { console.log(HELP); return; }
   const worker = !!SLOT;
-  const orchOnly = ['add', 'edit', 'note', 'replies', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'close-merged', 'pause', 'resume', 'import'];
+  const orchOnly = ['add', 'edit', 'note', 'replies', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'close-merged', 'pause', 'resume', 'import', 'retry', 'incident', 'incidents'];
   if (worker && orchOnly.includes(cmd)) die(`'${cmd}' is an orchestrator command; you are worker ${SLOT}`);
 
   if (cmd === 'sentinel') return sentinel(opt);
@@ -461,6 +471,63 @@ async function main() {
       console.log(r.released ? `released '${res}'` : `'${res}' was not held`);
       return;
     }
+    case 'incidents': {
+      const age = s => (s == null ? '?' : s >= 86400 ? `${(s / 86400).toFixed(1)}d` : s >= 3600 ? `${(s / 3600).toFixed(1)}h` : s >= 60 ? `${Math.round(s / 60)}m` : `${s}s`);
+      const line = i => `INCIDENT #${i.id} on #${i.bounty_id} ${i.worker}: ${i.cause}. bounty incident ${i.id}`;
+      if (opt.follow) {
+        // One line per new incident, as it is created. Starts after the newest existing one; never exits.
+        const every = Math.max(1, Number(opt.every) || 2) * 1000;
+        let after = (await api('GET', '/incidents?all=1')).reduce((m, i) => Math.max(m, i.id), 0);
+        console.error(`bounty: following incidents on ${URL_BASE} (after #${after}); Ctrl-C to stop`);
+        for (;;) {
+          await sleep(every);
+          let rows;
+          try {
+            const res = await fetch(`${URL_BASE}/api/incidents?after=${after}`, { headers: { 'x-bounty-actor': ACTOR } });
+            if (!res.ok) throw new Error(String(res.status));
+            rows = await res.json();
+          } catch (e) { console.error(`bounty: board unreachable (${e.cause?.code || e.message}); retrying`); continue; }
+          for (const i of rows) { console.log(opt.json ? JSON.stringify(i) : `${String(i.created_at).slice(0, 19).replace('T', ' ')} ${line(i)}`); after = Math.max(after, i.id); }
+        }
+      }
+      const rows = await api('GET', `/incidents${opt.all ? '?all=1' : ''}`);
+      if (opt.json) { console.log(JSON.stringify(rows, null, 2)); return; }
+      if (!rows.length) { console.log(opt.all ? 'no incidents' : 'no open incidents'); return; }
+      console.log('id     bounty  worker          age     status    cause');
+      for (const i of rows) console.log(`#${String(i.id).padEnd(5)} #${String(i.bounty_id).padEnd(6)} ${String(i.worker).slice(0, 15).padEnd(15)} ${age(i.age_seconds).padStart(6)}  ${(i.status === 'open' ? 'open' : 'resolved').padEnd(9)} ${i.cause}${i.status === 'open' ? '' : `  [${i.choice} by ${i.resolved_by}]`}`);
+      if (!opt.all) console.log(`\n${rows.length} open. Read one: bounty incident ID. Decide: bounty retry BOUNTY [--slot SLOT] | bounty incident ID --human "TEXT"`);
+      return;
+    }
+    case 'incident': {
+      const id = pos[0];
+      if (!id || !/^\d+$/.test(id)) die('usage: bounty incident ID [--json] | bounty incident ID --human "TEXT"');
+      if (opt.human !== undefined) {
+        if (opt.human === true || !String(opt.human).trim()) die('usage: bounty incident ID --human "what the human must do or decide"');
+        const r = await api('POST', `/incidents/${id}/human`, { text: String(opt.human), by: process.env.AGENT_NAME || undefined });
+        if (opt.json) { console.log(JSON.stringify(r, null, 2)); return; }
+        console.log(`incident #${id} resolved (hand to a human); #${r.bounty.id} blocked: ${r.bounty.blocked_reason}`);
+        if (r.resolved.length > 1) console.log(`also resolved: ${r.resolved.filter(x => String(x) !== id).map(x => '#' + x).join(', ')}`);
+        return;
+      }
+      const i = await api('GET', `/incidents/${id}`);
+      if (opt.json) { console.log(JSON.stringify(i, null, 2)); return; }
+      console.log(i.report);
+      return;
+    }
+    case 'retry': {
+      const id = idOf(pos);
+      const body = { by: process.env.AGENT_NAME || undefined };
+      if (opt.note !== undefined) { if (opt.note === true) die('usage: bounty retry BOUNTY [--note TEXT] [--slot SLOT]'); body.note = String(opt.note); }
+      if (opt.slot !== undefined) { if (opt.slot === true) die('usage: bounty retry BOUNTY [--note TEXT] [--slot SLOT]'); body.slot = String(opt.slot); }
+      const r = await api('POST', `/bounties/${id}/retry`, body);
+      if (opt.json) { console.log(JSON.stringify(r, null, 2)); return; }
+      const b = r.bounty;
+      console.log(`#${b.id} -> ${b.status}${b.assignee_slot ? ` (slot ${b.assignee_slot})` : ''}; attempts ${b.attempts}, failures ${b.failures}. Resolved incident ${r.resolved.map(x => '#' + x).join(', ')} (${r.choice}).`);
+      if (r.capped) {
+        console.log(`The attempt cap is reached: the bounty is failed. Hand it to a human with bounty incident ${r.resolved[0] || 'ID'} --human "TEXT", or override the cap with bounty ready ${b.id}.`);
+      }
+      return;
+    }
     case 'pause': case 'resume': { const r = await api('POST', `/${cmd}`, {}); console.log(`dispatcher ${r.paused ? 'PAUSED (running workers finish; nothing new spawns)' : 'running'}`); return; }
     case 'status': case 'state': {
       const s = await api('GET', '/state');
@@ -519,6 +586,8 @@ async function main() {
         const name = opt.name && opt.name !== true ? opt.name : process.env.AGENT_NAME || undefined;
         const o = await api('POST', '/orchestrator', { pid, name });
         console.log(`registered orchestrator '${o.name}' pid ${o.pid}${opt.pid ? '' : ` (${procComm(o.pid) || 'your agent process'})`}: ${o.online ? 'online' : 'NOT online'}`);
+        const n = o.open_incidents || 0;
+        console.log(n ? `${n} open incident${n > 1 ? 's' : ''} waiting for a decision: bounty incidents` : 'no open incidents');
         return;
       }
       if (pos[0]) die('usage: bounty orchestrator [--json] | bounty orchestrator register [--name N] [--pid P]');
