@@ -521,3 +521,43 @@ test('worktree failures retried up to the cap: each dispatch its own attempt, th
       ['resolved', 'retry', 'Conductor', 'worktree setup failed'], 'the earlier decision is untouched');
   } finally { await t.s.close(); }
 });
+
+test('the cap joins only an open incident of the current attempt; retry with no open incident is refused and requeues nothing', async () => {
+  const t = await startBoard('inc-cap-older', { dispatch: false, over: { retry: { max_attempts: 2, escalate_after_failures: 9, escalate_model: {} } } });
+  try {
+    const { board } = t;
+    const b = board.create({ title: 'older', project: 'scratch', criteria: CRIT });
+    board.ready(b.id);
+    // attempt 1 broke and nobody decided it: its incident stays open
+    board.db.prepare('UPDATE bounties SET attempts = 1 WHERE id = ?').run(b.id);
+    const old = board.incidents.record({ bounty: b.id, kind: 'exit_no_submit', attemptNo: 1, slot: 'fake-1', exitCode: 1, countFailure: true }).incident;
+    // attempt 2 runs and is rejected at the cap: the cap is attempt 2's own record
+    board.db.prepare('UPDATE bounties SET attempts = 2 WHERE id = ?').run(b.id);
+    board.start(b.id, 'fake-1');
+    transition(board.db, b.id, 'review', { actor: 'test', via: 'gates' });
+    board.reject(b.id, 'still wrong');
+    assert.strictEqual(board.raw(b.id).status, 'failed');
+    const rows = board.db.prepare('SELECT * FROM incidents WHERE bounty_id = ? ORDER BY id').all(b.id);
+    assert.strictEqual(rows.length, 2, 'the cap is not merged into the older attempt');
+    assert.strictEqual(rows[0].id, old.id);
+    assert.strictEqual(rows[0].cause, 'exited with code 1 without submitting', 'the older record is untouched');
+    assert.strictEqual(rows[0].attempt_no, 1);
+    assert.strictEqual(rows[1].attempt_no, 2);
+    assert.strictEqual(rows[1].cause_kind, 'attempt_cap');
+
+    // a blocked bounty with no open incident: retry refuses, points at bounty ready, changes nothing
+    const c = board.create({ title: 'no incident', project: 'scratch', criteria: CRIT });
+    board.ready(c.id);
+    board.start(c.id, 'fake-1');
+    transition(board.db, c.id, 'blocked', { actor: 'test', note: 'blocked by hand' });
+    const before = board.raw(c.id);
+    const e = (() => { try { board.incidents.retry(c.id, { by: 'Conductor' }); } catch (x) { return x; } })();
+    assert.ok(e, 'retry must refuse');
+    assert.strictEqual(e.code, 409);
+    assert.match(e.message, /no open incident.*bounty ready \d+/);
+    const after = board.raw(c.id);
+    assert.strictEqual(after.status, 'blocked');
+    assert.strictEqual(after.failures, before.failures);
+    assert.strictEqual(after.attempts, before.attempts);
+  } finally { await t.s.close(); }
+});

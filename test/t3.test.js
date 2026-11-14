@@ -325,6 +325,12 @@ test('T3: a deleted thread ends its attempt; a finished turn frees the slot for 
     await waitFor(() => !t.d.live.has(next.id));
     assert.equal(t.board.raw(next.id).status, 'blocked');
     assert.match(t.board.get(next.id).attempts[0].outcome, /never started/);
+    // the incident says the thread disappeared, not only that the worker exited
+    const incs = t.board.incidents.openFor(next.id);
+    assert.equal(incs.length, 1);
+    assert.equal(incs[0].cause_kind, 'never_started');
+    assert.equal(incs[0].detail.reason, 'T3 thread no longer exists');
+    assert.match(incs[0].report, /- Details: .*ended: T3 thread no longer exists/);
   } finally { await t.finish(); }
 });
 
