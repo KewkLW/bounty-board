@@ -1,0 +1,21 @@
++ bounty sentinel --registry-dir /tmp/b11-qa3/registry --out /tmp/b11-qa3/out --since 72
+sentinel: 2 board(s) scanned (2 readable, 0 unreadable), last 72 h
+  issues 10 open from 19 occurrence(s); attempts 10, broken 6 (stall kills 2, exits without submit 4)
+  verify failures 5, reviewer errors 2, retry-cap failures 2, stale open attempts 2, boards with work and no orchestrator 1
+  cost $7.50 in the window; last 24 h: 10 attempts, 6 broken, $7.50
+     4  40a6391bb37230a4  exit without submit: error: enoent: no such file or directory, open '<path>' at <ts>
+     2  ef038fdc9e18e7d5  stale open attempt: open attempt log silent past the stall threshold (log present)
+     2  dc7c762862367a5d  verify crashed: enospc: no space left on device, write
+     2  8e3db21672b38f8f  reviewer error: no verdict from the reviewer (exit <n>); log <path>
+     2  2b889b4c5e667e53  verify failed: error: expected <n>, got <n> with token=[redacted key] authorization: bearer [redacted]
+  report: /tmp/b11-qa3/out/report.html
++ bounty sentinel --registry-dir /tmp/b11-qa3/registry --out /tmp/b11-qa3/out --since 72
+sentinel: 2 board(s); no source db, WAL or log changed since the last run (2026-11-14T21:55:35.670Z); nothing read (use --force to scan anyway)
++ per-board orchestrator signals (boards.json)
+A {"known":true,"online":true,"pending":5,"pending_min":4320,"offline_min":4040,"minutes_without":4040}
+B {"known":false,"online":false,"pending":4,"pending_min":600,"offline_min":4320,"minutes_without":600}
++ verify_crashed issues (issues.json)
+2 dc7c762862367a5d verify crashed: enospc: no space left on device, write
+1 aab03979a2510442 verify crashed: sqliteerror: database is locked
++ report.html header
+last full scan 2026-11-14T21:55:35.670Z · checked 2026-11-14T21:55:35.730Z, no source changed since

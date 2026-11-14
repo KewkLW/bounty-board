@@ -176,6 +176,11 @@ test('unchanged sources: the second run reads no rows; --force does; a change tr
     assert.strictEqual(hl.length, 2, 'one history line per run');
     assert.strictEqual(hl[1].unchanged, true);
     assert.strictEqual(hl[1].broken, undefined, 'an unchanged run carries no figures (it read nothing)');
+    // report.html is rebuilt on the fast path from the stored results and the history so far
+    const html = fs.readFileSync(path.join(out, 'report.html'), 'utf8');
+    assert.ok(html.includes(`checked ${j2.at}`), 'the report says when it was last checked');
+    assert.ok(html.includes(`last full scan ${r1.at}`));
+    assert.ok(html.includes('Day over day') && /<td>2<\/td>/.test(html), 'the trend counts both runs');
     const human = cli(args.filter(a => a !== '--json'));
     assert.match(human.stdout, /nothing read/);
     if (process.getuid && process.getuid() !== 0) {
@@ -503,6 +508,8 @@ test('fast path: with no source changed, an open attempt crossing the stall thre
   assert.strictEqual(r5.unchanged, false);
   assert.match(r5.rescan_reason, /went online/);
   assert.strictEqual(r5.no_orchestrator_with_work, 0);
+  const b5 = JSON.parse(fs.readFileSync(path.join(out, 'boards.json'), 'utf8')).boards[0].signals.orchestrator;
+  assert.strictEqual(b5.minutes_without, 41, 'online now, but pending work waited -5..+36 with none online: not lost');
   assert.strictEqual(s.run({ ...opts, now: now + 38 * 60000 }).unchanged, true);
   // and goes offline again (its pid gone): a scan, and the pending work without it is an issue again
   writeRegistry(reg, [{ name: 'A', port: 4941, dir: A.dir, presence: { ...offline, since: new Date(now + 38 * 60000).toISOString() } }]);
@@ -511,6 +518,76 @@ test('fast path: with no source changed, an open attempt crossing the stall thre
   assert.match(r7.rescan_reason, /went offline/);
   assert.strictEqual(r7.no_orchestrator_with_work, 1);
   const b7 = JSON.parse(fs.readFileSync(path.join(out, 'boards.json'), 'utf8')).boards[0].signals.orchestrator;
-  assert.strictEqual(b7.minutes_without, 12, 'pending the whole time; offline from +38 to +50 minutes');
+  assert.strictEqual(b7.minutes_without, 53, 'pending from -5 the whole time; offline -5..+36 (seen by the first runs, kept though it came online since) and +38..+50');
   assert.strictEqual(s.run({ ...opts, now: now + 51 * 60000 }).unchanged, true);
+});
+
+test('signals: offline spells earlier in the window count while the orchestrator is online now (board presence notes and the note before the window)', () => {
+  const now = Date.parse('2026-11-14T12:00:00Z');
+  const t = m => new Date(now - m * 60000).toISOString();
+  const sinceMs = now - 72 * 3600000;
+  const st = require('../lib/proc').procStat(process.pid);
+  const online = since => ({ label: 'X', stall_minutes: 30, slots: [], run: '/nonexistent', entry: { presence: { name: 'o', online: true, pid: process.pid, start_time: st.start_time, since } } });
+  const note = (id, m, n) => ({ id, bounty_id: null, at: t(m), actor: 'board', kind: 'note', note: n });
+  // pending since 300 min ago; online until the board saw it gone 240 min ago, registered again 120 min ago
+  const rows = { attempts: [], prior: [], priorPresence: [],
+    events: [{ id: 1, bounty_id: 1, at: t(300), kind: 'status', to_status: 'ready' }, note(2, 240, "orchestrator 'o' (pid 7) is offline: its process is gone"), note(3, 120, "orchestrator 'o' registered, pid 8")],
+    bounties: [{ id: 1, status: 'ready' }] };
+  let o = s.analyze(online(t(120)), rows, { nowMs: now, sinceMs }).signals.orchestrator;
+  assert.strictEqual(o.online, true);
+  assert.strictEqual(o.no_orchestrator_with_work, false, 'online now');
+  assert.strictEqual(o.minutes_without, 120, 'the 240..120 spell is kept');
+  // the window opens after the registration that started the spell: the last note before it says how it opened
+  const r2 = { attempts: [], prior: [{ id: 1, bounty_id: 1, at: t(600), kind: 'status', to_status: 'ready' }], events: [], bounties: [{ id: 1, status: 'ready' }],
+    priorPresence: [note(9, 500, "orchestrator 'o' (pid 7) is offline: its process is gone")] };
+  o = s.analyze(online(t(30)), r2, { nowMs: now, sinceMs: now - 120 * 60000 }).signals.orchestrator;
+  assert.strictEqual(o.minutes_without, 90, 'offline when the 2 h window opened, online 30 min ago');
+  r2.priorPresence = [note(9, 500, "orchestrator 'o' registered, pid 7")];
+  o = s.analyze(online(t(500)), r2, { nowMs: now, sinceMs: now - 120 * 60000 }).signals.orchestrator;
+  assert.strictEqual(o.minutes_without, 0, 'online the whole window');
+  // the sentinel's own earlier observations count too (a board too old to write presence notes)
+  const bare = { attempts: [], prior: [{ id: 1, bounty_id: 1, at: t(600), kind: 'status', to_status: 'ready' }], events: [], bounties: [{ id: 1, status: 'ready' }] };
+  o = s.analyze(online(t(30)), bare, { nowMs: now, sinceMs: now - 300 * 60000, presenceLog: [{ t: now - 400 * 60000, online: true }, { t: now - 200 * 60000, online: false }] }).signals.orchestrator;
+  assert.strictEqual(o.minutes_without, 170, 'seen offline from 200 min ago until it came online 30 min ago');
+  assert.strictEqual(o.offline_min, 170);
+  // an offline presence with no usable since (an older registry entry) and nothing else known: offline the whole window
+  const nosince = { label: 'X', stall_minutes: 30, slots: [], run: '/nonexistent', entry: { presence: { name: 'o', online: false, since: null } } };
+  o = s.analyze(nosince, bare, { nowMs: now, sinceMs: now - 300 * 60000 }).signals.orchestrator;
+  assert.strictEqual(o.minutes_without, 300);
+  // ... unless a presence note dates it: offline only from the note on
+  o = s.analyze(nosince, { ...bare, events: [note(5, 100, "orchestrator 'o' (pid 7) is offline: its process is gone")] }, { nowMs: now, sinceMs: now - 300 * 60000 }).signals.orchestrator;
+  assert.strictEqual(o.minutes_without, 100);
+});
+
+test('verify crashes hash their real error: different errors are different issues, the same one with other numbers is one', () => {
+  const now = Date.parse('2026-11-14T12:00:00Z');
+  const b = { label: 'X', stall_minutes: 30, slots: [], run: '/nonexistent', entry: null };
+  const crash = (id, n) => ({ id, bounty_id: id, at: new Date(now - id * 60000).toISOString(), actor: 'board', kind: 'verify', note: n });
+  const rows = { attempts: [], prior: [], bounties: [], events: [
+    crash(1, 'verify crashed: ENOSPC: no space left on device, write'), crash(2, 'verify crashed: SqliteError: database is locked'),
+    crash(3, 'verify crashed: ENOSPC: no space left on device, write'), crash(4, 'verify FAILED (exit 1): npm test; log /tmp/a/v-123.log'),
+    crash(5, 'verify FAILED (exit 2): npm test; log /tmp/b/v-456.log')] };
+  const occ = s.analyze(b, rows, { nowMs: now, sinceMs: now - 3600e3 }).occurrences;
+  const sig = cause => [...new Set(occ.filter(o => o.cause === cause).map(o => o.signature))];
+  assert.strictEqual(sig('verify_crashed').length, 2, 'ENOSPC and database locked are two issues');
+  assert.ok(occ.some(o => o.cause === 'verify_crashed' && /no space left/.test(o.title)));
+  assert.ok(occ.some(o => o.cause === 'verify_crashed' && /database is locked/.test(o.title)));
+  assert.strictEqual(occ.filter(o => o.cause === 'verify_crashed').length, 3);
+  assert.strictEqual(sig('verify_failed').length, 1, 'the same failure with another exit code and log path');
+});
+
+test('readBoard: the last presence note before the window is read from the db', () => {
+  const root = tmp('prior-presence');
+  const A = makeBoard(path.join(root, 'a'), { name: 'A', port: 4951, seed: false, keepOpen: true });
+  const now = Date.now(), at = m => new Date(now - m * 60000).toISOString();
+  const ins = A.db.prepare("INSERT INTO events (bounty_id, at, actor, kind, note) VALUES (NULL, ?, 'board', 'note', ?)");
+  ins.run(at(600), "orchestrator 'o' registered, pid 7");
+  ins.run(at(500), "orchestrator 'o' (pid 7) is offline: its process is gone");
+  ins.run(at(400), 'idle shutdown after 30 min idle: stopped nothing (all gone)');
+  ins.run(at(10), "orchestrator 'o' registered, pid 8");
+  A.db.close();
+  const b = s.resolveBoard(A.dir);
+  const rows = s.readBoard(b, { sinceMs: now - 120 * 60000 });
+  assert.deepStrictEqual(rows.priorPresence.map(e => e.note), ["orchestrator 'o' (pid 7) is offline: its process is gone"]);
+  assert.ok(rows.events.some(e => /registered, pid 8/.test(e.note)));
 });

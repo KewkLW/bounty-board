@@ -5,7 +5,7 @@
 - `lib/sentinel-report.js`: self-contained `report.html` (inline CSS, CSP `default-src 'none'`, no scripts).
 - `bin/bounty sentinel ...`: runs locally and never calls a board server.
 - `systemd/bounty-sentinel.service` (oneshot) + `systemd/bounty-sentinel.timer` (`OnCalendar=hourly`, `Persistent=true`), `%h` paths only. `systemd-analyze --user verify` is clean. README section "Sentinel".
-- `test/sentinel.test.js` (16 tests) + `test/sentinel-fixtures.js` (seeded fixture boards). `scripts/sentinel-shot.js` (headless screenshot that fails on any non-file:// request).
+- `test/sentinel.test.js` (19 tests) + `test/sentinel-fixtures.js` (seeded fixture boards). `scripts/sentinel-shot.js` (headless screenshot that fails on any non-file:// request).
 
 ## Decisions worth knowing
 - **Exit codes.** Every scan exits 0, including when boards are unreadable (each becomes a `board_unreadable` issue). A refused `--out` or a bad `--since` is not a scan, so it exits 2 and writes nothing.
@@ -18,15 +18,28 @@
 - **Signals.** Slots listed in `board.json` that never ran still count as idle while work waited. A bounty claimed outside the dispatcher (`ready → in_progress` with no spawn) ends a queue wait. A registry entry without `board_dir` is a `board_unreadable` issue (`NO_BOARD_DIR`).
 - **Queue waits across `--since`.** `readBoard` also reads each bounty's last `status` and last `spawn` event before the window (one grouped query). A wait that began before the window and ended in it counts with its full length; a wait that ended before the window does not count.
 - **Idle while ready (attempt 2 fix).** The ready time is the union of every wait, clipped to the window, so two bounties waiting together count once. Each slot's idle minutes are that union minus its own attempts. `ready_waiting_min` is the union itself, and `board_idle_with_ready_min` is the part of it with no slot running.
-- **No-orchestrator time (attempt 2 fix).** This is the overlap of two things. Pending time is the union of each bounty's ready/in_progress/blocked spells, taken from its status timeline including the state before the window. Offline time comes from the presence's `since`. A board with no orchestrator registered at all counts as offline for the whole window rather than unknown, and its issue reads "no orchestrator registered". Work ready for 5 minutes under an orchestrator offline for 3 h reports 5 minutes. The db keeps no presence history, so an orchestrator that came and went inside the window is not seen.
+- **No-orchestrator time (attempt 2 fix).** This is the overlap of two things. Pending time is the union of each bounty's ready/in_progress/blocked spells, taken from its status timeline including the state before the window. Offline time comes from the presence's `since`. A board with no orchestrator registered at all counts as offline for the whole window rather than unknown, and its issue reads "no orchestrator registered". Work ready for 5 minutes under an orchestrator offline for 3 h reports 5 minutes. (Attempt 3 replaced the offline side; see below.)
 - **Fast path and elapsed time (attempt 2 fix).** A full scan stores a watch list in `state.json`: the open attempts not yet stale, the stall threshold and whether the orchestrator was online. An unchanged run re-checks that list from log stats and the presence only. If an attempt has crossed the threshold, or the orchestrator came online or went offline, the run becomes a full scan and reports `rescan_reason`. Otherwise it reads nothing.
+
+- **No-orchestrator time over the whole window (attempt 3 fix).** Offline time is now a timeline built from dated presence transitions, not only the current spell:
+  - the board's own presence notes in its events: `orchestrator '<n>' registered, pid N` (online) and `orchestrator '<n>' (pid N) is offline: its process is gone` (offline);
+  - the last such note before the window (one extra `LIMIT 1` query in `readBoard`), which says how the window opened;
+  - the sentinel's own observations, kept in `state.json` under `presence` (one `{t, online}` per change, recorded on full and unchanged runs, pruned after 30 days). These cover boards too old to write the notes, and spells while a board was down;
+  - the presence now: an online one's `since`, an offline one's `last_seen`.
+
+  Before the first transition the opposite state is assumed. With no dated transition at all, the state now holds for the whole window: an offline presence without a usable `since` (7 older live entries) counts as offline throughout. `minutes_without` is the overlap of pending time and offline time, even when an orchestrator is online now; `offline_min` is reported alongside it. The report's board line shows those minutes for an online board too.
+- **Verify crash signatures (attempt 3 fix).** A crash's text is its real message (`verify crashed: ENOSPC ...` vs `verify crashed: SqliteError: database is locked` are two issues). A failure's text is its last error-like output line, else its head line (exit code and command, normalized).
+- **Report on the fast path (attempt 3 fix).** A full scan stores its summary in `state.json`. An unchanged run reads no rows, but rebuilds `report.html` from that summary, the stored `issues.json` and `boards.json`, and the history up to now. The header then reads "last full scan X · checked Y, no source changed since", and the trend counts the unchanged run.
 
 ## Commands and counts
 
 Gate:
 ```
-npm ci --silent && npm test      -> attempt 2: tests 118, pass 118, fail 0
-node --test test/sentinel.test.js -> 16 pass (3 new in attempt 2: overlap and --since boundary; no-orchestrator overlap and an unregistered orchestrator; fast-path time progression)
+npm ci --silent && npm test      -> attempt 3: tests 121, pass 121, fail 0 (attempt 2: 118)
+node --test test/sentinel.test.js -> 19 pass (3 new in attempt 2: overlap and --since boundary; no-orchestrator overlap and an unregistered orchestrator; fast-path time progression.
+   attempt 3: offline spells earlier in the window while online now (notes, the note before the window, the sentinel's own log, a presence without since);
+   verify crash signatures; readBoard's prior presence query on a real db; the fast-path test now expects 41 and 53 min (offline spells kept across
+   online/offline changes between scans, where attempt 2 gave 0 and 12); the unchanged-sources test checks report.html is rebuilt)
 ```
 
 ### Scratch QA (`scratch-qa.txt`)
@@ -87,3 +100,27 @@ bounty sentinel --out <tmp>/out --json   (three runs in a row)
 node scripts/sentinel-shot.js <tmp>/out/report.html <tmp>/report-live.png -> 22 issue rows, 18 board sections, 0 external requests
 ```
 The live screenshot stays outside the repo. It has the same layout as before, and each board line now reads "no orchestrator online/registered; N pending now; M min of pending work with none online in the window · ready work waited X min, with no slot running for Y min of it".
+
+### Attempt 3: scratch QA (`scratch-qa-3.txt`) and live re-run
+Two fixture boards. Board A has presence notes (registered 400 min ago, offline 240 min ago, registered again 120 min ago by a stand-in `sleep` process I started and killed afterwards), plus three `verify crashed` events (2 ENOSPC, 1 database locked). Board B has no orchestrator registered.
+```
+bounty sentinel --registry-dir /tmp/b11-qa3/registry --out /tmp/b11-qa3/out --since 72   (twice)
+  run 1 -> full scan: 10 issues from 19 occurrences; verify failures 5; boards with work and no orchestrator now 1 (B)
+           A: online now, minutes_without 4040 (before the first registration plus the 240..120 spell), offline_min 4040
+           B: no orchestrator registered, minutes_without 600 (its pending time)
+           verify_crashed: 2 issues (count 2 "enospc: no space left on device, write", count 1 "sqliteerror: database is locked")
+  run 2 -> unchanged, nothing read; report.html rebuilt: header "last full scan <run 1> · checked <run 2>", trend runs 2
+node scripts/sentinel-shot.js /tmp/b11-qa3/out/report.html docs/evidence/b11/report-scratch.png
+  -> 10 issue rows, 2 board sections, 0 external requests (rendered from the fast-path report)
+```
+Live registry, read-only, `--out` in a temp dir outside the repo, three runs:
+```
+each run -> exit 0, about 0.5-0.7 s, full scan (live worker logs grow between runs): boards 18 (17 readable, 1 unreadable),
+            23 issues from 73 occurrences, attempts 490, broken 34, exits w/o submit 20, verify failures 28, stall kills 0, stale open 0,
+            boards with pending work and no orchestrator now 10
+issue causes: verify_failed 28, exit_without_submit 20, worker_exit_error 11, no_orchestrator 10, never_started 3, board_unreadable 1
+presence: 17 known, 2 online, 7 without a usable since; no-orchestrator overlap 40506 min summed over boards (attempt 2's model: 40188),
+  offline 67491 min summed; state.json keeps a presence log for all 18 boards
+node scripts/sentinel-shot.js <tmp>/out/report.html <tmp>/report-live.png -> 23 issue rows, 18 board sections, 0 external requests
+```
+A first attempt-3 live run showed 14585 min: 7 offline presences without a `since` had been read as online all window. The second rule above fixes that, and a test covers it. The live screenshot stays outside the repo; its layout matches the scratch one.
