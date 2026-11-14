@@ -1,0 +1,127 @@
+server pid 375500
+commit f42b30d; board port 37279
+$ q.sh project add scratch --repo $QA/repo --main main --verify ./verify.sh --wt-path $QA/wt/{task}
+project scratch saved
+--- (1) the cap with an older attempt's incident still open (max_attempts 2)
+$ q.sh add Older incident --desc mode:giveup --criteria math.js exports mul --slot qa-1 --ready
+added #1 TSK_0001: Older incident [backlog] project scratch
+#1 -> ready
+$ q.sh incidents
+id     bounty  worker          age     status    cause
+#1     #1      Alpha               3s  open      exited with code 1 without submitting
+
+1 open. Read one: bounty incident ID. Decide: bounty retry BOUNTY [--slot SLOT] | bounty incident ID --human "TEXT"
+$ # nobody decides incident #1; the bounty is requeued by hand, attempt 2 submits real work, the orchestrator rejects it at the cap
+$ q.sh edit 1 --desc mode:good
+#1 updated: Older incident (1 criteria)
+$ q.sh ready 1
+#1 -> ready
+$ q.sh reject 1 the product must be BigInt-safe
+#1 -> failed
+$ q.sh show 1
+#1 TSK_0001  [failed]  Older incident
+project scratch | type task | tier C (SCRAP WORK) | priority normal | slot qa-1
+branch b1-older-incident | worktree $QA/wt/b1-older-incident
+attempts 2 | failures 2 | cost $0.0000 | tokens in 0 out 0 | worker none
+verify: pass ($QA/logs/bounty-1-verify-1794696959926.log)
+commits: 2e444b8eaf
+
+mode:good
+
+Acceptance criteria:
+  1. [x] math.js exports mul  (added mul and its test)
+
+Review:
+orchestrator: the product must be BigInt-safe
+
+Attempts:
+  1 worker qa-1 sonnet pid 379593 2026-11-14T22:55:55.405Z -> 2026-11-14T22:55:55.634Z exit 1 $n/a blocked (exited without submit)
+  2 worker qa-1 sonnet pid 380325 2026-11-14T22:55:59.390Z -> 2026-11-14T22:56:00.743Z exit 128 $n/a failed
+  3 review reviewer  pid 380831 2026-11-14T22:56:00.050Z -> running exit - $n/a 
+
+History:
+$ sqlite3 -header board.db "SELECT id,bounty_id,attempt_no,attempt_id,status,cause_kind,cause FROM incidents WHERE bounty_id=1 ORDER BY id"
+id|bounty_id|attempt_no|attempt_id|status|cause_kind|cause
+1|1|1|1|open|exit_no_submit|exited with code 1 without submitting
+2|1|2|2|open|attempt_cap|attempt cap 2 reached, bounty failed; then exited on signal SIGTERM
+$ q.sh incidents
+id     bounty  worker          age     status    cause
+#1     #1      Alpha               5s  open      exited with code 1 without submitting
+#2     #1      Alpha               0s  open      attempt cap 2 reached, bounty failed; then exited on signal SIGTERM
+
+2 open. Read one: bounty incident ID. Decide: bounty retry BOUNTY [--slot SLOT] | bounty incident ID --human "TEXT"
+--- (2) retry with no open incident is refused
+$ q.sh add Blocked by hand --criteria x
+added #2 TSK_0002: Blocked by hand [backlog] project scratch
+$ q.sh block 2 waiting on a design decision
+#2 blocked: waiting on a design decision
+$ sqlite3 -header board.db "SELECT id,status,attempts,failures FROM bounties WHERE id=2"
+id|status|attempts|failures
+2|blocked|0|0
+$ q.sh retry 2
+bounty: 409: bounty 2 has no open incident to retry (status blocked); to requeue it anyway use bounty ready 2
+$ echo exit=$?
+exit=1
+$ sqlite3 -header board.db "SELECT id,status,attempts,failures FROM bounties WHERE id=2"
+id|status|attempts|failures
+2|blocked|0|0
+--- (3) workers gone across a board restart
+$ q.sh add Gone after restart --desc mode:stall --criteria x --slot qa-2 --ready
+added #3 TSK_0003: Gone after restart [backlog] project scratch
+#3 -> ready
+$ q.sh add Adopted then dies --desc mode:stall --criteria x --slot qa-3 --ready
+added #4 TSK_0004: Adopted then dies [backlog] project scratch
+#4 -> ready
+worker pids: #3 381680 (children 381735 ), #4 381685 (children 381733 )
+381680: bash <wt>/test/fake-worker.sh 
+381735: sleep 600 
+381685: bash <wt>/test/fake-worker.sh 
+381733: sleep 600 
+$ kill -TERM 375500  # stop the board; workers outlive it
+$ kill -TERM 381680 381735   # #3's worker dies while the board is down
+server pid 382150
+$ kill -TERM 381685 381733   # #4's worker was re-attached, then dies
+$ q.sh incidents
+id     bounty  worker          age     status    cause
+#1     #1      Alpha              18s  open      exited with code 1 without submitting
+#2     #1      Alpha              13s  open      attempt cap 2 reached, bounty failed; then exited on signal SIGTERM
+#3     #3      Bravo               8s  open      exited without submitting
+#4     #4      Charlie             2s  open      exited without submitting
+
+4 open. Read one: bounty incident ID. Decide: bounty retry BOUNTY [--slot SLOT] | bounty incident ID --human "TEXT"
+$ q.sh incident 3 | sed -n '1,9p'
+**Incident #3: bounty #3 TSK_0003 "Gone after restart"**
+
+- Bounty: #3 "Gone after restart" (project scratch), status now blocked: worker qa-2 (pid 381680) exited (worker was gone after a board restart) without submitting; log $QA/logs/bounty-3-attempt-1-qa-2-2026-11-14T22-56-01-385Z.log
+- Worker: Bravo (slot qa-2, runner command, model sonnet)
+- Attempt: 1 of 2 (failures so far: 1)
+- Cause: exited without submitting
+- Details: ended: worker was gone after a board restart
+- Attempt record: 2026-11-14T22:56:01.403Z -> 2026-11-14T22:56:05.515Z, exit -, pid 381680
+- Log: $QA/logs/bounty-3-attempt-1-qa-2-2026-11-14T22-56-01-385Z.log
+$ q.sh incident 4 | sed -n '1,9p'
+**Incident #4: bounty #4 TSK_0004 "Adopted then dies"**
+
+- Bounty: #4 "Adopted then dies" (project scratch), status now blocked: worker qa-3 (pid 381685) exited (worker process died) without submitting; log $QA/logs/bounty-4-attempt-1-qa-3-2026-11-14T22-56-01-387Z.log
+- Worker: Charlie (slot qa-3, runner command, model opus)
+- Attempt: 1 of 2 (failures so far: 1)
+- Cause: exited without submitting
+- Details: ended: worker process died
+- Attempt record: 2026-11-14T22:56:01.408Z -> 2026-11-14T22:56:11.529Z, exit -, pid 381685
+- Log: $QA/logs/bounty-4-attempt-1-qa-3-2026-11-14T22-56-01-387Z.log
+$ sqlite3 -header board.db "SELECT bounty_id,COUNT(*) n FROM incidents GROUP BY bounty_id, attempt_no HAVING n > 1  -- expect nothing"
+--- stopping by recorded PID
+382150: node server.js 
+$ kill -TERM 382150
+382150 gone
+381680 gone
+381735 gone
+381685 gone
+381733 gone
+attempt pid 379593 gone
+attempt pid 380325 gone
+attempt pid 380831 still alive
+attempt pid 381680 gone
+attempt pid 381685 gone
+port 37279 closed
+DONE

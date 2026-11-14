@@ -81,7 +81,7 @@ Read the report before deciding: the cause, attempt N of max and the failures so
 
 Then pick exactly one:
 
-1. **Retry** when the cause is transient or the worker just needs a hint (a flaky tool, a silent stall, a fixable mistake the report shows): `<prefix>-bounty retry 12 --note "what to do differently"`. The bounty goes back to ready through the board's requeue path (the attempt cap and model escalation still apply) and the next worker's prompt carries the report under "A previous attempt broke".
+1. **Retry** when the cause is transient or the worker just needs a hint (a flaky tool, a silent stall, a fixable mistake the report shows): `<prefix>-bounty retry 12 --note "what to do differently"`. The bounty goes back to ready through the board's requeue path (the attempt cap and model escalation still apply) and the next worker's prompt carries the report under "A previous attempt broke". Retry needs an open incident on the bounty; without one it is refused (requeue a bounty that never broke with `<prefix>-bounty ready 12`).
 2. **Reassign** when this slot is the problem (its model keeps failing the same way, its runner or binary is broken, the work needs a stronger model): `<prefix>-bounty retry 12 --slot <slot>` (add `--note` too). Your slot wins over escalation.
 3. **Hand to a human** when only the user can unblock it (a login, hardware, a missing tool or permission, a product decision), or when the bounty failed at the attempt cap: `<prefix>-bounty incident 3 --human "the exact step they need to do"`. The bounty is blocked as "Waiting on a human: ..." and shows in the hub's Needs you.
 

@@ -20,16 +20,16 @@ incident (any status) only adds its exit.
 |---|---|---|
 | spawn failure (the `tick()` spawn catch: unknown runner, T3 refusal, T3 read-only, no T3 project) | `lib/dispatcher.js:159` | `test/incidents.test.js:126` (unknown runner, twice: attempts 1 and 2), `test/t3.test.js:286` (T3 read-only) |
 | worktree failure inside `spawn()` | `lib/dispatcher.js:255` | `test/incidents.test.js:126` (worktree cmd exits 7), `:485` (retried to the cap) |
-| `onExit`: exited without submit | `lib/dispatcher.js:333` → `:344` | `test/incidents.test.js:126` (giveup), `:418` (leak) |
-| `onExit`: never ran `bounty start` (incl. a missing binary: `child.on('error')` with no pid ends the attempt, `:291`) | `lib/dispatcher.js:338` → `:344` | `test/incidents.test.js:126` (crash, ENOENT) |
-| `onExit`: verify failed while the worker waited, then it exited | `lib/dispatcher.js:333` (kind `verify_failed_exit`) | `test/room.test.js:166` |
-| stall watchdog kill (dispatcher-spawned) + its later `onExit` = one record | `lib/dispatcher.js:436`, merge at `:343` | `test/incidents.test.js:126` (stall: 1 record, `...; then exited on signal SIGTERM`) |
-| stall watchdog for CLI-driven in-progress bounties | `lib/dispatcher.js:454` | `test/incidents.test.js:126` (external) |
-| t3 runner: launch refused (`lib/t3-workers.js:73` → onExit, then the tick catch) = one record | `lib/dispatcher.js:343/344` + `:159` | `test/t3.test.js:141` |
-| t3 runner: turn ended without submit (`lib/t3-workers.js:116`), thread gone (`:129`) | `lib/dispatcher.js:344` | `test/t3.test.js:109` |
-| t3 runner: stall interrupt + turn `interrupted` = one record | `lib/dispatcher.js:436`, `:343` | `test/t3.test.js:212` |
+| `onExit`: exited without submit | `lib/dispatcher.js:336` → `:347` | `test/incidents.test.js:126` (giveup), `:418` (leak) |
+| `onExit`: never ran `bounty start` (incl. a missing binary: `child.on('error')` with no pid ends the attempt, `:291`) | `lib/dispatcher.js:341` → `:347` | `test/incidents.test.js:126` (crash, ENOENT) |
+| `onExit`: verify failed while the worker waited, then it exited | `lib/dispatcher.js:336` (kind `verify_failed_exit`) | `test/room.test.js:166` |
+| stall watchdog kill (dispatcher-spawned) + its later `onExit` = one record | `lib/dispatcher.js:439`, merge at `:346` | `test/incidents.test.js:126` (stall: 1 record, `...; then exited on signal SIGTERM`) |
+| stall watchdog for CLI-driven in-progress bounties | `lib/dispatcher.js:457` | `test/incidents.test.js:126` (external) |
+| t3 runner: launch refused (`lib/t3-workers.js:73` → onExit, then the tick catch) = one record | `lib/dispatcher.js:346/347` + `:159` | `test/t3.test.js:141` |
+| t3 runner: turn ended without submit (`lib/t3-workers.js:116`), thread gone (`:129`; the report's Details say `ended: T3 thread no longer exists`) | `lib/dispatcher.js:347` | `test/t3.test.js:109`, `:312` (deleted thread: one incident, `detail.reason` and the report asserted) |
+| t3 runner: stall interrupt + turn `interrupted` = one record | `lib/dispatcher.js:439`, `:346` | `test/t3.test.js:212` |
 | verify/CI failure after the worker exited (board still requeues as before) | `lib/board.js:675` | `test/incidents.test.js:236` |
-| retry cap moves the bounty to `failed` (joins the bounty's newest open incident: the verify failure just recorded, or the incident a retry at the cap is deciding) | `lib/board.js:374` | `test/incidents.test.js:236`, `:284` (retry at cap: same row, resolved), `:485` (worktree breaks retried to the cap) |
+| retry cap moves the bounty to `failed` (joins the newest open incident **of the current attempt**: the verify failure just recorded, or the incident a retry at the cap is deciding; an older attempt's open incident is left alone and the cap is its own record) | `lib/board.js:374`, match at `lib/incidents.js:141` | `test/incidents.test.js:236`, `:284` (retry at cap: same row, resolved), `:485` (worktree breaks retried to the cap), `:525` (older attempt's incident open: the cap is attempt 2's own record) |
 
 Each record has bounty, attempt (`attempt_no`, `attempt_id`), slot, worker name, cause, `created_at`,
 `status` open/resolved, `choice`, `resolution`, `resolved_by`, `resolved_at`.
@@ -41,6 +41,30 @@ stored report's "failures so far" includes this break (asserted for spawn, workt
 `test/incidents.test.js`). The verify path then requeues with `countFailure: false`.
 `bounty retry` calls `requeue(..., { countFailure: false })`, so it never counts twice; the cap and
 escalation still apply (3 broken attempts with max 3 → the retry ends `failed`).
+
+### Attempt 4: fixes for the third review
+
+- **The cap joins only the current attempt's incident.** `record()` (`lib/incidents.js:141`) now matches
+  the `attempt_cap` event on `attempt_no` too: it joins the newest open incident of the attempt that hit
+  the cap, never an older attempt's undecided one. With none for this attempt (an orchestrator or
+  reviewer reject at the cap) the cap is its own record for that attempt. Test:
+  `test/incidents.test.js:525` (attempt 1's incident left open, attempt 2 rejected at cap 2: two rows,
+  the older one untouched). QA: run 4, part (1).
+- **An attempt's end reason is kept as a report fact.** `onExit` passes `why` as `reason` whenever it is
+  not a plain `signal SIG...` or a spawn error (which stays the `error` fact): "T3 thread no longer
+  exists" (`lib/t3-workers.js:129`), "worker process ended" / "worker process died" for an adopted worker
+  that disappears (`lib/dispatcher.js:145`, `:430`), "worker was gone after a board restart" (`:117`),
+  the T3 launch failure (`lib/t3-workers.js:73`) and a T3 turn's end state (`:116`)
+  (`lib/dispatcher.js:328`). `record()` stores it redacted (`detail.reason`, or in `detail.also` when the
+  exit joins a stall incident) and the report's Details line shows `ended: <reason>`
+  (`lib/incidents.js:204`). The short cause (sent to the room) is still built from structured fields only.
+  Tests: `test/t3.test.js:312` (deleted thread: `detail.reason` and `- Details: ended: T3 thread no
+  longer exists` in the report). QA: run 4, part (3) (board restart, and an adopted worker that dies).
+- **`bounty retry` with no open incident is refused.** `retry()` (`lib/incidents.js:346`) throws 409
+  `bounty N has no open incident to retry (status S); to requeue it anyway use bounty ready N` and
+  requeues nothing (the live-worker, moved-on and failed-at-cap checks still come first, with their own
+  messages). Test: `test/incidents.test.js:525` (status, attempts and failures unchanged). QA: run 4,
+  part (2).
 
 ### Attempt 3: fixes for the second review
 
@@ -393,6 +417,59 @@ $ kill -TERM 3901158 3900907 3900735
 ports closed
 DONE
 ````
+
+### Run 4: the third review's points (commit f42b30d)
+
+Run by `docs/evidence/b10/qa/run2.sh`: the same isolation as above (fresh `mktemp -d` as `$QA` with its own
+`board.json`, db, logs, registry and run dir; ephemeral port 37279; `command` slots running
+`test/fake-worker.sh`), `retry.max_attempts: 2`, and a reviewer that sleeps 20 s before the fake reviewer
+so the orchestrator can reject while the bounty is in review. Full transcript:
+`docs/evidence/b10/qa/transcript4.txt`. Excerpts:
+
+(1) The cap with an older attempt's incident still open: attempt 1 gives up (incident #1, nobody decides
+it), `bounty ready 1` requeues it by hand, attempt 2 submits real work and `bounty reject 1 ...` hits cap 2:
+
+```
+$ q.sh reject 1 the product must be BigInt-safe
+#1 -> failed
+$ sqlite3 -header board.db "SELECT id,bounty_id,attempt_no,attempt_id,status,cause_kind,cause FROM incidents WHERE bounty_id=1 ORDER BY id"
+id|bounty_id|attempt_no|attempt_id|status|cause_kind|cause
+1|1|1|1|open|exit_no_submit|exited with code 1 without submitting
+2|1|2|2|open|attempt_cap|attempt cap 2 reached, bounty failed; then exited on signal SIGTERM
+```
+
+Incident #1 is untouched; the cap is attempt 2's own record (and the board's stop of attempt 2's still
+waiting worker joins it as `then exited on signal SIGTERM`).
+
+(2) Retry with no open incident (a bounty the orchestrator blocked by hand):
+
+```
+$ q.sh block 2 waiting on a design decision
+#2 blocked: waiting on a design decision
+$ q.sh retry 2
+bounty: 409: bounty 2 has no open incident to retry (status blocked); to requeue it anyway use bounty ready 2
+exit=1
+id|status|attempts|failures      (before and after: identical)
+2|blocked|0|0
+```
+
+(3) Workers gone across a board restart: two `mode:stall` workers run; the board is stopped by its PID
+(workers outlive it), #3's worker is stopped by its recorded PID while the board is down, the board is
+started again (it re-attaches #4's live worker), then #4's worker is stopped by its recorded PID:
+
+```
+$ q.sh incident 3 | sed -n '1,9p'
+- Cause: exited without submitting
+- Details: ended: worker was gone after a board restart
+$ q.sh incident 4 | sed -n '1,9p'
+- Cause: exited without submitting
+- Details: ended: worker process died
+```
+
+Stopping: the board, both workers and their `sleep` children by recorded PID, all gone; the port closed.
+The sweep at the end lists the attempt-3 reviewer (`bash -c "sleep 20; ..."`, pid 380831) as still
+alive at that moment: it was finishing its sleep after the board stopped and exited by itself seconds
+later (checked: `/proc/380831` gone, nothing of the run left).
 
 ## 9. Docs
 
