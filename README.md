@@ -675,6 +675,33 @@ systemctl --user daemon-reload && systemctl --user enable --now bounty-hub
 
 **On your phone over Tailscale.** Open `http://<machine>.<tailnet>.ts.net:3770/`. The board links on the page use the same host name, so they work from the phone too. Never widen `allow_cidrs` to the public internet.
 
+## Sentinel: what keeps breaking, across every board
+
+`bounty sentinel` is a read-only health scan. Plain code, no model calls, no network, no board server needed: it reads every board's SQLite database and the tails of its attempt logs, groups failures into issues, and writes what it found to its own folder. It keeps working when a board or the hub is down (a board it cannot read becomes an issue). Run it on a timer and look at `report.html` over several days to see what keeps breaking, where workers wait and what it costs.
+
+```bash
+bounty sentinel [--registry-dir DIR] [--board DIR]... [--out DIR] [--since HOURS] [--json] [--force]
+bounty sentinel --check-install     # is the timer installed and active, when did it last run
+```
+
+- **Which boards.** Every board in the registry (`$XDG_STATE_HOME/totally-not-a-kanban/boards`, or `--registry-dir`, or `BOUNTY_REGISTRY_DIR`), stopped ones too, plus each `--board DIR` (a board's config dir, a `board.json`, or a checkout with `config/board.json`). Paths in `board.json` resolve the way the board resolves them.
+- **Read-only.** Databases are opened `readonly` (never `immutable`, which would skip rows still in the WAL), queried with a few short reads, and closed at once with no transaction held, so a live board can always checkpoint. A locked, missing or foreign database is an issue, never a crash. Nothing is written inside a board dir, and an `--out` inside one (its config dir, its base dir, its db dir or its logs dir, symlinks resolved) is refused with exit 2. One SQLite detail: a read-only open of a *cleanly closed* WAL database makes SQLite create an empty `-wal` and a `-shm` next to it (a running board already has both); they hold no data and the board uses them as its own.
+- **Output** (default `$XDG_STATE_HOME/bounty-board/sentinel`, falling back to `~/.local/state/bounty-board/sentinel`): `issues.json` (signature, title, cause, first and last seen, count, boards, slots, runners, models, example bounty ids, one redacted sample of at most 200 characters), `history.ndjson` (one summary line per run, with last-24-hour figures so days compare), `report.html` (self-contained, no external requests: issues ranked by count and recency, a table per board, the day-over-day trend), plus `boards.json` (every signal per board) and `state.json` (the change fingerprint).
+- **Signatures.** A failure's signature is its cause class (`exit_without_submit`, `watchdog_stall`, `never_started`, `worker_exit_error`, `verify_failed`, `verify_crashed`, `reviewer_error`, `retry_cap`, `stale_open_attempt`, `no_orchestrator`, `board_unreadable`) plus its error text with timestamps, uuids, urls, paths, hex, ids, slot names and numbers stripped, hashed. The same failure on another slot, board or day gets the same signature. The error text comes from the last error in the attempt's log tail (32 KB), else the exit code and reason. Samples and titles are redacted first (provider keys, `Bearer ...`, `password=`-style assignments, private key blocks, url credentials, JWTs), then cut.
+- **Signals per board** (over the last `--since` hours, default 72): broken attempts by signature with counts per slot, runner and model; watchdog stall kills; exits without submit; verify failures and reviewer errors; queue wait from ready to first claim (p50, p90, max, and what is waiting now); attempts per bounty and retry-cap failures; cost and tokens per slot per day; slot minutes idle while ready work waited; minutes with pending work and no orchestrator online (from the registry's presence); open attempts whose log has not grown past the board's stall threshold.
+- **Unchanged runs are cheap.** When no db, WAL, log, `board.json` or registry entry changed since the last run (sizes and mtimes only), it says so and exits without reading a row; `--force` scans anyway. Such a run adds no history line, so a silent open attempt only shows up again once something changes. Counts in `issues.json` are recomputed from the sources on every full scan; only `first_seen` carries over, and an issue that left the window stays with count 0.
+- Every scan exits 0 and prints a short summary (or one JSON document with `--json`).
+
+**On a timer.** `systemd/bounty-sentinel.service` (a oneshot) and `systemd/bounty-sentinel.timer` (hourly, `Persistent=true`) are user units:
+
+```bash
+cp systemd/bounty-sentinel.service systemd/bounty-sentinel.timer ~/.config/systemd/user/   # edit the paths in the .service
+systemctl --user daemon-reload && systemctl --user enable --now bounty-sentinel.timer
+bounty sentinel --check-install                  # installed, active, last triggered, last scan
+journalctl --user -u bounty-sentinel             # each run's summary
+xdg-open ~/.local/state/bounty-board/sentinel/report.html
+```
+
 ## History
 
 The February 2026 board broke because agents faked work (appending to WORK_LOG.md) and the old reviewer approved any evidence string longer than 50 characters. Its 57 bounties are kept under the `legacy` project with their old agent names as text; its agents and their inflated loot were deleted, and legacy work never counts toward loot. The gates above exist so that cannot happen again.

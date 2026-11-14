@@ -315,3 +315,15 @@ test('default out dir follows XDG_STATE_HOME, else ~/.local/state', () => {
   assert.strictEqual(r.status, 0, r.stderr);
   assert.ok(fs.existsSync(path.join(root, 'state', 'bounty-board', 'sentinel', 'report.html')));
 });
+
+test('systemd: a generic oneshot service and an hourly persistent timer', () => {
+  const dir = path.join(__dirname, '..', 'systemd');
+  const svc = fs.readFileSync(path.join(dir, 'bounty-sentinel.service'), 'utf8');
+  const tim = fs.readFileSync(path.join(dir, 'bounty-sentinel.timer'), 'utf8');
+  assert.match(svc, /^Type=oneshot$/m);
+  assert.match(svc, /^ExecStart=.*bin\/bounty sentinel$/m);
+  assert.match(tim, /^OnCalendar=hourly$/m);
+  assert.match(tim, /^Persistent=true$/m);
+  assert.match(tim, /^WantedBy=timers\.target$/m);
+  for (const t of [svc, tim]) assert.ok(!/\/home\/|\/mnt\//.test(t), 'generic paths only (%h)');
+});
