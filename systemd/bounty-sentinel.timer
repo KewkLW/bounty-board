@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the bounty sentinel every hour
+
+[Timer]
+OnCalendar=hourly
+# A run missed while the machine was off or asleep runs at the next boot or wake.
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

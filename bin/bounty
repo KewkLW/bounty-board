@@ -50,6 +50,11 @@ Orchestrator
                                    every manifest process: pid, name, kind, bounty, age, RSS, stale or not.
                                    Dry run by default; --kill stops the stale ones, --all also the live
                                    non-orchestrator ones (--orchestrators adds those). Only manifest pids.
+  bounty sentinel [--registry-dir DIR] [--board DIR]... [--out DIR] [--since HOURS] [--json] [--force]
+                                   read-only health scan of every registered board (no server needed): issues
+                                   with stable signatures, queue waits, stalls, cost; writes issues.json,
+                                   history.ndjson, report.html to --out (default $XDG_STATE_HOME/bounty-board/sentinel)
+  bounty sentinel --check-install  is the bounty-sentinel.timer installed and active, and when did it last run
   bounty project list | bounty project add ID --repo PATH [--main main] [--wt-cmd CMD] [--wt-path TPL] [--verify CMD]
 Workers (BOUNTY_ID / BOUNTY_SLOT from the environment)
   bounty start                     bounty progress "note" [--check N]...     (both print unread notes)
@@ -66,7 +71,7 @@ function parse(argv) {
     if (a.startsWith('--')) {
       const k = a.slice(2);
       const nxt = argv[i + 1];
-      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help', 'peek', 'kill', 'orchestrators'].includes(k);
+      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help', 'peek', 'kill', 'orchestrators', 'check-install'].includes(k);
       const v = flag || nxt === undefined || nxt.startsWith('--') ? true : (i++, nxt);
       if (opt[k] === undefined) opt[k] = v; else opt[k] = [].concat(opt[k], v);
     } else pos.push(a);
@@ -209,6 +214,28 @@ function parseTaskFile(file) {
   return out;
 }
 
+// bounty sentinel: runs locally, reads boards read-only, never talks to a server. Every scan exits 0
+// (an unreadable board is an issue in the output); a refused --out or bad option exits 2.
+function sentinel(opt) {
+  const s = require('../lib/sentinel');
+  const one = v => (Array.isArray(v) ? v[v.length - 1] : v);
+  const str = v => (typeof one(v) === 'string' ? one(v) : undefined);
+  if (opt['check-install']) {
+    const r = s.checkInstall({ out: str(opt.out) || s.defaultOutDir() });
+    console.log(opt.json ? JSON.stringify(r, null, 2) : s.formatCheck(r));
+    return;
+  }
+  let r;
+  try {
+    r = s.run({ registryDir: str(opt['registry-dir']), boards: list(opt.board).filter(b => typeof b === 'string'), out: str(opt.out),
+      sinceHours: opt.since !== undefined ? Number(one(opt.since)) : undefined, force: !!opt.force });
+  } catch (e) {
+    if (e instanceof s.UsageError) { console.error(`bounty sentinel: ${e.message}`); process.exitCode = 2; return; }
+    throw e;
+  }
+  console.log(opt.json ? JSON.stringify(r, null, 2) : s.formatSummary(r));
+}
+
 async function main() {
   const { pos, opt } = parse(process.argv.slice(2));
   const cmd = pos.shift();
@@ -216,6 +243,8 @@ async function main() {
   const worker = !!SLOT;
   const orchOnly = ['add', 'edit', 'note', 'replies', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'close-merged', 'pause', 'resume', 'import'];
   if (worker && orchOnly.includes(cmd)) die(`'${cmd}' is an orchestrator command; you are worker ${SLOT}`);
+
+  if (cmd === 'sentinel') return sentinel(opt);
 
   switch (cmd) {
     case 'add': {
