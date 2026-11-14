@@ -23,21 +23,37 @@ incident (any status) only adds its exit.
 | `onExit`: exited without submit | `lib/dispatcher.js:326` → `:339` | `test/incidents.test.js:119` (giveup), `:374` (leak) |
 | `onExit`: never ran `bounty start` (incl. a missing binary: `child.on('error')` with no pid now ends the attempt, `:289`) | `lib/dispatcher.js:331` → `:339` | `test/incidents.test.js:119` (crash, ENOENT) |
 | `onExit`: verify failed while the worker waited, then it exited | `lib/dispatcher.js:326` (kind `verify_failed_exit`) | `test/room.test.js:165` |
-| stall watchdog kill (dispatcher-spawned) + its later `onExit` = one record | `lib/dispatcher.js:432`, merge at `:338` | `test/incidents.test.js:119` (stall: asserts 1 record, `...; then exited on signal SIGTERM`) |
-| stall watchdog for CLI-driven in-progress bounties | `lib/dispatcher.js:446` | `test/incidents.test.js:119` (external) |
+| stall watchdog kill (dispatcher-spawned) + its later `onExit` = one record | `lib/dispatcher.js:431`, merge at `:338` | `test/incidents.test.js:119` (stall: asserts 1 record, `...; then exited on signal SIGTERM`) |
+| stall watchdog for CLI-driven in-progress bounties | `lib/dispatcher.js:445` | `test/incidents.test.js:119` (external) |
 | t3 runner: launch refused (`t3-workers.js:73` → onExit, then the tick catch) = one record | `lib/dispatcher.js:338/339` + `:157` | `test/t3.test.js:141` |
 | t3 runner: turn ended without submit (`t3-workers.js:116`), thread gone (`:129`) | `lib/dispatcher.js:339` | `test/t3.test.js:109` |
-| t3 runner: stall interrupt + turn `interrupted` = one record | `lib/dispatcher.js:432`, `:338` | `test/t3.test.js:212` |
-| verify/CI failure after the worker exited (board still requeues as before) | `lib/board.js:672` | `test/incidents.test.js:211` |
-| retry cap moves the bounty to `failed` (merges into the verify incident of the same attempt) | `lib/board.js:374` | `test/incidents.test.js:211`, `:257` |
+| t3 runner: stall interrupt + turn `interrupted` = one record | `lib/dispatcher.js:431`, `:338` | `test/t3.test.js:212` |
+| verify/CI failure after the worker exited (board still requeues as before) | `lib/board.js:675` | `test/incidents.test.js:216` |
+| retry cap moves the bounty to `failed` (merges into the verify incident of the same attempt) | `lib/board.js:374` | `test/incidents.test.js:216`, `:264` |
 
 Each record has bounty, attempt (`attempt_no`, `attempt_id`), slot, worker name, cause, `created_at`,
 `status` open/resolved, `choice`, `resolution`, `resolved_by`, `resolved_at`.
 
-Failure counting: each broken attempt costs one failure. `onExit` and the stall watchdog already added it;
-the spawn, worktree and CLI-stall paths add it when they create a new record (`breakIncident(..., {count})`).
+Failure counting: each broken attempt costs one failure. `onExit` and the stall watchdog already added it
+before they record; the spawn, worktree, CLI-stall and verify-after-exit paths pass `countFailure` to
+`Incidents.record()`, which adds it on a new record *before* the report is rendered and stored, so the
+stored report's "failures so far" includes this break (asserted for spawn, worktree, CLI stall and verify in
+`test/incidents.test.js`). The verify path then requeues with `countFailure: false`.
 `bounty retry` calls `requeue(..., { countFailure: false })`, so it never counts twice; the cap and
-escalation still apply (`test/incidents.test.js:257`: 3 broken attempts with max 3 → the retry ends `failed`).
+escalation still apply (3 broken attempts with max 3 → the retry ends `failed`).
+
+### Attempt 2: fixes for the review
+
+- **One record across the cap transition.** `bounty retry` on a blocked bounty whose next requeue reaches
+  the cap no longer resolves the incident first (`lib/incidents.js`, `retry()`, `capped`). The requeue fails
+  the bounty and the `attempt_cap` record joins that attempt's incident (`record()` matches an
+  `attempt_cap` on bounty + attempt number, whatever its attempt row or status); the incident stays open
+  with cause `...; then attempt cap 3 reached, bounty failed` for the next decision (human, or
+  `bounty ready` to override). If a decision had already closed that attempt's record, the cap reopens the
+  same record (the previous decision is kept in `detail.reopened`) and announces it again. Tests: the
+  decisions test asserts no second row and one row for attempt 3, `capped: true`, `resolved: []`; the end
+  of that test asserts the reopen path keeps one record.
+- **Failures counted before the report is stored**, see above.
 
 ## 2. The report
 
@@ -81,7 +97,7 @@ no trace of the token.
   When the bounty has already moved on to a later attempt (the requeued verify failure is running again,
   or reached review/done), `retry` only closes the incident (resolution `already on attempt N (status)`);
   `--slot` and `--human` then ask for `bounty kill` first. Only the broken attempt's own live worker makes
-  retry wait (`test/incidents.test.js:211`).
+  retry wait (`test/incidents.test.js:216`).
 - `--human` blocks with `Waiting on a human: TEXT (incident #N: cause)`; `hub/server.js` `waitsOnHuman`
   matches it (asserted in `test/incidents.test.js:257`). It works on a failed bounty: the status machine
   gained `failed -> blocked` (`lib/machine.js`). A human unblock from the hub also resolves open incidents.

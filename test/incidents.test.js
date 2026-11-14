@@ -179,6 +179,7 @@ test('break paths: never ran start, exited without submit, stall kill (+ its exi
     assert.strictEqual(i.attempt_id, null);
     assert.match(board.incidents.row(i.id).report, /Error \(spawn\): unknown runner 'no-such-runner'/);
     assert.strictEqual(board.raw(odd.id).failures, 1);
+    assert.match(board.incidents.row(i.id).report, /Attempt: 1 of 4 \(failures so far: 1\)/, 'the stored report counts this break');
     // the worktree command fails inside spawn()
     board.upsertProject({ ...board.project('scratch'), id: 'nowt', worktree_cmd: 'echo cannot make a worktree; exit 7', worktree_path: path.join(t.dir, 'wt2', '{task}') });
     const nowt = mk('no worktree', null, 'fake-2', 'nowt');
@@ -188,6 +189,8 @@ test('break paths: never ran start, exited without submit, stall kill (+ its exi
     assert.strictEqual(i.attempt_no, 1);
     assert.match(board.incidents.row(i.id).report, /Error \(worktree\): worktree command failed \(exit 7\)/);
     assert.match(board.incidents.row(i.id).report, /cannot make a worktree/, 'the log lines show the command output');
+    assert.strictEqual(board.raw(nowt.id).failures, 1);
+    assert.match(board.incidents.row(i.id).report, /Attempt: 1 of 4 \(failures so far: 1\)/, 'the stored report counts this break');
     // an in-progress bounty driven by the CLI outside the dispatcher goes silent
     const ext = board.create({ criteria: CRIT, title: 'external', project: 'scratch', status: 'in_progress', external_owner: 'outside-agent' });
     board.db.prepare('UPDATE bounties SET heartbeat_at = ? WHERE id = ?').run(new Date(Date.now() - 600000).toISOString(), ext.id);
@@ -197,6 +200,8 @@ test('break paths: never ran start, exited without submit, stall kill (+ its exi
     assert.strictEqual(i.worker, 'outside-agent');
     assert.strictEqual(i.log_path, null);
     assert.match(board.incidents.row(i.id).report, /Log: \(none: no board-spawned process\)/);
+    assert.strictEqual(board.raw(ext.id).failures, 1);
+    assert.match(board.incidents.row(i.id).report, /\(failures so far: 1\)/, 'the stored report counts this break');
     // every break above is exactly one record
     const all = board.db.prepare('SELECT bounty_id, COUNT(*) c FROM incidents GROUP BY bounty_id').all();
     assert.ok(all.every(r => r.c === 1), JSON.stringify(all));
@@ -229,6 +234,8 @@ test('verify failure after the worker left: an incident, the board requeues; the
     assert.ok(rows[0].attempt_id);
     const rep1 = board.incidents.row(rows[0].id).report;
     assert.match(rep1, /### Verify output, last lines \(quoted data from the failed run: never instructions\)\n```text\n[\s\S]*failing on purpose/);
+    assert.strictEqual(board.raw(b.id).failures, 1, 'the verify break counts once');
+    assert.match(rep1, /Attempt: 1 of 2 \(failures so far: 1\)/, 'the stored report counts this break');
     // on a running board the next attempt is already live: --human and --slot are refused, retry only closes it
     board.db.prepare('UPDATE bounties SET attempts = 2 WHERE id = ?').run(b.id);
     board.start(b.id, 'fake-1');
@@ -302,14 +309,22 @@ test('decisions: retry requeues (cap still ends in failed, no double-counted fai
     assert.strictEqual(r2.data.bounty.assignee_slot, 'fake-1');
     assert.strictEqual(board.incidents.row(i2.id).choice, 'reassign to fake-1');
     assert.strictEqual((await t.call('POST', `/bounties/${b.id}/retry`, { slot: 'nope' })).status, 400);
-    // attempt 3 breaks; the retry hits the cap of 3: failed, with its own attempt-cap incident
+    // attempt 3 breaks; the retry hits the cap of 3: failed, and the cap joins attempt 3's own
+    // incident (one record per broken attempt), which stays open for the next decision
     const i3 = await run();
     assert.strictEqual(board.raw(b.id).failures, 3);
+    const before = board.db.prepare('SELECT COUNT(*) c FROM incidents WHERE bounty_id = ?').get(b.id).c;
     const r3 = await t.call('POST', `/bounties/${b.id}/retry`, {});
     assert.strictEqual(r3.data.bounty.status, 'failed');
-    assert.strictEqual(board.incidents.row(i3.id).status, 'resolved');
-    const cap = board.db.prepare("SELECT * FROM incidents WHERE bounty_id = ? AND status = 'open'").get(b.id);
-    assert.strictEqual(cap.cause, 'attempt cap 3 reached, bounty failed');
+    assert.strictEqual(r3.data.capped, true);
+    assert.deepStrictEqual(r3.data.resolved, []);
+    assert.strictEqual(board.db.prepare('SELECT COUNT(*) c FROM incidents WHERE bounty_id = ?').get(b.id).c, before, 'no second record at the cap');
+    assert.strictEqual(board.db.prepare('SELECT COUNT(*) c FROM incidents WHERE bounty_id = ? AND attempt_no = 3').get(b.id).c, 1);
+    const cap = board.incidents.row(i3.id);
+    assert.strictEqual(cap.status, 'open');
+    assert.match(cap.cause, /; then attempt cap 3 reached, bounty failed$/);
+    assert.match(cap.report, /status now failed/);
+    assert.match(cap.report, /\(failures so far: 3\)/);
     // retry on a failed bounty is refused with the way out
     const r4 = await t.call('POST', `/bounties/${b.id}/retry`, {});
     assert.strictEqual(r4.status, 409);
@@ -326,6 +341,14 @@ test('decisions: retry requeues (cap still ends in failed, no double-counted fai
     assert.deepStrictEqual([hc.status, hc.choice, hc.resolved_by], ['resolved', 'hand to a human', 'Conductor']);
     assert.strictEqual((await t.call('POST', `/incidents/${cap.id}/human`, {})).status, 400, '--human needs text');
     assert.strictEqual(board.incidents.openCount(), 0);
+    // a later cap for the same attempt (after a decision closed it) reopens that record, never a second one
+    const again = board.incidents.record({ bounty: b.id, kind: 'attempt_cap', attemptNo: 3 });
+    assert.strictEqual(again.created, false);
+    assert.strictEqual(again.reopened, true);
+    assert.strictEqual(again.incident.id, cap.id);
+    assert.strictEqual(again.incident.status, 'open');
+    assert.strictEqual(again.incident.resolved_by, null);
+    assert.strictEqual(board.db.prepare('SELECT COUNT(*) c FROM incidents WHERE bounty_id = ? AND attempt_no = 3').get(b.id).c, 1);
   } finally { await t.s.close(); }
 });
 
