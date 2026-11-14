@@ -172,7 +172,10 @@ test('unchanged sources: the second run reads no rows; --force does; a change tr
     const j2 = JSON.parse(r2.stdout);
     assert.strictEqual(j2.unchanged, true, r2.stdout);
     assert.match(j2.message, /no source db, WAL or log changed/);
-    assert.strictEqual(fs.readFileSync(path.join(out, 'history.ndjson'), 'utf8').trim().split('\n').length, 1, 'no history line for an unchanged run');
+    const hl = fs.readFileSync(path.join(out, 'history.ndjson'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+    assert.strictEqual(hl.length, 2, 'one history line per run');
+    assert.strictEqual(hl[1].unchanged, true);
+    assert.strictEqual(hl[1].broken, undefined, 'an unchanged run carries no figures (it read nothing)');
     const human = cli(args.filter(a => a !== '--json'));
     assert.match(human.stdout, /nothing read/);
     if (process.getuid && process.getuid() !== 0) {
@@ -190,6 +193,18 @@ test('unchanged sources: the second run reads no rows; --force does; a change tr
   // an empty -wal (what a reader of a cleanly closed WAL db can leave behind) is not a change
   fs.writeFileSync(A.dbPath + '-wal', '');
   assert.strictEqual(JSON.parse(cli(args).stdout).unchanged, true, 'empty -wal is the same as none');
+  // a registry entry rewritten (an orchestrator's last_seen moves every few seconds) is not a change
+  const reg = path.join(root, 'reg');
+  writeRegistry(reg, [{ name: 'A', port: 4921, dir: A.dir, presence: { name: 'o', online: false, last_seen: '2026-11-01T00:00:00Z' } }]);
+  const rargs = ['--registry-dir', reg, '--out', path.join(root, 'out2'), '--json'];
+  assert.strictEqual(JSON.parse(cli(rargs).stdout).unchanged, false);
+  writeRegistry(reg, [{ name: 'A', port: 4921, dir: A.dir, presence: { name: 'o', online: false, last_seen: '2026-11-02T00:00:00Z' } }]);
+  fs.utimesSync(path.join(reg, '4921.json'), new Date(), new Date(Date.now() + 5000));
+  assert.strictEqual(JSON.parse(cli(rargs).stdout).unchanged, true, 'registry rewrite alone is not a change');
+  // a new board in the registry is
+  const B = makeBoard(path.join(root, 'b'), { name: 'B', port: 4922 });
+  writeRegistry(reg, [{ name: 'A', port: 4921, dir: A.dir }, { name: 'B', port: 4922, dir: B.dir }]);
+  assert.strictEqual(JSON.parse(cli(rargs).stdout).unchanged, false, 'a board added is a change');
 });
 
 test('WAL: a scan sees rows still in the WAL while a writer holds the db open, and the writer can checkpoint after', () => {
@@ -323,4 +338,48 @@ test('systemd: a generic oneshot service and an hourly persistent timer', () => 
   assert.match(tim, /^Persistent=true$/m);
   assert.match(tim, /^WantedBy=timers\.target$/m);
   for (const t of [svc, tim]) assert.ok(!/\/home\/|\/mnt\//.test(t), 'generic paths only (%h)');
+});
+
+test('signals: a configured slot that never ran counts as idle; in_progress without spawn is a claim; an entry without board_dir is an issue', () => {
+  const now = Date.parse('2026-11-14T12:00:00Z');
+  const t = m => new Date(now - m * 60000).toISOString();
+  const board = { label: 'X', stall_minutes: 30, slots: ['busy-1', 'never-1'], run: '/nonexistent', entry: null };
+  const rows = {
+    attempts: [{ id: 1, bounty_id: 2, slot: 'busy-1', runner: 'claude', model: 'm', started_at: t(100), ended_at: t(40), exit_code: 0, kind: 'worker', outcome: 'review' }],
+    events: [
+      { id: 1, bounty_id: 1, at: t(120), kind: 'status', to_status: 'ready' },
+      { id: 2, bounty_id: 1, at: t(60), kind: 'status', to_status: 'in_progress' },   // claimed by hand, no spawn
+      { id: 3, bounty_id: 1, at: t(50), kind: 'status', to_status: 'ready' },
+      { id: 4, bounty_id: 1, at: t(20), kind: 'spawn' },
+      { id: 5, bounty_id: 2, at: t(110), kind: 'status', to_status: 'ready' },
+      { id: 6, bounty_id: 2, at: t(100), kind: 'spawn' },
+    ],
+    bounties: [{ id: 1, status: 'in_progress' }, { id: 2, status: 'review' }],
+  };
+  const a = s.analyze(board, rows, { nowMs: now, sinceMs: now - 72 * 3600000 });
+  const q = a.signals.queue_wait_min;
+  assert.strictEqual(q.n, 3, 'ready->in_progress, ready->spawn, ready->spawn');
+  assert.strictEqual(q.max, 60, 'the second wait is measured from the second ready, not the first');
+  assert.strictEqual(a.signals.idle_while_ready['never-1'], 60 + 30 + 10, 'never-1 idle through every wait');
+  assert.strictEqual(a.signals.idle_while_ready['busy-1'], 20 + 10 + 20, 'busy-1 idle only outside its attempt');
+
+  const root = tmp('nodir');
+  const reg = path.join(root, 'reg');
+  fs.mkdirSync(reg);
+  fs.writeFileSync(path.join(reg, '4999.json'), JSON.stringify({ name: 'Old', port: 4999, pid: 0, stopped_at: '2026-01-01T00:00:00Z' }));
+  const out = path.join(root, 'out');
+  const r = cli(['--registry-dir', reg, '--out', out, '--json']);
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.strictEqual(JSON.parse(r.stdout).unreadable, 1);
+  assert.ok(issues(out).some(i => i.cause === 'board_unreadable' && /NO_BOARD_DIR/.test(i.sample)));
+});
+
+test('report trend: unchanged runs count as runs, the day keeps its last full scan figures', () => {
+  const { trend } = require('../lib/sentinel-report');
+  const d = trend([
+    { at: '2026-11-13T10:00:00Z', last24h: { broken: 4 } },
+    { at: '2026-11-13T11:00:00Z', unchanged: true },
+    { at: '2026-11-14T09:00:00Z', unchanged: true },
+  ]);
+  assert.deepStrictEqual(d.map(([k, h]) => [k, h.runs, h.last24h.broken]), [['2026-11-13', 2, 4], ['2026-11-14', 1, undefined]]);
 });

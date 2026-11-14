@@ -11,9 +11,11 @@
 - **Exit codes.** Every scan exits 0, including when boards are unreadable (each becomes a `board_unreadable` issue). A refused `--out` or a bad `--since` is not a scan, so it exits 2 and writes nothing.
 - **Read-only, not immutable.** `new Database(db, {readonly: true, fileMustExist: true, timeout: 1500})`, three `.all()` reads with no transaction, then an immediate close.
   - A *closed* board (no `-wal` and no `-shm`) would get both sidecars created by SQLite on a read-only open. So it is read from a temp copy instead.
-  - If the db changes or a `-wal` appears during the copy, the original is opened read-only instead. The full-scan test asserts that both board dirs are byte-for-byte unchanged.
+  - If the db changes or a `-wal` appears during the copy, the original is opened read-only instead. The full-scan test asserts that both board dirs keep the same file list, sizes and mtimes, with nothing added.
 - **Issue counts.** Recomputed from the sources on every full scan. Only `first_seen` carries over from the previous `issues.json`, and a quiet issue stays at count 0.
-- **History.** Each line holds last-24-h figures. The report's trend takes one point per UTC day (that day's last run).
+- **History.** One line is appended per run. A full scan's line holds last-24-h figures; an unchanged run appends `{at, unchanged: true, boards}`, having read nothing. The report's trend takes one point per UTC day: every run counts in `runs`, and the figures come from that day's last full scan.
+- **Fingerprint.** It covers each db and its non-empty `-wal`, every logs-dir file, and the set of boards found. It does not cover registry file mtimes, because a board rewrites its entry about every minute while its orchestrator is online. I measured this on the live registry: one entry's mtime moved 60 s in 45 s, while an idle board's did not move.
+- **Signals.** Slots listed in `board.json` that never ran still count as idle while work waited. A bounty claimed outside the dispatcher (`ready → in_progress` with no spawn) ends a queue wait. A registry entry without `board_dir` is a `board_unreadable` issue (`NO_BOARD_DIR`).
 - **No-orchestrator time.** The db keeps no presence history, so this comes from the registry's presence (`since`) at scan time, clipped to the window. Across runs it is tracked by `no_orchestrator_with_work` in `history.ndjson`.
 - **Fast path limit.** A silent open attempt does not change any source, so it only resurfaces at the next full scan or with `--force`. This is by design (criterion 5).
 
@@ -21,8 +23,8 @@
 
 Gate:
 ```
-npm ci --silent && npm test      -> tests 113, pass 113, fail 0
-node --test test/sentinel.test.js -> 11 pass
+npm ci --silent && npm test      -> tests 115, pass 115, fail 0
+node --test test/sentinel.test.js -> 13 pass
 ```
 
 ### Scratch QA (`scratch-qa.txt`)
@@ -42,6 +44,15 @@ Headless report checks (`node scripts/sentinel-shot.js REPORT PNG`, Playwright o
 - `report-scratch.png`: 8 issue rows, 2 board sections, 0 external requests.
 - `report-scratch-days.png`: 4 runs at now-3d to now (in-process `run({now})`), showing the day-over-day bars and table. Because the fixture rows are fixed in time, the earlier days are synthetic: they demonstrate the trend rendering, not real history.
 
+### Cross-check of the classifier against direct SQL (live boards, read-only)
+I ran independent read-only SQL counts over the same 72 h window on every readable live board and compared them with the sentinel's `boards.json`. The script and its output stayed in /tmp.
+```
+attempts with outcome 'blocked (exited%' (minus watchdog kills)  vs exits_without_submit
+events actor=watchdog note 'watchdog:%'                         vs stall_kills
+events kind=verify note 'verify FAILED%' / 'verify crashed%'    vs verify_failures
+-> boards checked 17, mismatches 0 (totals: exits 20, stalls 0, verify failures 26); queue waits measured n=497 in total
+```
+
 ### Live registry, read-only
 `--out` was a temp dir outside the repo. The output and screenshot stay there and are not committed.
 ```
@@ -51,6 +62,8 @@ bounty sentinel --registry-dir $XDG_STATE_HOME/totally-not-a-kanban/boards --out
      stall kills 0; reviewer errors 0; retry-cap 0; stale open 0; boards with pending work and no orchestrator online 10
      issue causes: verify_failed 26, exit_without_submit 20, worker_exit_error 11, no_orchestrator 10, never_started 4, board_unreadable 1
 second run, ~1.3 s, exit 0: a full scan again (live boards' WALs and logs change between runs, as expected)
+after the fixes (fingerprint without registry mtimes): a full scan with the same totals (497 attempts, 35 broken, 22 issues);
+  two runs right after it: unchanged false (a log had grown), then unchanged true (nothing read), both exit 0
 node scripts/sentinel-shot.js <tmp>/out/report.html <tmp>/report-live.png
   -> 22 issue rows, 18 board sections, 0 external requests
 ```
