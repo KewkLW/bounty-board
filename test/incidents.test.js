@@ -70,8 +70,15 @@ test('redaction: provider tokens, Bearer, assignments, private keys; ordinary te
   assert.strictEqual(redact('authorization: bearer abcdefghijkl'), 'authorization: bearer [redacted 12 chars]');
   assert.strictEqual(redact('Authorization: Bearer abcdefghijkl'), 'Authorization: Bearer [redacted 12 chars]');
   assert.strictEqual(redact('-H "Authorization: token abcdefgh"'), '-H "Authorization: token [redacted 8 chars]"');
+  // short values are secrets too: no length floor
+  assert.strictEqual(redact('token=abc secret=xyz password=123'), 'token=[redacted 3 chars] secret=[redacted 3 chars] password=[redacted 3 chars]');
+  assert.strictEqual(redact('curl -H "Bearer abc1234"'), 'curl -H "Bearer [redacted 7 chars]"');
+  assert.strictEqual(redact('Bearer abc'), 'Bearer [redacted 3 chars]');
+  assert.strictEqual(redact('Authorization: Bearer abc'), 'Authorization: Bearer [redacted 3 chars]');
+  assert.strictEqual(redact('Authorization: abc'), 'Authorization: [redacted 3 chars]');
+  assert.strictEqual(redact('https://u:p@host/x'), 'https://u:[redacted 1 chars]@host/x');
   for (const keep of ['commit 3f2a9c0e1b7d4a6f8e9c0b1a2d3e4f5a6b7c8d9e merged', '"input_tokens":1000,"max_tokens": 4000, token_count=12345',
-    'bearer of bad news; bearer tokens', 'tokens in 1200 out 300', 'author: someone',
+    'bearer of bad news; bearer tokens', 'the Bearer token is sent', 'tokens in 1200 out 300', 'author: someone',
     'the token expired; password reset needed', 'export TOKEN=${GH_TOKEN}', 'Basic understanding of the code']) {
     assert.strictEqual(redact(keep), keep, keep);
   }
@@ -180,6 +187,11 @@ test('break paths: never ran start, exited without submit, stall kill (+ its exi
     assert.match(board.incidents.row(i.id).report, /Error \(spawn\): unknown runner 'no-such-runner'/);
     assert.strictEqual(board.raw(odd.id).failures, 1);
     assert.match(board.incidents.row(i.id).report, /Attempt: 1 of 4 \(failures so far: 1\)/, 'the stored report counts this break');
+    // the same break again after a retry: a distinct dispatch, its own attempt number and record
+    board.incidents.retry(odd.id, { by: 'Conductor' });
+    await waitFor(() => incs(odd.id).length === 2 && board.raw(odd.id).status === 'blocked');
+    assert.deepStrictEqual(incs(odd.id).map(x => [x.attempt_no, x.status]), [[1, 'resolved'], [2, 'open']]);
+    assert.match(board.incidents.row(incs(odd.id)[1].id).report, /Attempt: 2 of 4 \(failures so far: 2\)/);
     // the worktree command fails inside spawn()
     board.upsertProject({ ...board.project('scratch'), id: 'nowt', worktree_cmd: 'echo cannot make a worktree; exit 7', worktree_path: path.join(t.dir, 'wt2', '{task}') });
     const nowt = mk('no worktree', null, 'fake-2', 'nowt');
@@ -202,9 +214,9 @@ test('break paths: never ran start, exited without submit, stall kill (+ its exi
     assert.match(board.incidents.row(i.id).report, /Log: \(none: no board-spawned process\)/);
     assert.strictEqual(board.raw(ext.id).failures, 1);
     assert.match(board.incidents.row(i.id).report, /\(failures so far: 1\)/, 'the stored report counts this break');
-    // every break above is exactly one record
+    // every break above is exactly one record (the unknown-runner bounty broke on two dispatches)
     const all = board.db.prepare('SELECT bounty_id, COUNT(*) c FROM incidents GROUP BY bounty_id').all();
-    assert.ok(all.every(r => r.c === 1), JSON.stringify(all));
+    assert.ok(all.every(r => r.c === (r.bounty_id === odd.id ? 2 : 1)), JSON.stringify(all));
     assert.strictEqual(all.length, 7);
     // a worker's own `bounty block` is a decision, not a break: no incident
     const self = board.create({ criteria: CRIT, title: 'self block', project: 'scratch' });
@@ -309,19 +321,21 @@ test('decisions: retry requeues (cap still ends in failed, no double-counted fai
     assert.strictEqual(r2.data.bounty.assignee_slot, 'fake-1');
     assert.strictEqual(board.incidents.row(i2.id).choice, 'reassign to fake-1');
     assert.strictEqual((await t.call('POST', `/bounties/${b.id}/retry`, { slot: 'nope' })).status, 400);
-    // attempt 3 breaks; the retry hits the cap of 3: failed, and the cap joins attempt 3's own
-    // incident (one record per broken attempt), which stays open for the next decision
+    // attempt 3 breaks; the retry hits the cap of 3: failed, the cap joins attempt 3's own
+    // incident (one record per broken attempt), and the retry decision resolves it
     const i3 = await run();
     assert.strictEqual(board.raw(b.id).failures, 3);
     const before = board.db.prepare('SELECT COUNT(*) c FROM incidents WHERE bounty_id = ?').get(b.id).c;
-    const r3 = await t.call('POST', `/bounties/${b.id}/retry`, {});
+    const r3 = await t.call('POST', `/bounties/${b.id}/retry`, { by: 'Conductor' });
     assert.strictEqual(r3.data.bounty.status, 'failed');
     assert.strictEqual(r3.data.capped, true);
-    assert.deepStrictEqual(r3.data.resolved, []);
+    assert.deepStrictEqual(r3.data.resolved, [i3.id]);
     assert.strictEqual(board.db.prepare('SELECT COUNT(*) c FROM incidents WHERE bounty_id = ?').get(b.id).c, before, 'no second record at the cap');
     assert.strictEqual(board.db.prepare('SELECT COUNT(*) c FROM incidents WHERE bounty_id = ? AND attempt_no = 3').get(b.id).c, 1);
     const cap = board.incidents.row(i3.id);
-    assert.strictEqual(cap.status, 'open');
+    assert.deepStrictEqual([cap.status, cap.choice, cap.resolved_by], ['resolved', 'retry', 'Conductor']);
+    assert.ok(cap.resolved_at);
+    assert.match(cap.resolution, /attempt cap 3 reached: the bounty is failed/);
     assert.match(cap.cause, /; then attempt cap 3 reached, bounty failed$/);
     assert.match(cap.report, /status now failed/);
     assert.match(cap.report, /\(failures so far: 3\)/);
@@ -339,6 +353,7 @@ test('decisions: retry requeues (cap still ends in failed, no double-counted fai
     assert.ok(waitsOnHuman(row.blocked_reason));
     const hc = board.incidents.row(cap.id);
     assert.deepStrictEqual([hc.status, hc.choice, hc.resolved_by], ['resolved', 'hand to a human', 'Conductor']);
+    assert.strictEqual(hc.detail.earlier_decisions[0].choice, 'retry', 'the capped retry decision is kept');
     assert.strictEqual((await t.call('POST', `/incidents/${cap.id}/human`, {})).status, 400, '--human needs text');
     assert.strictEqual(board.incidents.openCount(), 0);
     // a cap with no open incident (e.g. a reviewer reject at the cap) is its own record: a closed
@@ -459,7 +474,7 @@ test('room line per incident, presence counts open incidents, API and CLI (list,
   }
 });
 
-test('worktree failures retried up to the cap: the cap joins the last break, earlier decisions untouched', async () => {
+test('worktree failures retried up to the cap: each dispatch its own attempt, the cap joins the last break, every decision recorded', async () => {
   const FAKE = ['bash', path.join(ROOT, 'test', 'fake-worker.sh')];
   const t = await startBoard('inc-wtcap', { over: {
     retry: { max_attempts: 2, escalate_after_failures: 9, escalate_model: {} },
@@ -478,17 +493,20 @@ test('worktree failures retried up to the cap: the cap joins the last break, ear
     await waitFor(() => incs().length === 2 && board.raw(b.id).status === 'blocked');
     const second = incs()[1];
     assert.strictEqual(board.raw(b.id).failures, 2);
-    assert.strictEqual(board.raw(b.id).attempts || 0, 0, 'no worker ever ran');
-    assert.match(board.incidents.row(second.id).report, /\(failures so far: 2\)/);
-    // this retry reaches the cap: the bounty fails, the open incident stays open and takes the cap
+    // no worker ever ran, but each broken dispatch used up its attempt number: two distinct records
+    assert.strictEqual(board.raw(b.id).attempts, 2);
+    assert.deepStrictEqual(incs().map(i => i.attempt_no), [1, 2]);
+    assert.match(board.incidents.row(second.id).report, /Attempt: 2 of 2 \(failures so far: 2\)/);
+    // this retry reaches the cap: the bounty fails, the cap joins the open incident, and the
+    // decision resolves it with who and which choice
     const r2 = board.incidents.retry(b.id, { by: 'Conductor' });
     assert.strictEqual(r2.bounty.status, 'failed');
     assert.strictEqual(r2.capped, true);
-    assert.deepStrictEqual(r2.resolved, []);
-    assert.deepStrictEqual(r2.open, [second.id]);
+    assert.deepStrictEqual(r2.resolved, [second.id]);
     const rows = incs();
     assert.strictEqual(rows.length, 2, 'no extra record at the cap');
-    assert.strictEqual(rows[1].status, 'open');
+    assert.deepStrictEqual([rows[1].status, rows[1].choice, rows[1].resolved_by], ['resolved', 'retry', 'Conductor']);
+    assert.ok(rows[1].resolved_at);
     assert.strictEqual(rows[1].cause, 'worktree setup failed; then attempt cap 2 reached, bounty failed');
     assert.strictEqual(rows[1].attempt_id, null, 'the cap names no attempt row of its own');
     assert.deepStrictEqual([rows[0].status, rows[0].choice, rows[0].resolved_by, rows[0].cause],
