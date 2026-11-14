@@ -78,7 +78,7 @@ test('a full scan of two fixture boards: issues, signals, outputs, nothing writt
   assert.strictEqual(sum.reviewer_errors, 2);
   assert.strictEqual(sum.retry_cap_failures, 2);
   assert.strictEqual(sum.stale_open, 2);
-  assert.strictEqual(sum.no_orchestrator_with_work, 1, 'only the registered board knows its presence');
+  assert.strictEqual(sum.no_orchestrator_with_work, 2, 'board A: registered offline; board B: no orchestrator registered at all');
 
   // nothing inside a board changed or was added: a closed board (no -wal/-shm) is read from a copy,
   // so SQLite does not create its sidecars next to the board's db either
@@ -360,8 +360,10 @@ test('signals: a configured slot that never ran counts as idle; in_progress with
   const q = a.signals.queue_wait_min;
   assert.strictEqual(q.n, 3, 'ready->in_progress, ready->spawn, ready->spawn');
   assert.strictEqual(q.max, 60, 'the second wait is measured from the second ready, not the first');
-  assert.strictEqual(a.signals.idle_while_ready['never-1'], 60 + 30 + 10, 'never-1 idle through every wait');
-  assert.strictEqual(a.signals.idle_while_ready['busy-1'], 20 + 10 + 20, 'busy-1 idle only outside its attempt');
+  // waits 120->60, 50->20 and 110->100 overlap: their union is 120->60 plus 50->20, 90 minutes
+  assert.strictEqual(a.signals.ready_waiting_min, 90);
+  assert.strictEqual(a.signals.idle_while_ready['never-1'], 90, 'never-1 idle through the union of the waits');
+  assert.strictEqual(a.signals.idle_while_ready['busy-1'], 20 + 20, 'busy-1 idle only outside its attempt (100->40)');
 
   const root = tmp('nodir');
   const reg = path.join(root, 'reg');
@@ -382,4 +384,124 @@ test('report trend: unchanged runs count as runs, the day keeps its last full sc
     { at: '2026-11-14T09:00:00Z', unchanged: true },
   ]);
   assert.deepStrictEqual(d.map(([k, h]) => [k, h.runs, h.last24h.broken]), [['2026-11-13', 2, 4], ['2026-11-14', 1, undefined]]);
+});
+
+test('signals: overlapping ready waits count once; waits and pending work crossing --since are measured from when they began', () => {
+  const now = Date.parse('2026-11-14T12:00:00Z');
+  const t = m => new Date(now - m * 60000).toISOString();
+  const board = { label: 'X', stall_minutes: 30, slots: ['s-1', 's-2'], run: '/nonexistent', entry: null };
+  const sinceMs = now - 120 * 60000;   // a 2 h window
+  const rows = {
+    attempts: [{ id: 1, bounty_id: 3, slot: 's-1', runner: 'claude', model: 'm', started_at: t(150), ended_at: t(90), exit_code: 0, kind: 'worker', outcome: 'review' }],
+    // bounty 3 went ready at 200 (before the window) and was spawned at 150 (also before): no wait in the window
+    // bounty 4 went ready at 180 (before the window), claimed at 100: a 80 min wait that ends in the window
+    // bounty 5 went ready at 300 (before the window) and still waits
+    prior: [
+      { id: 1, bounty_id: 3, at: t(200), kind: 'status', to_status: 'ready' },
+      { id: 2, bounty_id: 3, at: t(150), kind: 'spawn' },
+      { id: 3, bounty_id: 4, at: t(180), kind: 'status', to_status: 'ready' },
+      { id: 4, bounty_id: 5, at: t(300), kind: 'status', to_status: 'ready' },
+    ],
+    events: [
+      { id: 10, bounty_id: 4, at: t(100), kind: 'spawn' },
+      { id: 11, bounty_id: 4, at: t(100), kind: 'status', to_status: 'in_progress' },
+      { id: 12, bounty_id: 4, at: t(40), kind: 'status', to_status: 'review' },
+      // two bounties ready together for the same 60 minutes
+      { id: 13, bounty_id: 6, at: t(70), kind: 'status', to_status: 'ready' },
+      { id: 14, bounty_id: 7, at: t(70), kind: 'status', to_status: 'ready' },
+      { id: 15, bounty_id: 6, at: t(10), kind: 'spawn' },
+      { id: 16, bounty_id: 7, at: t(10), kind: 'spawn' },
+    ],
+    bounties: [{ id: 3, status: 'review' }, { id: 4, status: 'review' }, { id: 5, status: 'ready' }, { id: 6, status: 'in_progress' }, { id: 7, status: 'in_progress' }],
+  };
+  const a = s.analyze(board, rows, { nowMs: now, sinceMs }).signals;
+  const q = a.queue_wait_min;
+  assert.strictEqual(q.n, 3, 'bounty 4 (began before --since) and bounties 6 and 7; not bounty 3 (ended before)');
+  assert.strictEqual(q.max, 80, 'bounty 4 is measured from its ready before the window');
+  assert.strictEqual(q.waiting_now, 1);
+  assert.strictEqual(q.longest_waiting_now, 300, 'bounty 5 waits since before the window');
+  // ready time in the window: bounty 5 waits through all of it, so the union is the whole 120 minutes
+  assert.strictEqual(a.ready_waiting_min, 120);
+  assert.strictEqual(a.idle_while_ready['s-2'], 120, 'a slot that never ran: idle the whole window, not 120+80+60+60');
+  assert.strictEqual(a.idle_while_ready['s-1'], 120 - 30, 's-1 ran 120->90 of the window');
+  assert.strictEqual(a.board_idle_with_ready_min, 90);
+
+  // the two simultaneous 60 min waits alone: 60 idle minutes, not 120
+  const two = { attempts: [], prior: [], events: rows.events.filter(e => e.bounty_id >= 6), bounties: rows.bounties.filter(x => x.id >= 6) };
+  const b = s.analyze(board, two, { nowMs: now, sinceMs }).signals;
+  assert.strictEqual(b.ready_waiting_min, 60);
+  assert.strictEqual(b.idle_while_ready['s-2'], 60);
+  assert.strictEqual(b.board_idle_with_ready_min, 60);
+});
+
+test('signals: no-orchestrator time is the overlap of pending work and offline time; an unregistered orchestrator is offline', () => {
+  const now = Date.parse('2026-11-14T12:00:00Z');
+  const t = m => new Date(now - m * 60000).toISOString();
+  const sinceMs = now - 72 * 3600000;
+  const offline = since => ({ label: 'X', stall_minutes: 30, slots: [], run: '/nonexistent', entry: { presence: { name: 'o', online: false, since } } });
+  // work became ready 5 minutes ago; the orchestrator went offline 3 h ago
+  const five = { attempts: [], prior: [], events: [{ id: 1, bounty_id: 1, at: t(5), kind: 'status', to_status: 'ready' }], bounties: [{ id: 1, status: 'ready' }] };
+  let o = s.analyze(offline(t(180)), five, { nowMs: now, sinceMs });
+  assert.strictEqual(o.signals.orchestrator.no_orchestrator_with_work, true);
+  assert.strictEqual(o.signals.orchestrator.minutes_without, 5, 'not the 180 minutes it has been offline');
+  assert.ok(o.occurrences.some(x => x.cause === 'no_orchestrator'));
+  // offline 3 h ago, work pending 10 h (since before a 2 h window): the overlap is 120 minutes in a 2 h window, 180 in 72 h
+  const long = { attempts: [], prior: [{ id: 1, bounty_id: 1, at: t(600), kind: 'status', to_status: 'ready' }], events: [], bounties: [{ id: 1, status: 'ready' }] };
+  assert.strictEqual(s.analyze(offline(t(180)), long, { nowMs: now, sinceMs: now - 120 * 60000 }).signals.orchestrator.minutes_without, 120);
+  assert.strictEqual(s.analyze(offline(t(180)), long, { nowMs: now, sinceMs }).signals.orchestrator.minutes_without, 180);
+  // pending 60->30 only (then done), offline the whole time: 30 minutes, nothing pending now, still an issue
+  const past = { attempts: [], prior: [], events: [{ id: 1, bounty_id: 1, at: t(60), kind: 'status', to_status: 'ready' }, { id: 2, bounty_id: 1, at: t(30), kind: 'status', to_status: 'done' }], bounties: [{ id: 1, status: 'done' }] };
+  o = s.analyze(offline(t(1000)), past, { nowMs: now, sinceMs });
+  assert.strictEqual(o.signals.orchestrator.no_orchestrator_with_work, false);
+  assert.strictEqual(o.signals.orchestrator.minutes_without, 30);
+  // no presence at all (no registry presence, no run/orchestrator.json): offline, not unknown
+  const none = { label: 'X', stall_minutes: 30, slots: [], run: '/nonexistent', entry: null };
+  o = s.analyze(none, five, { nowMs: now, sinceMs });
+  assert.strictEqual(o.signals.orchestrator.known, false);
+  assert.strictEqual(o.signals.orchestrator.no_orchestrator_with_work, true);
+  assert.strictEqual(o.signals.orchestrator.minutes_without, 5);
+  assert.ok(o.occurrences.some(x => x.cause === 'no_orchestrator' && /no orchestrator registered/.test(x.text)));
+  // an online orchestrator: none
+  const st = require('../lib/proc').procStat(process.pid);
+  const online = { label: 'X', stall_minutes: 30, slots: [], run: '/nonexistent', entry: { presence: { name: 'o', online: true, pid: process.pid, start_time: st.start_time, since: t(10) } } };
+  o = s.analyze(online, five, { nowMs: now, sinceMs });
+  assert.strictEqual(o.signals.orchestrator.minutes_without, 0);
+  assert.ok(!o.occurrences.some(x => x.cause === 'no_orchestrator'));
+});
+
+test('fast path: with no source changed, an open attempt crossing the stall threshold or an orchestrator coming online still triggers a scan', () => {
+  const root = tmp('elapsed');
+  const now = Date.now();
+  const A = makeBoard(path.join(root, 'a'), { name: 'A', port: 4941, seed: false, stallMinutes: 30, keepOpen: true });
+  const bid = Number(A.db.prepare("INSERT INTO bounties (title, status) VALUES ('x', 'in_progress')").run().lastInsertRowid);
+  A.db.prepare("INSERT INTO events (bounty_id, at, actor, kind, to_status) VALUES (?, ?, 'board', 'status', 'in_progress')").run(bid, new Date(now - 5 * 60000).toISOString());
+  const log = path.join(A.logs, 'open.log');
+  fs.writeFileSync(log, 'working\n');
+  fs.utimesSync(log, new Date(now - 5 * 60000), new Date(now - 5 * 60000));
+  A.db.prepare("INSERT INTO attempts (bounty_id, slot, runner, started_at, log_path, kind) VALUES (?, 'alpha-1', 'claude', ?, ?, 'worker')").run(bid, new Date(now - 5 * 60000).toISOString(), log);
+  A.db.close();
+  const reg = path.join(root, 'reg');
+  const offline = { name: 'o', online: false, pid: 1, start_time: 1, since: new Date(now - 3600e3).toISOString() };
+  writeRegistry(reg, [{ name: 'A', port: 4941, dir: A.dir, presence: offline }]);
+  const out = path.join(root, 'out');
+  const opts = { registryDir: reg, out };
+  const r1 = s.run({ ...opts, now });
+  assert.strictEqual(r1.unchanged, false);
+  assert.strictEqual(r1.stale_open, 0, 'log written 5 minutes ago');
+  assert.strictEqual(s.run({ ...opts, now: now + 10 * 60000 }).unchanged, true, '15 minutes silent: still under the threshold, nothing read');
+  // 40 minutes later: no file changed, but the attempt is now past the 30 min threshold
+  const r3 = s.run({ ...opts, now: now + 35 * 60000 });
+  assert.strictEqual(r3.unchanged, false);
+  assert.match(r3.rescan_reason, /stall threshold/);
+  assert.strictEqual(r3.stale_open, 1);
+  assert.ok(issues(out).some(i => i.cause === 'stale_open_attempt' && i.count === 1));
+  assert.strictEqual(s.run({ ...opts, now: now + 36 * 60000 }).unchanged, true, 'already reported: back to the fast path');
+  // the orchestrator comes online: only the registry entry changed, which the fingerprint ignores
+  const st = require('../lib/proc').procStat(process.pid);
+  writeRegistry(reg, [{ name: 'A', port: 4941, dir: A.dir, presence: { name: 'o', online: true, pid: process.pid, start_time: st.start_time, since: new Date(now + 36 * 60000).toISOString() } }]);
+  const r5 = s.run({ ...opts, now: now + 37 * 60000 });
+  assert.strictEqual(r5.unchanged, false);
+  assert.match(r5.rescan_reason, /went online/);
+  assert.strictEqual(r5.no_orchestrator_with_work, 0);
+  assert.strictEqual(s.run({ ...opts, now: now + 38 * 60000 }).unchanged, true);
 });

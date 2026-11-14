@@ -1,25 +1,28 @@
-++ bin/bounty sentinel --registry-dir /tmp/b11-qa/registry --out /tmp/b11-qa/out --since 72
+writer ready
++ bin/bounty sentinel --registry-dir /tmp/b11-qa/registry --out /tmp/b11-qa/out --since 72
 sentinel: 2 board(s) scanned (2 readable, 0 unreadable), last 72 h
-  issues 8 open from 18 occurrence(s); attempts 13, broken 9 (stall kills 2, exits without submit 7)
-  verify failures 2, reviewer errors 2, retry-cap failures 2, stale open attempts 2, boards with work and no orchestrator 1
-  cost $8.10 in the window; last 24 h: 8 attempts, 6 broken, $4.35
+  issues 9 open from 19 occurrence(s); attempts 13, broken 9 (stall kills 2, exits without submit 7)
+  verify failures 2, reviewer errors 2, retry-cap failures 2, stale open attempts 2, boards with work and no orchestrator 2
+  cost $8.10 in the window; last 24 h: 13 attempts, 9 broken, $8.10
      4  40a6391bb37230a4  exit without submit: error: enoent: no such file or directory, open '<path>' at <ts>
      3  8dfc8b257f02849d  exit without submit: exit code <n>
      2  ef038fdc9e18e7d5  stale open attempt: open attempt log silent past the stall threshold (log present)
      2  8e3db21672b38f8f  reviewer error: no verdict from the reviewer (exit <n>); log <path>
      2  2b889b4c5e667e53  verify failed: error: expected <n>, got <n> with token=[redacted key] authorization: bearer [redacted]
   report: /tmp/b11-qa/out/report.html
-++ bin/bounty sentinel --registry-dir /tmp/b11-qa/registry --out /tmp/b11-qa/out --since 72
-sentinel: 2 board(s); no source db, WAL or log changed since the last run (2026-11-14T21:13:42.543Z); nothing read (use --force to scan anyway)
-++ bin/bounty sentinel --registry-dir /tmp/b11-qa/registry --out /tmp/b11-qa/out --since 72 --force --json
-++ node -e 'const j=JSON.parse(require("fs").readFileSync(0));delete j.out;delete j.registry_dir;console.log(JSON.stringify(j))'
-{"at":"2026-11-14T21:13:42.684Z","version":1,"since_hours":72,"boards":2,"unchanged":false,"readable":2,"unreadable":0,"issues_open":8,"occurrences":18,"attempts":13,"broken":9,"stall_kills":2,"exits_without_submit":7,"verify_failures":2,"reviewer_errors":2,"retry_cap_failures":2,"stale_open":2,"no_orchestrator_with_work":1,"cost_usd":8.1,"last24h":{"broken":6,"verify_failures":1,"reviewer_errors":1,"attempts":8,"cost_usd":4.35,"tokens_out":1200},"top_issues":[{"signature":"40a6391bb37230a4","count":4,"title":"exit without submit: error: enoent: no such file or directory, open '<path>' at <ts>"},{"signature":"8dfc8b257f02849d","count":3,"title":"exit without submit: exit code <n>"},{"signature":"ef038fdc9e18e7d5","count":2,"title":"stale open attempt: open attempt log silent past the stall threshold (log present)"},{"signature":"8e3db21672b38f8f","count":2,"title":"reviewer error: no verdict from the reviewer (exit <n>); log <path>"},{"signature":"2b889b4c5e667e53","count":2,"title":"verify failed: error: expected <n>, got <n> with token=[redacted key] authorization: bearer [redacted]"}]}
-++ bin/bounty sentinel --registry-dir /tmp/b11-qa/registry --out /tmp/b11-qa/board-a/logs/sentinel
++ bin/bounty sentinel --registry-dir /tmp/b11-qa/registry --out /tmp/b11-qa/out --since 72
+sentinel: 2 board(s); no source db, WAL or log changed since the last run (2026-11-14T21:33:00.746Z); nothing read (use --force to scan anyway)
++ bin/bounty sentinel --registry-dir /tmp/b11-qa/registry --out /tmp/b11-qa/out --since 72 --force --json
++ node -e 'const j=JSON.parse(require("fs").readFileSync(0));delete j.out;delete j.registry_dir;console.log(JSON.stringify(j))'
+{"at":"2026-11-14T21:33:00.867Z","version":1,"since_hours":72,"boards":2,"unchanged":false,"readable":2,"unreadable":0,"issues_open":9,"occurrences":19,"attempts":13,"broken":9,"stall_kills":2,"exits_without_submit":7,"verify_failures":2,"reviewer_errors":2,"retry_cap_failures":2,"stale_open":2,"no_orchestrator_with_work":2,"cost_usd":8.1,"last24h":{"broken":9,"verify_failures":2,"reviewer_errors":2,"attempts":13,"cost_usd":8.1,"tokens_out":2400},"top_issues":[{"signature":"40a6391bb37230a4","count":4,"title":"exit without submit: error: enoent: no such file or directory, open '<path>' at <ts>"},{"signature":"8dfc8b257f02849d","count":3,"title":"exit without submit: exit code <n>"},{"signature":"ef038fdc9e18e7d5","count":2,"title":"stale open attempt: open attempt log silent past the stall threshold (log present)"},{"signature":"8e3db21672b38f8f","count":2,"title":"reviewer error: no verdict from the reviewer (exit <n>); log <path>"},{"signature":"2b889b4c5e667e53","count":2,"title":"verify failed: error: expected <n>, got <n> with token=[redacted key] authorization: bearer [redacted]"}]}
++ bin/bounty sentinel --registry-dir /tmp/b11-qa/registry --out /tmp/b11-qa/board-a/logs/sentinel
 bounty sentinel: refusing --out /tmp/b11-qa/board-a/logs/sentinel: it is inside a board dir (/tmp/b11-qa/board-a); the sentinel never writes inside a board
-++ echo exit=2
++ echo exit=2
 exit=2
++ set +x
 checkpoint after scans: {"busy":0,"log":0,"checkpointed":0}
-total 88
-drwxr-xr-x 2 kewk kewk    60 Nov 14 13:13 .
-drwxr-xr-x 4 kewk kewk   100 Nov 14 13:13 ..
--rw-r--r-- 1 kewk kewk 90112 Nov 14 13:13 board.db
+board A data dir after the scans and the checkpoint (names only):
+board.db
+board B data dir (closed board, read from a copy):
+board.db
+attempts by codex in the main db now: 4
