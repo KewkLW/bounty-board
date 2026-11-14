@@ -52,6 +52,10 @@ test('redaction: provider tokens, Bearer, assignments, private keys; ordinary te
   assert.strictEqual(redact('export MY_SECRET_TOKEN=s3cr3t-value'), 'export MY_SECRET_TOKEN=[redacted 12 chars]');
   assert.strictEqual(redact("client_secret: 'qwertyuiop'"), "client_secret: '[redacted 10 chars]'");
   assert.strictEqual(redact('postgres://app:pa55word@db/x'), 'postgres://app:[redacted 8 chars]@db/x');
+  // file names, file:line references and hyphenated labels that only contain a secret word stay
+  for (const t of ['src/handler/compare_secret.rs:40-41 applies the guard', 'see token.ts:12', 'submitted b9-linux-secret-service-provider: 24 commit(s)'])
+    assert.strictEqual(redact(t), t, t);
+  assert.strictEqual(redact('X-Api-Key: abc123def'), 'X-Api-Key: [redacted 9 chars]');
   const body = rep('MIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n', 4);
   const pem = `-----BEGIN RSA PRIVATE KEY-----\n${body}-----END RSA PRIVATE KEY-----`;
   assert.strictEqual(redact(`a\n${pem}\nb`), `a\n[redacted ${pem.length} chars]\nb`);
