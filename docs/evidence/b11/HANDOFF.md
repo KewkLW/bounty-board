@@ -27,7 +27,7 @@
   - the sentinel's own observations, kept in `state.json` under `presence` (one `{t, online}` per change, recorded on full and unchanged runs, pruned after 30 days). These cover boards too old to write the notes, and spells while a board was down;
   - the presence now: an online one's `since`, an offline one's `last_seen`.
 
-  Before the first transition the opposite state is assumed. With no dated transition at all, the state now holds for the whole window: an offline presence without a usable `since` (7 older live entries) counts as offline throughout. `minutes_without` is the overlap of pending time and offline time, even when an orchestrator is online now; `offline_min` is reported alongside it. The report's board line shows those minutes for an online board too.
+  Before the first transition the opposite state is assumed. With no dated transition at all, the state now holds for the whole window. A presence object with `registered: false` (what a board writes when nobody ever registered; 8 live entries have that shape) is no presence: "no orchestrator registered", offline throughout. The `no_orchestrator` occurrence is stamped with the end of the last pending-and-offline spell, so an issue whose spell is over stops refreshing its `last_seen`. `minutes_without` is the overlap of pending time and offline time, even when an orchestrator is online now; `offline_min` is reported alongside it. The report's board line shows those minutes for an online board too.
 - **Verify crash signatures (attempt 3 fix).** A crash's text is its real message (`verify crashed: ENOSPC ...` vs `verify crashed: SqliteError: database is locked` are two issues). A failure's text is its last error-like output line, else its head line (exit code and command, normalized).
 - **Report on the fast path (attempt 3 fix).** A full scan stores its summary in `state.json`. An unchanged run reads no rows, but rebuilds `report.html` from that summary, the stored `issues.json` and `boards.json`, and the history up to now. The header then reads "last full scan X · checked Y, no source changed since", and the trend counts the unchanged run.
 
@@ -58,7 +58,7 @@ writer, after the scans: wal_checkpoint(TRUNCATE) -> {"busy":0}; the 3 WAL rows 
 ```
 
 Headless report checks (`node scripts/sentinel-shot.js REPORT PNG`, Playwright on /usr/bin/chromium):
-- `report-scratch.png`: 9 issue rows, 2 board sections, 0 external requests (re-rendered in attempt 2).
+- `report-scratch.png`: re-rendered in attempt 3 from the attempt-3 scratch boards (below): 10 issue rows, 2 board sections, 0 external requests.
 - `report-scratch-days.png`: 4 runs at now-3d to now (in-process `run({now})`), showing the day-over-day bars and table. This is the attempt-1 render: the per-board orchestrator line uses the older wording, while `report-scratch.png` is current. Because the fixture rows are fixed in time, the earlier days are synthetic: they demonstrate the trend rendering, not real history.
 
 ### Cross-check of the classifier against direct SQL (live boards, read-only)
@@ -109,18 +109,19 @@ bounty sentinel --registry-dir /tmp/b11-qa3/registry --out /tmp/b11-qa3/out --si
            A: online now, minutes_without 4040 (before the first registration plus the 240..120 spell), offline_min 4040
            B: no orchestrator registered, minutes_without 600 (its pending time)
            verify_crashed: 2 issues (count 2 "enospc: no space left on device, write", count 1 "sqliteerror: database is locked")
+           no_orchestrator: A last seen at the end of its spell (120 min before the scan), B last seen at the scan (still offline)
   run 2 -> unchanged, nothing read; report.html rebuilt: header "last full scan <run 1> · checked <run 2>", trend runs 2
 node scripts/sentinel-shot.js /tmp/b11-qa3/out/report.html docs/evidence/b11/report-scratch.png
   -> 10 issue rows, 2 board sections, 0 external requests (rendered from the fast-path report)
 ```
-Live registry, read-only, `--out` in a temp dir outside the repo, three runs:
+Live registry, read-only, `--out` in a temp dir outside the repo, two runs with the final code:
 ```
-each run -> exit 0, about 0.5-0.7 s, full scan (live worker logs grow between runs): boards 18 (17 readable, 1 unreadable),
-            23 issues from 73 occurrences, attempts 490, broken 34, exits w/o submit 20, verify failures 28, stall kills 0, stale open 0,
-            boards with pending work and no orchestrator now 10
+each run -> exit 0, under 1 s, full scan (live worker logs grow between runs): boards 18 (17 readable, 1 unreadable),
+            24 issues from 73 occurrences, attempts 488, broken 34, exits w/o submit 20, verify failures 28, stall kills 0, stale open 0,
+            boards with pending work and no orchestrator now 10 (6 never registered, 4 registered and offline: two signatures)
 issue causes: verify_failed 28, exit_without_submit 20, worker_exit_error 11, no_orchestrator 10, never_started 3, board_unreadable 1
-presence: 17 known, 2 online, 7 without a usable since; no-orchestrator overlap 40506 min summed over boards (attempt 2's model: 40188),
-  offline 67491 min summed; state.json keeps a presence log for all 18 boards
-node scripts/sentinel-shot.js <tmp>/out/report.html <tmp>/report-live.png -> 23 issue rows, 18 board sections, 0 external requests
+presence: 10 registered (2 online, 8 offline), 7 never registered; no-orchestrator overlap 40510 min summed over boards
+  (attempt 2's model: 40188), offline 67491 min summed; state.json keeps a presence log per board
+node scripts/sentinel-shot.js <tmp>/out/report.html <tmp>/report-live.png -> 24 issue rows, 18 board sections, 0 external requests
 ```
-A first attempt-3 live run showed 14585 min: 7 offline presences without a `since` had been read as online all window. The second rule above fixes that, and a test covers it. The live screenshot stays outside the repo; its layout matches the scratch one.
+An intermediate attempt-3 live run showed 14585 min: offline presences without a dated transition had been read as online for the whole window. That run also showed 7 such presences, which turned out to be `registered: false` objects from boards that never had an orchestrator. Both are fixed and covered by tests. The live screenshot stays outside the repo; its layout matches the scratch one.

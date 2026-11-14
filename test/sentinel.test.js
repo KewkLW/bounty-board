@@ -180,7 +180,7 @@ test('unchanged sources: the second run reads no rows; --force does; a change tr
     const html = fs.readFileSync(path.join(out, 'report.html'), 'utf8');
     assert.ok(html.includes(`checked ${j2.at}`), 'the report says when it was last checked');
     assert.ok(html.includes(`last full scan ${r1.at}`));
-    assert.ok(html.includes('Day over day') && /<td>2<\/td>/.test(html), 'the trend counts both runs');
+    assert.ok(html.includes(`<td>${j2.at.slice(0, 10)}</td><td>2</td>`), 'the trend row for today counts both runs');
     const human = cli(args.filter(a => a !== '--json'));
     assert.match(human.stdout, /nothing read/);
     if (process.getuid && process.getuid() !== 0) {
@@ -537,6 +537,9 @@ test('signals: offline spells earlier in the window count while the orchestrator
   assert.strictEqual(o.online, true);
   assert.strictEqual(o.no_orchestrator_with_work, false, 'online now');
   assert.strictEqual(o.minutes_without, 120, 'the 240..120 spell is kept');
+  const occ = s.analyze(online(t(120)), rows, { nowMs: now, sinceMs }).occurrences.filter(x => x.cause === 'no_orchestrator');
+  assert.strictEqual(occ.length, 1);
+  assert.strictEqual(occ[0].at, t(120), 'last seen when the spell ended, not at every later scan');
   // the window opens after the registration that started the spell: the last note before it says how it opened
   const r2 = { attempts: [], prior: [{ id: 1, bounty_id: 1, at: t(600), kind: 'status', to_status: 'ready' }], events: [], bounties: [{ id: 1, status: 'ready' }],
     priorPresence: [note(9, 500, "orchestrator 'o' (pid 7) is offline: its process is gone")] };
@@ -554,6 +557,12 @@ test('signals: offline spells earlier in the window count while the orchestrator
   const nosince = { label: 'X', stall_minutes: 30, slots: [], run: '/nonexistent', entry: { presence: { name: 'o', online: false, since: null } } };
   o = s.analyze(nosince, bare, { nowMs: now, sinceMs: now - 300 * 60000 }).signals.orchestrator;
   assert.strictEqual(o.minutes_without, 300);
+  // the shape a board writes when nobody ever registered (registered: false, no pid or name) is no orchestrator registered
+  const never = { label: 'X', stall_minutes: 30, slots: [], run: '/nonexistent', entry: { presence: { name: null, expected_name: 'o', online: false, pid: null, since: null, last_seen: null, registered: false } } };
+  const nv = s.analyze(never, bare, { nowMs: now, sinceMs: now - 300 * 60000 });
+  assert.strictEqual(nv.signals.orchestrator.known, false);
+  assert.strictEqual(nv.signals.orchestrator.minutes_without, 300);
+  assert.ok(nv.occurrences.some(x => x.cause === 'no_orchestrator' && /no orchestrator registered/.test(x.text) && x.at === new Date(now).toISOString()), 'still offline: last seen now');
   // ... unless a presence note dates it: offline only from the note on
   o = s.analyze(nosince, { ...bare, events: [note(5, 100, "orchestrator 'o' (pid 7) is offline: its process is gone")] }, { nowMs: now, sinceMs: now - 300 * 60000 }).signals.orchestrator;
   assert.strictEqual(o.minutes_without, 100);

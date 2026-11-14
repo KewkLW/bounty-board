@@ -10,12 +10,14 @@ sentinel: 2 board(s) scanned (2 readable, 0 unreadable), last 72 h
      2  2b889b4c5e667e53  verify failed: error: expected <n>, got <n> with token=[redacted key] authorization: bearer [redacted]
   report: /tmp/b11-qa3/out/report.html
 + bounty sentinel --registry-dir /tmp/b11-qa3/registry --out /tmp/b11-qa3/out --since 72
-sentinel: 2 board(s); no source db, WAL or log changed since the last run (2026-11-14T21:55:35.670Z); nothing read (use --force to scan anyway)
+sentinel: 2 board(s); no source db, WAL or log changed since the last run (2026-11-14T21:58:58.862Z); nothing read (use --force to scan anyway)
 + per-board orchestrator signals (boards.json)
 A {"known":true,"online":true,"pending":5,"pending_min":4320,"offline_min":4040,"minutes_without":4040}
 B {"known":false,"online":false,"pending":4,"pending_min":600,"offline_min":4320,"minutes_without":600}
-+ verify_crashed issues (issues.json)
-2 dc7c762862367a5d verify crashed: enospc: no space left on device, write
-1 aab03979a2510442 verify crashed: sqliteerror: database is locked
++ no_orchestrator and verify_crashed issues (issues.json)
+2 dc7c762862367a5d A last_seen 2026-11-14T21:28:58.799Z verify crashed: enospc: no space left on device, write
+1 4729c97b311a366a B last_seen 2026-11-14T21:58:58.862Z no orchestrator: pending work and no orchestrator registered
+1 aab03979a2510442 A last_seen 2026-11-14T21:18:58.799Z verify crashed: sqliteerror: database is locked
+1 4b3b002516fede55 A last_seen 2026-11-14T19:58:58.799Z no orchestrator: pending work with no orchestrator online
 + report.html header
-last full scan 2026-11-14T21:55:35.670Z · checked 2026-11-14T21:55:35.730Z, no source changed since
+last full scan 2026-11-14T21:58:58.862Z · checked 2026-11-14T21:58:58.939Z, no source changed since
