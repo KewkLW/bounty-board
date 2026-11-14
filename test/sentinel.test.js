@@ -504,4 +504,13 @@ test('fast path: with no source changed, an open attempt crossing the stall thre
   assert.match(r5.rescan_reason, /went online/);
   assert.strictEqual(r5.no_orchestrator_with_work, 0);
   assert.strictEqual(s.run({ ...opts, now: now + 38 * 60000 }).unchanged, true);
+  // and goes offline again (its pid gone): a scan, and the pending work without it is an issue again
+  writeRegistry(reg, [{ name: 'A', port: 4941, dir: A.dir, presence: { ...offline, since: new Date(now + 38 * 60000).toISOString() } }]);
+  const r7 = s.run({ ...opts, now: now + 50 * 60000 });
+  assert.strictEqual(r7.unchanged, false);
+  assert.match(r7.rescan_reason, /went offline/);
+  assert.strictEqual(r7.no_orchestrator_with_work, 1);
+  const b7 = JSON.parse(fs.readFileSync(path.join(out, 'boards.json'), 'utf8')).boards[0].signals.orchestrator;
+  assert.strictEqual(b7.minutes_without, 12, 'pending the whole time; offline from +38 to +50 minutes');
+  assert.strictEqual(s.run({ ...opts, now: now + 51 * 60000 }).unchanged, true);
 });

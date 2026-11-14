@@ -5,7 +5,7 @@
 - `lib/sentinel-report.js`: self-contained `report.html` (inline CSS, CSP `default-src 'none'`, no scripts).
 - `bin/bounty sentinel ...`: runs locally and never calls a board server.
 - `systemd/bounty-sentinel.service` (oneshot) + `systemd/bounty-sentinel.timer` (`OnCalendar=hourly`, `Persistent=true`), `%h` paths only. `systemd-analyze --user verify` is clean. README section "Sentinel".
-- `test/sentinel.test.js` (11 tests) + `test/sentinel-fixtures.js` (seeded fixture boards). `scripts/sentinel-shot.js` (headless screenshot that fails on any non-file:// request).
+- `test/sentinel.test.js` (16 tests) + `test/sentinel-fixtures.js` (seeded fixture boards). `scripts/sentinel-shot.js` (headless screenshot that fails on any non-file:// request).
 
 ## Decisions worth knowing
 - **Exit codes.** Every scan exits 0, including when boards are unreadable (each becomes a `board_unreadable` issue). A refused `--out` or a bad `--since` is not a scan, so it exits 2 and writes nothing.
@@ -25,7 +25,7 @@
 
 Gate:
 ```
-npm ci --silent && npm test      -> see the attempt-2 line at the end
+npm ci --silent && npm test      -> attempt 2: tests 118, pass 118, fail 0
 node --test test/sentinel.test.js -> 16 pass (3 new in attempt 2: overlap and --since boundary; no-orchestrator overlap and an unregistered orchestrator; fast-path time progression)
 ```
 
@@ -46,7 +46,7 @@ writer, after the scans: wal_checkpoint(TRUNCATE) -> {"busy":0}; the 3 WAL rows 
 
 Headless report checks (`node scripts/sentinel-shot.js REPORT PNG`, Playwright on /usr/bin/chromium):
 - `report-scratch.png`: 9 issue rows, 2 board sections, 0 external requests (re-rendered in attempt 2).
-- `report-scratch-days.png`: 4 runs at now-3d to now (in-process `run({now})`), showing the day-over-day bars and table. Because the fixture rows are fixed in time, the earlier days are synthetic: they demonstrate the trend rendering, not real history.
+- `report-scratch-days.png`: 4 runs at now-3d to now (in-process `run({now})`), showing the day-over-day bars and table. This is the attempt-1 render: the per-board orchestrator line uses the older wording, while `report-scratch.png` is current. Because the fixture rows are fixed in time, the earlier days are synthetic: they demonstrate the trend rendering, not real history.
 
 ### Cross-check of the classifier against direct SQL (live boards, read-only)
 I ran independent read-only SQL counts over the same 72 h window on every readable live board and compared them with the sentinel's `boards.json`. The script and its output stayed in /tmp.
@@ -80,7 +80,7 @@ bounty sentinel --out <tmp>/out --json   (three runs in a row)
   run 1 -> exit 0, full scan: boards 18 (17 readable, 1 unreadable), 22 issues from 71 occurrences, attempts 490, broken 34,
            exits w/o submit 20, verify failures 26, stall kills 0, stale open 0, boards with pending work and no orchestrator 10
            issue causes: verify_failed 26, exit_without_submit 20, worker_exit_error 11, no_orchestrator 10, never_started 3, board_unreadable 1
-  run 2 -> exit 0, full scan (a live log had grown), same totals
+  run 2 -> exit 0, full scan (a live log had grown), same totals; the run's own stamps put a full 18-board scan, including the new prior-state query, at about 2 s
   run 3 -> exit 0, unchanged: nothing read
   presence: 17 readable boards have a presence, 2 online; queue waits n=490; ready-wait union 23413 min summed over boards,
   of which 19691 min had no slot running; no-orchestrator overlap 40188 min summed over boards
