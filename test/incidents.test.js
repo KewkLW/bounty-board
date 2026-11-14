@@ -214,9 +214,17 @@ test('break paths: never ran start, exited without submit, stall kill (+ its exi
     assert.match(board.incidents.row(i.id).report, /Log: \(none: no board-spawned process\)/);
     assert.strictEqual(board.raw(ext.id).failures, 1);
     assert.match(board.incidents.row(i.id).report, /\(failures so far: 1\)/, 'the stored report counts this break');
-    // every break above is exactly one record (the unknown-runner bounty broke on two dispatches)
+    assert.strictEqual(i.attempt_no, 1, 'the CLI run is attempt 1, not 0');
+    assert.match(board.incidents.row(i.id).report, /Attempt: 1 of 4/);
+    // put back in progress without a decision (bounty ready, then an outside bounty start) and silent
+    // again: a second CLI run, its own attempt number and record, while the first stays open
+    board.db.prepare("UPDATE bounties SET status = 'in_progress', heartbeat_at = ? WHERE id = ?").run(new Date(Date.now() - 600000).toISOString(), ext.id);
+    t.s.dispatcher.watchdog();
+    assert.deepStrictEqual(incs(ext.id).map(x => [x.attempt_no, x.status]), [[1, 'open'], [2, 'open']]);
+    assert.match(board.incidents.row(incs(ext.id)[1].id).report, /Attempt: 2 of 4 \(failures so far: 2\)/);
+    // every break above is exactly one record (the unknown-runner and CLI bounties broke on two runs each)
     const all = board.db.prepare('SELECT bounty_id, COUNT(*) c FROM incidents GROUP BY bounty_id').all();
-    assert.ok(all.every(r => r.c === (r.bounty_id === odd.id ? 2 : 1)), JSON.stringify(all));
+    assert.ok(all.every(r => r.c === ([odd.id, ext.id].includes(r.bounty_id) ? 2 : 1)), JSON.stringify(all));
     assert.strictEqual(all.length, 7);
     // a worker's own `bounty block` is a decision, not a break: no incident
     const self = board.create({ criteria: CRIT, title: 'self block', project: 'scratch' });
