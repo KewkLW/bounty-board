@@ -807,8 +807,14 @@ test('reclaim: a done bounty\'s merged, clean, idle worktree is removed; dirty, 
     const root = path.join(t.dir, 'otherdrive'); fs.mkdirSync(root);
     p.worktree_cmd = 'git worktree add "$WORKTREE_ROOT/{task}" -b {branch} {main}';
     const linked = await make('worktree on another drive', { id: 'hdd', worktree_root: root });
+    p.worktree_cmd = 'git worktree add {path} -b {branch} {main}';
+    const secret = await make('merged, with an ignored .env');
     fs.closeSync(logFd);
-    for (const b of [merged, dirty, unmerged, busy, recent, linked]) sh(repo, `git merge -q --no-ff ${b.branch} -m "merge ${b.id}"`);
+    for (const b of [merged, dirty, unmerged, busy, recent, linked, secret]) sh(repo, `git merge -q --no-ff ${b.branch} -m "merge ${b.id}"`);
+    fs.appendFileSync(path.join(secret.worktree, '.gitignore'), '.env\n');
+    sh(secret.worktree, 'git add .gitignore && git -c user.email=t@t -c user.name=t commit -q -m "ignore .env"');
+    sh(repo, `git merge -q --no-ff ${secret.branch} -m "merge env ignore"`);
+    fs.writeFileSync(path.join(secret.worktree, '.env'), 'TOKEN=hunter2\n');
     fs.writeFileSync(path.join(dirty.worktree, 'notes.txt'), 'unsaved\n');
     sh(unmerged.worktree, `echo more >> ${unmerged.id}.js && git -c user.email=t@t -c user.name=t commit -qam "not merged"`);
     board.db.prepare('UPDATE bounties SET completed_at = ? WHERE id = ?').run(new Date().toISOString(), recent.id);
@@ -824,6 +830,8 @@ test('reclaim: a done bounty\'s merged, clean, idle worktree is removed; dirty, 
     assert.match(out[unmerged.id].kept, /not on main/);
     assert.match(out[busy.id].kept, /working inside/);
     assert.match(out[recent.id].kept, /too recently/);
+    assert.match(out[secret.id].kept, /not build output: \.env/);
+    assert.ok(fs.existsSync(path.join(secret.worktree, '.env')));
     assert.ok(out[linked.id].removed, JSON.stringify(out[linked.id]));
     assert.ok(!fs.existsSync(linked.worktree) && !fs.existsSync(path.join(root, linked.branch)), 'real dir and symlink both gone');
     // a lasting reason is recorded once, a timing one never
