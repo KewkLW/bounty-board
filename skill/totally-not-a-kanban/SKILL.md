@@ -85,7 +85,7 @@ Then pick exactly one:
 2. **Reassign** when this slot is the problem (its model keeps failing the same way, its runner or binary is broken, the work needs a stronger model): `<prefix>-bounty retry 12 --slot <slot>` (add `--note` too). Your slot wins over escalation.
 3. **Hand to a human** when only the user can unblock it (a login, hardware, a missing tool or permission, a product decision), or when the bounty failed at the attempt cap: `<prefix>-bounty incident 3 --human "the exact step they need to do"`. The bounty is blocked as "Waiting on a human: ..." and shows in the hub's Needs you.
 
-Each choice resolves the incident with your name and the choice. Do not retry the same cause blindly: two incidents with the same cause on one bounty mean reassign or hand to a human, or fix the brief (`bounty edit`) first. A verify failure the board already requeued only needs `retry` to acknowledge it (or `--slot`/`--human` to change course). Resuming the broken session in place is not supported: every retry is a fresh worker.
+Each choice resolves the incident with your name and the choice. Do not retry the same cause blindly: two incidents with the same cause on one bounty mean reassign or hand to a human, or fix the brief (`bounty edit`) first. A verify failure the board already requeued only needs `retry` to acknowledge it (or `--slot`/`--human` to change course). A retry that reaches the attempt cap fails the bounty and leaves its incident open (the cap is added to that same incident): decide again with `--human`, or override the cap with `bounty ready`. Resuming the broken session in place is not supported: every retry is a fresh worker.
 
 ## Names, everywhere
 

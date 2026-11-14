@@ -341,14 +341,12 @@ test('decisions: retry requeues (cap still ends in failed, no double-counted fai
     assert.deepStrictEqual([hc.status, hc.choice, hc.resolved_by], ['resolved', 'hand to a human', 'Conductor']);
     assert.strictEqual((await t.call('POST', `/incidents/${cap.id}/human`, {})).status, 400, '--human needs text');
     assert.strictEqual(board.incidents.openCount(), 0);
-    // a later cap for the same attempt (after a decision closed it) reopens that record, never a second one
+    // a cap with no open incident (e.g. a reviewer reject at the cap) is its own record: a closed
+    // decision is never reopened or rewritten
     const again = board.incidents.record({ bounty: b.id, kind: 'attempt_cap', attemptNo: 3 });
-    assert.strictEqual(again.created, false);
-    assert.strictEqual(again.reopened, true);
-    assert.strictEqual(again.incident.id, cap.id);
-    assert.strictEqual(again.incident.status, 'open');
-    assert.strictEqual(again.incident.resolved_by, null);
-    assert.strictEqual(board.db.prepare('SELECT COUNT(*) c FROM incidents WHERE bounty_id = ? AND attempt_no = 3').get(b.id).c, 1);
+    assert.strictEqual(again.created, true);
+    assert.notStrictEqual(again.incident.id, cap.id);
+    assert.deepStrictEqual(Object.values((({ status, choice, resolved_by }) => ({ status, choice, resolved_by }))(board.incidents.row(cap.id))), ['resolved', 'hand to a human', 'Conductor']);
   } finally { await t.s.close(); }
 });
 
@@ -459,4 +457,41 @@ test('room line per incident, presence counts open incidents, API and CLI (list,
     await t.s.close();
     await new Promise(r => srv.close(r));
   }
+});
+
+test('worktree failures retried up to the cap: the cap joins the last break, earlier decisions untouched', async () => {
+  const FAKE = ['bash', path.join(ROOT, 'test', 'fake-worker.sh')];
+  const t = await startBoard('inc-wtcap', { over: {
+    retry: { max_attempts: 2, escalate_after_failures: 9, escalate_model: {} },
+    slots: [{ id: 'fake-1', name: 'Alpha', runner: 'command', model: 'sonnet', cmd: FAKE }] } });
+  try {
+    const { board } = t;
+    board.upsertProject({ ...board.project('scratch'), id: 'nowt', worktree_cmd: 'echo cannot make a worktree; exit 7', worktree_path: path.join(t.dir, 'wt3', '{task}') });
+    const incs = () => board.db.prepare('SELECT * FROM incidents WHERE bounty_id = ? ORDER BY id').all(b.id);
+    const b = board.create({ criteria: CRIT, title: 'no worktree', project: 'nowt', assignee_slot: 'fake-1' });
+    board.ready(b.id);
+    await waitFor(() => incs().length === 1 && board.raw(b.id).status === 'blocked');
+    const [first] = incs();
+    assert.match(board.incidents.row(first.id).report, /Attempt: 1 of 2 \(failures so far: 1\)/);
+    const r1 = board.incidents.retry(b.id, { by: 'Conductor' });
+    assert.deepStrictEqual(r1.resolved, [first.id]);
+    await waitFor(() => incs().length === 2 && board.raw(b.id).status === 'blocked');
+    const second = incs()[1];
+    assert.strictEqual(board.raw(b.id).failures, 2);
+    assert.strictEqual(board.raw(b.id).attempts || 0, 0, 'no worker ever ran');
+    assert.match(board.incidents.row(second.id).report, /\(failures so far: 2\)/);
+    // this retry reaches the cap: the bounty fails, the open incident stays open and takes the cap
+    const r2 = board.incidents.retry(b.id, { by: 'Conductor' });
+    assert.strictEqual(r2.bounty.status, 'failed');
+    assert.strictEqual(r2.capped, true);
+    assert.deepStrictEqual(r2.resolved, []);
+    assert.deepStrictEqual(r2.open, [second.id]);
+    const rows = incs();
+    assert.strictEqual(rows.length, 2, 'no extra record at the cap');
+    assert.strictEqual(rows[1].status, 'open');
+    assert.strictEqual(rows[1].cause, 'worktree setup failed; then attempt cap 2 reached, bounty failed');
+    assert.strictEqual(rows[1].attempt_id, null, 'the cap names no attempt row of its own');
+    assert.deepStrictEqual([rows[0].status, rows[0].choice, rows[0].resolved_by, rows[0].cause],
+      ['resolved', 'retry', 'Conductor', 'worktree setup failed'], 'the earlier decision is untouched');
+  } finally { await t.s.close(); }
 });
