@@ -31,6 +31,13 @@ test('signature: the same failure with other numbers, paths, ids, timestamps and
   assert.ok(!/\d/.test(s.normalize(a, opts).replace(/<\w+>/g, '')), 'no digits survive normalization');
   assert.notStrictEqual(s.signature('verify_failed', a, opts), s.signature('exit_without_submit', a, opts), 'cause class is part of the signature');
   assert.notStrictEqual(s.signature('exit_without_submit', 'Error: EACCES permission denied'), s.signature('exit_without_submit', 'Error: ENOENT no such file'));
+  // alphanumeric ids: labeled request ids, ULIDs, prefixed tokens mixing letters and digits
+  const idA = 'request failed id=req_ABC123XYZ trace: T9q2Lm8 run 01HZX3K9M2Q4R5S6T7V8W9XYZA msg_01HAbCdEfG9 rejected';
+  const idB = 'request failed id=req_DEF987UVW trace: Zz77abc run 01J0AB1CD2EF3GH4JK5MN6PQ7R msg_02ZyXwVuTs1 rejected';
+  assert.strictEqual(s.normalize(idA), s.normalize(idB));
+  assert.strictEqual(s.signature('verify_failed', idA), s.signature('verify_failed', idB));
+  // words without digits are kept, so distinct errors stay distinct
+  assert.notStrictEqual(s.normalize('ERR_OSSL_EVP_UNSUPPORTED in worker'), s.normalize('ERR_MODULE_NOT_FOUND in worker'));
   // uuids, hex, urls, a Windows path
   assert.strictEqual(s.normalize('id 1b4e28ba-2fa1-11d2-883f-0016d3cca427 at 0xdeadbeef from https://x.example/a/b?c=1 in C:\\a\\b.txt'),
     s.normalize('id 9c4e28ba-2fa1-11d2-883f-0016d3cca999 at 0x1 from https://y.example/z in D:\\q.txt'));
