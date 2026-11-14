@@ -145,7 +145,8 @@ test('board: one report per ended attempt, "what\'s next" only when the slot get
     await new Promise(r => setTimeout(r, 1500));
     assert.strictEqual(fr.posts.length, 2, 'one message per attempt: ' + JSON.stringify(fr.posts));
     assert.ok(fr.posts.every(p => p.as === 'Scratch Board'));
-    assert.strictEqual(fr.posts[0].text, `@Conductor Alpha (fake-1) finished #${first.id} crashes: failed (never ran bounty start).`);
+    // a broken attempt is reported as its incident (lib/incidents.js); a submitted one as finished
+    assert.strictEqual(fr.posts[0].text, `@Conductor INCIDENT #1 on #${first.id} Alpha: exited with code 3 without running bounty start. bounty incident 1`);
     assert.strictEqual(fr.posts[1].text, `@Conductor Alpha (fake-1) finished #${second.id} Add mul() with a test: submitted. Alpha is idle: what's next?`);
     // a room that answers 500 does not hold the board up: the next bounty still dispatches and finishes
     fr.members.clear();
@@ -162,14 +163,15 @@ test('board: one report per ended attempt, "what\'s next" only when the slot get
   } finally { await t.s.close(); await fr.close(); }
 });
 
-test('board: a verify that fails while the worker waits is reported as verify failed', async () => {
+test('board: a verify that fails while the worker waits is reported as a verify-failed incident', async () => {
   const fr = await fakeRoom({ joined: ['Scratch'] });
   const t = await startBoard('room-vf', { verify: 'fail', over: { orchestrator: 'Conductor', room: { id: fr.id, url: fr.url } } });
   try {
     const b = t.board.create({ criteria: CRIT, title: 'Add mul() with a test', project: 'scratch', assignee_slot: 'fake-2' });
     t.board.ready(b.id);
     await waitFor(() => fr.posts.length >= 1, 40000);
-    assert.match(fr.posts[0].text, new RegExp(`^@Conductor Bravo \\(fake-2\\) finished #${b.id} Add mul\\(\\) with a test: verify failed\\.`));
+    assert.match(fr.posts[0].text, new RegExp(`^@Conductor INCIDENT #1 on #${b.id} Bravo: verify failed, then the worker exited with code \\d+ without resubmitting\\. bounty incident 1$`));
+    assert.ok(!/\//.test(fr.posts[0].text), 'no paths in the room line');
   } finally { await t.s.close(); await fr.close(); }
 });
 
