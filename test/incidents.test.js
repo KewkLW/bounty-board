@@ -559,5 +559,52 @@ test('the cap joins only an open incident of the current attempt; retry with no 
     assert.strictEqual(after.status, 'blocked');
     assert.strictEqual(after.failures, before.failures);
     assert.strictEqual(after.attempts, before.attempts);
+
+    // a retry that hits the cap while the only open incident is an older attempt's: the cap is its
+    // own record and the same decision resolves both
+    const e2 = board.create({ title: 'retry at cap, older incident', project: 'scratch', criteria: CRIT });
+    board.ready(e2.id); board.start(e2.id, 'fake-1');
+    board.db.prepare('UPDATE bounties SET attempts = 1 WHERE id = ?').run(e2.id);
+    board.incidents.record({ bounty: e2.id, kind: 'exit_no_submit', attemptNo: 1, slot: 'fake-1', exitCode: 1, countFailure: true });
+    board.db.prepare('UPDATE bounties SET attempts = 2 WHERE id = ?').run(e2.id);
+    transition(board.db, e2.id, 'blocked', { actor: 'test', note: 'attempt 2 blocked itself' });
+    const rr = board.incidents.retry(e2.id, { by: 'Conductor' });
+    assert.strictEqual(rr.capped, true);
+    const rows2 = board.db.prepare('SELECT * FROM incidents WHERE bounty_id = ? ORDER BY id').all(e2.id);
+    assert.deepStrictEqual(rows2.map(r => [r.attempt_no, r.cause_kind, r.status, r.resolved_by]),
+      [[1, 'exit_no_submit', 'resolved', 'Conductor'], [2, 'attempt_cap', 'resolved', 'Conductor']]);
+    assert.deepStrictEqual(rr.resolved, rows2.map(r => r.id));
+  } finally { await t.s.close(); }
+});
+
+test('an attempt that ends without an exit code keeps its end reason in the report: gone after a board restart, adopted worker died', async () => {
+  const t = await startBoard('inc-reason', { dispatch: false });
+  try {
+    const { board } = t;
+    const d = t.s.dispatcher;
+    const DEAD = 2147483646; // no such pid
+    const mk = title => {
+      const b = board.create({ title, project: 'scratch', criteria: CRIT });
+      board.ready(b.id); board.start(b.id, 'fake-1');
+      board.db.prepare('UPDATE bounties SET attempts = 1 WHERE id = ?').run(b.id);
+      const a = board.db.prepare("INSERT INTO attempts (bounty_id, slot, runner, started_at, kind, pid) VALUES (?, 'fake-1', 'command', ?, 'worker', ?)")
+        .run(b.id, new Date().toISOString(), DEAD);
+      return { b, attemptId: Number(a.lastInsertRowid) };
+    };
+    // a worker that was gone when the board came back up
+    const r1 = mk('gone after restart');
+    d.adopt();
+    // a re-attached worker (no child process of this board) that dies later
+    const r2 = mk('adopted then dies');
+    d.live.set(r2.b.id, { attemptId: r2.attemptId, slot: 'fake-1', pid: DEAD, child: null, logPath: null, adopted: true, runner: 'command' });
+    d.watchdog();
+    for (const [r, why] of [[r1, 'worker was gone after a board restart'], [r2, 'worker process died']]) {
+      assert.strictEqual(board.raw(r.b.id).status, 'blocked');
+      const incs = board.incidents.openFor(r.b.id);
+      assert.strictEqual(incs.length, 1);
+      assert.strictEqual(incs[0].cause, 'exited without submitting', 'the short cause stays structured');
+      assert.strictEqual(incs[0].detail.reason, why);
+      assert.ok(incs[0].report.includes(`- Details: ended: ${why}`), incs[0].report.split('\n').slice(0, 8).join('\n'));
+    }
   } finally { await t.s.close(); }
 });

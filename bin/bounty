@@ -493,7 +493,7 @@ async function main() {
       const r = await api('POST', `/bounties/${id}/retry`, body);
       if (opt.json) { console.log(JSON.stringify(r, null, 2)); return; }
       const b = r.bounty;
-      console.log(`#${b.id} -> ${b.status}${b.assignee_slot ? ` (slot ${b.assignee_slot})` : ''}; attempts ${b.attempts}, failures ${b.failures}. ${r.resolved.length ? `Resolved incident ${r.resolved.map(x => '#' + x).join(', ')} (${r.choice}).` : 'No open incident.'}`);
+      console.log(`#${b.id} -> ${b.status}${b.assignee_slot ? ` (slot ${b.assignee_slot})` : ''}; attempts ${b.attempts}, failures ${b.failures}. Resolved incident ${r.resolved.map(x => '#' + x).join(', ')} (${r.choice}).`);
       if (r.capped) {
         console.log(`The attempt cap is reached: the bounty is failed. Hand it to a human with bounty incident ${r.resolved[0] || 'ID'} --human "TEXT", or override the cap with bounty ready ${b.id}.`);
       }

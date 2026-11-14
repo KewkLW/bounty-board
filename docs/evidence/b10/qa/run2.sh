@@ -72,6 +72,11 @@ for B in 3 4; do I=$(sqlite3 board.db "SELECT id FROM incidents WHERE bounty_id=
 sql "SELECT bounty_id,COUNT(*) n FROM incidents GROUP BY bounty_id, attempt_no HAVING n > 1  -- expect nothing"
 
 echo "--- stopping by recorded PID" >> $O
+# attempts still running (the slow reviewer of #1's rejected attempt), and their children
+for p in $(sqlite3 board.db "SELECT pid FROM attempts WHERE ended_at IS NULL AND pid IS NOT NULL"); do
+  [ -e /proc/$p ] || continue; K=$(cat /proc/$p/task/*/children 2>/dev/null)
+  echo "$p: $(tr '\0' ' ' < /proc/$p/cmdline) (children $K)" >> $O; step "kill -TERM $p $K"; kill -TERM $p $K
+done
 echo "$(cat server.pid): $(tr '\0' ' ' < /proc/$(cat server.pid)/cmdline)" >> $O
 step "kill -TERM $(cat server.pid)"; kill -TERM $(cat server.pid); sleep 2
 for p in $(cat server.pid) $P3 $C3 $P4 $C4; do [ -e /proc/$p ] && echo "$p still alive" >> $O || echo "$p gone" >> $O; done
