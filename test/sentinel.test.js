@@ -175,7 +175,12 @@ test('unchanged sources: the second run reads no rows; --force does; a change tr
     const hl = fs.readFileSync(path.join(out, 'history.ndjson'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
     assert.strictEqual(hl.length, 2, 'one history line per run');
     assert.strictEqual(hl[1].unchanged, true);
-    assert.strictEqual(hl[1].broken, undefined, 'an unchanged run carries no figures (it read nothing)');
+    // it read nothing, so it carries the last full scan's figures (still true: nothing changed)
+    assert.strictEqual(hl[1].figures_from, r1.at);
+    assert.strictEqual(hl[1].broken, hl[0].broken);
+    assert.ok(hl[0].broken > 0);
+    assert.deepStrictEqual(hl[1].last24h, hl[0].last24h);
+    assert.deepStrictEqual(hl[1].per_board, hl[0].per_board);
     // report.html is rebuilt on the fast path from the stored results and the history so far
     const html = fs.readFileSync(path.join(out, 'report.html'), 'utf8');
     assert.ok(html.includes(`checked ${j2.at}`), 'the report says when it was last checked');
@@ -388,7 +393,38 @@ test('report trend: unchanged runs count as runs, the day keeps its last full sc
     { at: '2026-11-13T11:00:00Z', unchanged: true },
     { at: '2026-11-14T09:00:00Z', unchanged: true },
   ]);
-  assert.deepStrictEqual(d.map(([k, h]) => [k, h.runs, h.last24h.broken]), [['2026-11-13', 2, 4], ['2026-11-14', 1, undefined]]);
+  // an old-format unchanged line (no figures) on a new day takes the latest full scan before it
+  assert.deepStrictEqual(d.map(([k, h]) => [k, h.runs, h.last24h.broken]), [['2026-11-13', 2, 4], ['2026-11-14', 1, 4]]);
+  // a line that carries its own figures uses them
+  const e = trend([
+    { at: '2026-11-13T10:00:00Z', last24h: { broken: 4 } },
+    { at: '2026-11-14T09:00:00Z', unchanged: true, last24h: { broken: 7 } },
+  ]);
+  assert.deepStrictEqual(e.map(([k, h]) => [k, h.runs, h.last24h.broken]), [['2026-11-13', 1, 4], ['2026-11-14', 1, 7]]);
+});
+
+test('a day with only unchanged runs keeps the last full scan figures in history and in the report trend', () => {
+  const root = tmp('days');
+  const A = makeBoard(path.join(root, 'a'), { name: 'A', port: 4931 });
+  const out = path.join(root, 'out');
+  const opts = { registryDir: path.join(root, 'none'), boards: [A.dir], out };
+  const day1 = Date.parse('2026-11-13T23:00:00Z');
+  const r1 = s.run({ ...opts, now: day1, sinceHours: 24 * 400 });
+  assert.strictEqual(r1.unchanged, false);
+  assert.ok(r1.broken > 0);
+  const r2 = s.run({ ...opts, now: day1 + 2 * 3600000, sinceHours: 24 * 400 });   // the next UTC day
+  assert.strictEqual(r2.unchanged, true, JSON.stringify(r2));
+  const hl = fs.readFileSync(path.join(out, 'history.ndjson'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.strictEqual(hl.length, 2);
+  assert.strictEqual(hl[1].at.slice(0, 10), '2026-11-14');
+  assert.strictEqual(hl[1].broken, r1.broken);
+  assert.deepStrictEqual(hl[1].last24h, r1.last24h);
+  const { trend } = require('../lib/sentinel-report');
+  const d = trend(hl);
+  assert.deepStrictEqual(d.map(([k, h]) => [k, h.runs, h.issues_open, h.last24h.attempts]),
+    [['2026-11-13', 1, r1.issues_open, r1.last24h.attempts], ['2026-11-14', 1, r1.issues_open, r1.last24h.attempts]]);
+  const html = fs.readFileSync(path.join(out, 'report.html'), 'utf8');
+  assert.ok(html.includes(`<td>2026-11-14</td><td>1</td><td>1</td><td>${r1.issues_open}</td><td>${r1.last24h.attempts}</td><td>${r1.last24h.broken}</td>`), 'the quiet day renders the carried figures, not zeros');
 });
 
 test('signals: overlapping ready waits count once; waits and pending work crossing --since are measured from when they began', () => {
