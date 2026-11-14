@@ -59,18 +59,25 @@ escalation still apply (3 broken attempts with max 3 → the retry ends `failed`
   exit joins a stall incident) and the report's Details line shows `ended: <reason>`
   (`lib/incidents.js:204`). The short cause (sent to the room) is still built from structured fields only.
   Tests: `test/t3.test.js:312` (deleted thread: `detail.reason` and `- Details: ended: T3 thread no
-  longer exists` in the report). QA: run 4, part (3) (board restart, and an adopted worker that dies).
+  longer exists` in the report), `test/incidents.test.js:580` (a worker gone at `adopt()` after a restart,
+  and an adopted worker whose pid dies under `watchdog()`: one incident each, `detail.reason` and the
+  `ended:` line asserted). QA: run 4, part (3) (board restart, and an adopted worker that dies).
 - **`bounty retry` with no open incident is refused.** `retry()` (`lib/incidents.js:346`) throws 409
   `bounty N has no open incident to retry (status S); to requeue it anyway use bounty ready N` and
   requeues nothing (the live-worker, moved-on and failed-at-cap checks still come first, with their own
-  messages). Test: `test/incidents.test.js:525` (status, attempts and failures unchanged). QA: run 4,
+  messages). The unreachable `No open incident.` branch of `bin/bounty retry` is gone. Test:
+  `test/incidents.test.js:525` (status, attempts and failures unchanged).
+- **A retry that hits the cap closes the cap's record too.** When the only open incident is an older
+  attempt's and the retry's requeue reaches the cap, the cap is attempt N's own record (above); `retry()`
+  now resolves it with the same decision (who, choice, the cap in the resolution), so no record is left
+  open behind a decision. Test: `test/incidents.test.js:525` (both rows resolved by Conductor). QA: run 4,
   part (2).
 
 ### Attempt 3: fixes for the second review
 
 - **Each broken dispatch uses up its attempt number.** A spawn or worktree failure happens before the
   dispatcher wrote `attempts = N`; it now sets `attempts = MAX(attempts, N)` itself
-  (`lib/dispatcher.js:158` spawn catch, `:254` worktree failure, `:453` CLI-driven stall). The next dispatch is attempt N+1, so it can
+  (`lib/dispatcher.js:158` spawn catch, `:254` worktree failure, `:456` CLI-driven stall). The next dispatch is attempt N+1, so it can
   never be merged into the earlier open incident, the report says `Attempt 2 of 4`, and the attempt cap
   counts it. `forPrompt()` now just takes the incident of attempt N-1. Tests: `test/incidents.test.js:126`
   (unknown runner retried: incidents for attempts 1 and 2, `Attempt: 2 of 4 (failures so far: 2)`), `:485`
@@ -90,8 +97,8 @@ escalation still apply (3 broken attempts with max 3 → the retry ends `failed`
   `https://u:p@host` are all redacted (`lib/redact.js`). `Bearer` written as the scheme takes any value but
   a prose word (`Bearer token`); lowercase `bearer` and `Basic` still need a credential-shaped value, so
   "bearer of bad news" and "Basic understanding" survive. Fixtures: `test/incidents.test.js:73-79`.
-- **QA re-run on this revision** (section 8): every output there is from commit `006d0b6`, the final code;
-  later commits touch only `docs/evidence`.
+- **QA re-run on this revision** (section 8): every output in the main run is from commit `006d0b6`.
+  Attempt 4 (`f42b30d`, `47a6ecd`) changed only the third review's points; QA run 4 re-ran those on `47a6ecd`.
 
 ### Attempt 2: fixes for the first review
 
@@ -160,13 +167,13 @@ the bounty automatically, so an offline orchestrator still finds it; `bounty ret
 
 ## 7. Tests
 
-`npm ci && npm test`: **111 tests, 111 pass, 0 fail** on this branch at commit `006d0b6` (the final code).
-New: `test/incidents.test.js` (9 tests); incident assertions added to `test/t3.test.js` (4 tests) and
+`npm ci && npm test`: **113 tests, 113 pass, 0 fail** on this branch at commit `47a6ecd` (the final code; 111 at `006d0b6`, plus the two attempt-4 tests at `test/incidents.test.js:525` and `:580`).
+New: `test/incidents.test.js` (11 tests); incident assertions added to `test/t3.test.js` (4 tests) and
 `test/room.test.js` (2 tests, updated for the incident line). Fake workers: `test/fake-worker.sh` modes
 `giveup` (start, progress, claude-style last message, exit 1), `stall` (start, then silent) and `leak`
 (prints a token built at run time, an injection-shaped message, exit 1).
 
-## 8. Real QA on a scratch board (re-run on the final code, commit 006d0b6)
+## 8. Real QA on a scratch board (main run on commit 006d0b6; run 4 on 47a6ecd for the attempt-4 changes)
 
 Run by `docs/evidence/b10/qa/run.sh` (the copy here differs from the one that ran only in how it finds the
 worktree and `fakeroom.js`): a fresh `mktemp -d` as `$QA` holding its own `board.json`, db, logs, registry
@@ -418,10 +425,10 @@ ports closed
 DONE
 ````
 
-### Run 4: the third review's points (commit f42b30d)
+### Run 4: the third review's points (commit 47a6ecd)
 
 Run by `docs/evidence/b10/qa/run2.sh`: the same isolation as above (fresh `mktemp -d` as `$QA` with its own
-`board.json`, db, logs, registry and run dir; ephemeral port 37279; `command` slots running
+`board.json`, db, logs, registry and run dir; ephemeral port 42231; `command` slots running
 `test/fake-worker.sh`), `retry.max_attempts: 2`, and a reviewer that sleeps 20 s before the fake reviewer
 so the orchestrator can reject while the bounty is in review. Full transcript:
 `docs/evidence/b10/qa/transcript4.txt`. Excerpts:
@@ -466,10 +473,9 @@ $ q.sh incident 4 | sed -n '1,9p'
 - Details: ended: worker process died
 ```
 
-Stopping: the board, both workers and their `sleep` children by recorded PID, all gone; the port closed.
-The sweep at the end lists the attempt-3 reviewer (`bash -c "sleep 20; ..."`, pid 380831) as still
-alive at that moment: it was finishing its sleep after the board stopped and exited by itself seconds
-later (checked: `/proc/380831` gone, nothing of the run left).
+Stopping, all by recorded PID: the still-running review attempt of #1 and its `sleep` child (pids from
+the `attempts` table), the board, both stall workers and their `sleep` children. The sweep then shows
+every one of them and every attempt pid gone, and the port closed (end of `transcript4.txt`).
 
 ## 9. Docs
 
