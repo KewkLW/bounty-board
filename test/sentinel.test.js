@@ -80,15 +80,9 @@ test('a full scan of two fixture boards: issues, signals, outputs, nothing writt
   assert.strictEqual(sum.stale_open, 2);
   assert.strictEqual(sum.no_orchestrator_with_work, 1, 'only the registered board knows its presence');
 
-  // nothing inside a board changed; the only new files SQLite itself may create are the empty
-  // -wal/-shm of a read-only open on a cleanly closed WAL db (a live board already has them)
-  for (const [k, B0] of [['a', A], ['b', B]]) {
-    const after = snapshot(B0.dir);
-    for (const [f, v] of Object.entries(before[k])) assert.strictEqual(after[f], v, `${k}/${f} unchanged`);
-    const added = Object.keys(after).filter(f => !(f in before[k]));
-    assert.deepStrictEqual(added.filter(f => !/^data\/board\.db-(wal|shm)$/.test(f)), [], `no other files added in ${k}`);
-    assert.strictEqual(fs.statSync(path.join(B0.dir, 'data', 'board.db-wal')).size, 0);
-  }
+  // nothing inside a board changed or was added: a closed board (no -wal/-shm) is read from a copy,
+  // so SQLite does not create its sidecars next to the board's db either
+  for (const [k, B0] of [['a', A], ['b', B]]) assert.deepStrictEqual(snapshot(B0.dir), before[k], `board ${k} untouched`);
 
   const is = issues(out);
   const exitIssue = is.find(i => i.cause === 'exit_without_submit');
@@ -192,7 +186,10 @@ test('unchanged sources: the second run reads no rows; --force does; a change tr
   assert.strictEqual(JSON.parse(cli(args).stdout).unchanged, true);
   fs.appendFileSync(path.join(A.logs, fs.readdirSync(A.logs)[0]), 'more\n');
   assert.strictEqual(JSON.parse(cli(args).stdout).unchanged, false);
-  assert.strictEqual(JSON.parse(cli(args).stdout).unchanged, true, 'the empty -wal SQLite leaves behind is not a change');
+  assert.strictEqual(JSON.parse(cli(args).stdout).unchanged, true);
+  // an empty -wal (what a reader of a cleanly closed WAL db can leave behind) is not a change
+  fs.writeFileSync(A.dbPath + '-wal', '');
+  assert.strictEqual(JSON.parse(cli(args).stdout).unchanged, true, 'empty -wal is the same as none');
 });
 
 test('WAL: a scan sees rows still in the WAL while a writer holds the db open, and the writer can checkpoint after', () => {
