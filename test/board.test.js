@@ -777,3 +777,61 @@ test('dispatcher: a slot with worktree_root builds its worktree there and symlin
     assert.ok(fs.existsSync(path.join(wt.worktree, 'math.js')));
   } finally { await t.s.close(); }
 });
+
+test('reclaim: a done bounty\'s merged, clean, idle worktree is removed; dirty, unmerged or busy ones stay', async () => {
+  const t = await startBoard('reclaim', { dispatch: false });
+  try {
+    const { board, repo, s } = t;
+    const p = board.project('scratch');
+    fs.mkdirSync(path.join(t.dir, 'wt'), { recursive: true });
+    const logFd = fs.openSync(path.join(t.dir, 'reclaim.log'), 'a');
+    const make = async (title, slot = { id: 'fake-1' }) => {
+      const b = board.create({ title, project: 'scratch', type: 'task', tier: 'C', criteria: CRIT, status: 'ready' });
+      const wt = await s.dispatcher.ensureWorktree(board.need(b.id), p, logFd, slot);
+      fs.writeFileSync(path.join(wt.worktree, `${b.id}.js`), `module.exports = ${b.id};\n`);
+      sh(wt.worktree, `git add -A && git -c user.email=t@t -c user.name=t commit -q -m "bounty ${b.id}"`);
+      // build output, ignored by git, like target/
+      fs.writeFileSync(path.join(wt.worktree, '.gitignore'), 'target/\n');
+      sh(wt.worktree, `git add .gitignore && git -c user.email=t@t -c user.name=t commit -q -m ignore`);
+      fs.mkdirSync(path.join(wt.worktree, 'target'));
+      fs.writeFileSync(path.join(wt.worktree, 'target', 'big.o'), 'x'.repeat(1000));
+      board.db.prepare("UPDATE bounties SET status = 'done', worktree = ?, branch = ?, completed_at = ? WHERE id = ?")
+        .run(wt.worktree, wt.branch, new Date(Date.now() - 3600e3).toISOString(), b.id);
+      return { id: b.id, ...wt };
+    };
+    const merged = await make('merged and clean');
+    const dirty = await make('merged with an untracked file');
+    const unmerged = await make('a commit after the merge');
+    const busy = await make('someone is in it');
+    const recent = await make('done a minute ago');
+    const root = path.join(t.dir, 'otherdrive'); fs.mkdirSync(root);
+    p.worktree_cmd = 'git worktree add "$WORKTREE_ROOT/{task}" -b {branch} {main}';
+    const linked = await make('worktree on another drive', { id: 'hdd', worktree_root: root });
+    fs.closeSync(logFd);
+    for (const b of [merged, dirty, unmerged, busy, recent, linked]) sh(repo, `git merge -q --no-ff ${b.branch} -m "merge ${b.id}"`);
+    fs.writeFileSync(path.join(dirty.worktree, 'notes.txt'), 'unsaved\n');
+    sh(unmerged.worktree, `echo more >> ${unmerged.id}.js && git -c user.email=t@t -c user.name=t commit -qam "not merged"`);
+    board.db.prepare('UPDATE bounties SET completed_at = ? WHERE id = ?').run(new Date().toISOString(), recent.id);
+    const busyReal = fs.realpathSync(busy.worktree);
+    board.reclaimer.opts.cwdInside = dir => dir === busyReal;
+
+    const out = Object.fromEntries((await board.reclaimer.sweep()).map(o => [o.id, o]));
+    assert.ok(out[merged.id].removed, JSON.stringify(out[merged.id]));
+    assert.ok(!fs.existsSync(merged.worktree), 'merged worktree is gone, build output with it');
+    assert.ok(gitx.branchExists(repo, merged.branch), 'the branch stays');
+    assert.match(out[dirty.id].kept, /untracked/);
+    assert.ok(fs.existsSync(path.join(dirty.worktree, 'notes.txt')));
+    assert.match(out[unmerged.id].kept, /not on main/);
+    assert.match(out[busy.id].kept, /working inside/);
+    assert.match(out[recent.id].kept, /too recently/);
+    assert.ok(out[linked.id].removed, JSON.stringify(out[linked.id]));
+    assert.ok(!fs.existsSync(linked.worktree) && !fs.existsSync(path.join(root, linked.branch)), 'real dir and symlink both gone');
+    // a lasting reason is recorded once, a timing one never
+    await board.reclaimer.sweep();
+    const notes = id => board.db.prepare("SELECT note FROM events WHERE bounty_id = ? AND kind = 'reclaim'").all(id).map(r => r.note);
+    assert.strictEqual(notes(dirty.id).length, 1);
+    assert.strictEqual(notes(busy.id).length, 0);
+    assert.match(notes(merged.id)[0], /removed after merge/);
+    assert.ok(fs.existsSync(repo) && fs.existsSync(path.join(repo, 'math.js')), 'the project repo is untouched');
+  } finally { await t.s.close(); }
+});
