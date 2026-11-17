@@ -6,8 +6,8 @@ n=$(printf '%s' "$prompt" | awk '/^## Acceptance criteria/{f=1;next} /^#/{f=0} f
 crit=""
 if printf '%s' "$prompt" | grep -q '^+function mul'; then
   for i in $(seq 1 "$n"); do crit+="{\"index\":$i,\"met\":true,\"evidence\":\"math.js adds mul; mul.test.js\"},"; done
-  echo "{\"verdict\":\"approve\",\"notes\":\"mul() added with a test\",\"criteria\":[${crit%,}]}"
+  echo "{\"verdict\":\"approve\",\"notes\":\"mul() added with a test\",\"criteria\":[${crit%,}],\"findings\":[]}"
 else
   for i in $(seq 1 "$n"); do crit+="{\"index\":$i,\"met\":false,\"evidence\":\"no mul in the diff\"},"; done
-  echo "{\"verdict\":\"reject\",\"notes\":\"the diff does not add mul()\",\"criteria\":[${crit%,}]}"
+  echo "{\"verdict\":\"reject\",\"notes\":\"the diff does not add mul()\",\"criteria\":[${crit%,}],\"findings\":[]}"
 fi

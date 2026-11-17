@@ -83,9 +83,30 @@ backlog -> ready -> in_progress -> review -> approved -> done
 |---|---|---|
 | backlog to ready | orchestrator (`bounty ready`, UI) | a project, and at least one acceptance criterion |
 | ready to in_progress | the worker (`bounty start`) | the dispatcher spawned it for the assigned slot |
-| in_progress to review | `bounty submit`, then the gates | the branch exists; its diff against main is not empty; the diff is not only notes/logs (docs and research bounties may be docs-only); the project verify command passes on the branch tip (result and log stored) |
-| review to approved / ready | the reviewer (Codex, `codex exec -s read-only`) | reads the real diff and the acceptance criteria; returns approve/reject with per-criterion evidence; an approval that does not show every criterion met is overruled to reject. Reject sends the bounty back to ready with the notes for a fresh worker |
-| approved to done | the merge check (every 60 s, or `bounty done`) | every recorded commit is reachable from main (or main holds the same patch: rebase, cherry-pick or squash merges count) |
+| in_progress to review | `bounty submit`, then the gates | the branch exists; its diff against main is not empty; the diff is not only notes/logs (docs and research bounties may be docs-only); the diff touches no [protected path](#keep-the-checks-out-of-reach-of-the-change) unless the orchestrator allowed it; the project verify command passes on the exact commit submitted (`submitted_sha`; result, log and `verified_sha` stored) |
+| review to approved / ready | the reviewer (Codex, `codex exec -s read-only`) | reads the real diff of the verified commit (`main...verified_sha`, never later commits) and the acceptance criteria, with the project's `REVIEW.md`/`AGENTS.md` taken from main; returns approve/reject with per-criterion evidence and severity-tagged findings; an approval that does not show every criterion met is overruled to reject. Approve records `reviewed_sha`. Reject sends the bounty back to ready with the notes for a fresh worker |
+| approved to done | the merge check (every 60 s, or `bounty done`) | every recorded commit is reachable from main (or main holds the same patch: rebase, cherry-pick or squash merges count). Branch commits after `reviewed_sha` that reached main raise a `FLAG unreviewed commits merged` event |
+
+### One commit through every gate
+
+"A passing review on an out-of-date commit means nothing." Submit records the branch tip as `submitted_sha`; verify runs on exactly that commit (in the bounty worktree when it sits clean on it, otherwise in a throwaway detached worktree; if a live worker moves its worktree while verify runs, that run is discarded and verify runs again detached). Verify's pass records `verified_sha`; the reviewer reads and checks out that sha, and its approve records it as `reviewed_sha`. If the branch moved after verify, the review still stands for the sha it read and a `FLAG branch ... moved after verify` event tells the orchestrator to merge the reviewed sha, not the branch. A requeue clears all three. Rows from before this change have no shas and fall back to the branch tip.
+
+`bounty show ID` prints the three shas. `bounty trailer ID` prints lines for the merge commit:
+
+```
+Bounty: #12
+Verified-by: npm test @ 1a2b3c4d5e
+Reviewed-by: codex/gpt-5 @ 1a2b3c4d5e
+QA-evidence: ran the export in a scratch profile; the file opened in the viewer
+```
+
+`QA-evidence` is the first line of what the worker passed to `bounty submit --evidence "..."` (or `none`), so `git log --grep 'QA-evidence: none'` finds merges nobody checked in the real app.
+
+### Keep the checks out of reach of the change
+
+"If a change can modify the check that judges it, the check is broken." Submit refuses a diff that touches a protected path unless the orchestrator allowed it on that bounty (`bounty add|edit --allow-protected`; workers can't set it). The project's `protected_paths` (globs: `**` any depth, `*` one segment) default to `REVIEW.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/**`. List your verify script and test harness too: `bounty project add ID --repo PATH --protected 'REVIEW.md,AGENTS.md,CLAUDE.md,.claude/**,Scripts/verify.sh,Scripts/verify.d/**'`; `--protected-default` goes back to the default, `--no-protected` turns it off. A bounty whose job is to change those files (adding a `verify` skill, editing REVIEW.md) is filed with `--allow-protected`.
+
+The reviewer reads `REVIEW.md` and `AGENTS.md` from main (`git show main:REVIEW.md`), never from the branch. Not covered: tests that live in the branch itself (`npm test` runs the branch's tests). Protect the test directory if that matters, and the reviewer rejects weakened tests.
 
 Work done off the board (an `external` bounty, e.g. one in flight before the board existed) never goes through submit, so it can't reach approved. When the orchestrator has merged it, `bounty close-merged ID --commit SHA [--commit SHA]... ["evidence"]` (API `POST /api/bounties/:id/close-merged {commits, evidence}`) takes it to done from any open status: every commit must exist in the project repo and be an ancestor of main (it is refused otherwise, and refused while the bounty has a live board worker or a verify running). Loot goes to a slot only if that slot's board attempt submitted commits that are on main; otherwise no one is credited. Orchestrator only.
 
@@ -320,10 +341,12 @@ Good:
 ### How the reviewer works
 
 After a worker submits and the verify command passes, the Codex reviewer:
-1. Reads the full `git diff` between the bounty's branch and main
-2. Reads every acceptance criterion
-3. Returns approve or reject with per-criterion evidence from the diff
+1. Reads the full `git diff` between main and the verified commit, in a checkout of that commit
+2. Reads every acceptance criterion, and the project's `REVIEW.md` / `AGENTS.md` from main (what to focus on for this code)
+3. Returns approve or reject with per-criterion evidence from the diff, plus `findings` tagged `important` (a bug this change introduces; enough to reject), `nit` (never a reason to reject) or `pre_existing` (already on main; noted, not held against the change)
 4. An approval that doesn't cite evidence for every criterion is overruled to reject
+
+Tune the reviewer with a `REVIEW.md` on main rather than stacking a second reviewer: when a bug gets past review (a revert, a bug found later), and the same miss shows in two or more changes and can be spotted from a diff, add it as a rule there.
 
 Configure the reviewer:
 ```json

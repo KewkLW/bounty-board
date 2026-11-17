@@ -13,12 +13,12 @@ const HELP = `bounty: the Bounty Board CLI  (server ${URL_BASE}, actor ${ACTOR})
 
 Orchestrator
   bounty add "<title>" [--desc TEXT | --brief FILE.md] [--criteria "..."]... [--type task|bug|test|research|art|docs]
-             [--tier S|A|B|C] [--priority critical|high|normal|low] [--project ID] [--slot SLOT] [--depends 3,4] [--t3-runtime MODE] [--ready]
+             [--tier S|A|B|C] [--priority critical|high|normal|low] [--project ID] [--slot SLOT] [--depends 3,4] [--t3-runtime MODE] [--allow-protected] [--ready]
                                    (no --project: the configured default_project, or the only non-legacy project)
   bounty add --file TASK.md        (# Title, optional key: value header lines, "## Acceptance criteria" with - [ ] items)
   bounty list [--status s1,s2] [--project P] [--slot S|none] [--type T] [--all] [--json]
   bounty show [ID] [--json]        bounty log ID [--raw]
-  bounty edit ID [--title T] [--desc TEXT|--brief FILE] [--criteria "..."]... [--tier] [--priority] [--type] [--project P] [--depends 3,4] [--t3-runtime MODE|default] [--file TASK.md]
+  bounty edit ID [--title T] [--desc TEXT|--brief FILE] [--criteria "..."]... [--tier] [--priority] [--type] [--project P] [--depends 3,4] [--t3-runtime MODE|default] [--allow-protected|--no-allow-protected] [--file TASK.md]
   bounty note ID "text"            tell the live worker (and every later attempt) something new
   bounty inbox ID --peek           the notes that worker has not read yet (without marking them read)
   bounty replies [--all] [--peek] [--json]
@@ -29,6 +29,7 @@ Orchestrator
   bounty approve ID ["notes"]      bounty reject ID "notes"  bounty done ID   (only if the commits are on main)
   bounty fail ID "reason"          bounty kill ID ["reason"]
   bounty close-merged ID --commit SHA [--commit SHA]... ["evidence"]
+  bounty trailer ID                 # trailer lines for the merge commit (Bounty/Verified-by/Reviewed-by/QA-evidence); merge the reviewed sha
                                    done for work merged outside the board (external): each commit must be on main;
                                    refused while a board worker is live. Records commits + evidence; loot only to
                                    a slot whose board attempt submitted those commits (external work credits nobody).
@@ -65,12 +66,12 @@ Orchestrator
                                    with stable signatures, queue waits, stalls, cost; writes issues.json,
                                    history.ndjson, report.html to --out (default $XDG_STATE_HOME/bounty-board/sentinel)
   bounty sentinel --check-install  is the bounty-sentinel.timer installed and active, and when did it last run
-  bounty project list | bounty project add ID --repo PATH [--main main] [--wt-cmd CMD] [--wt-path TPL] [--verify CMD]
+  bounty project list | bounty project add ID --repo PATH [--main main] [--wt-cmd CMD] [--wt-path TPL] [--verify CMD] [--protected GLOB,GLOB|--protected-default|--no-protected]
 Workers (BOUNTY_ID / BOUNTY_SLOT from the environment)
   bounty start                     bounty progress "note" [--check N]...     (both print unread notes)
   bounty inbox                     unread orchestrator notes and messages from the human; marks them read. Check it often.
   bounty block "reason"            bounty split "<title>" [--desc TEXT] [--criteria "..."]...
-  bounty submit [--branch B] [--no-wait]
+  bounty submit [--branch B] [--evidence "what you ran in the real app and saw"] [--no-wait]
   bounty next                      bounty lease gpu [--ttl MIN] [--no-wait]    bounty release gpu
 `;
 
@@ -81,7 +82,7 @@ function parse(argv) {
     if (a.startsWith('--')) {
       const k = a.slice(2);
       const nxt = argv[i + 1];
-      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help', 'peek', 'kill', 'orchestrators', 'check-install', 'follow'].includes(k);
+      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help', 'peek', 'kill', 'orchestrators', 'check-install', 'follow', 'allow-protected', 'no-allow-protected', 'protected-default', 'no-protected', 'quiet'].includes(k);
       const v = flag || nxt === undefined || nxt.startsWith('--') ? true : (i++, nxt);
       if (opt[k] === undefined) opt[k] = v; else opt[k] = [].concat(opt[k], v);
     } else pos.push(a);
@@ -170,6 +171,8 @@ function show(b) {
   L.push(`attempts ${b.attempts} | failures ${b.failures} | cost $${(b.cost_usd || 0).toFixed(4)} | tokens in ${b.tokens_in} out ${b.tokens_out} | worker ${b.worker_alive ? 'LIVE' : 'none'}`);
   if (b.ci_status) L.push(`verify: ${b.ci_status} ${b.ci_log ? '(' + b.ci_log + ')' : ''}`);
   if ((b.commits || []).length) L.push(`commits: ${b.commits.map(c => c.slice(0, 10)).join(' ')}`);
+  if (b.submitted_sha || b.verified_sha || b.reviewed_sha) L.push(`shas: submitted ${(b.submitted_sha || '-').slice(0, 10)} | verified ${(b.verified_sha || '-').slice(0, 10)} | reviewed ${(b.reviewed_sha || '-').slice(0, 10)}${b.reviewed_sha ? '  (merge the reviewed sha)' : ''}`);
+  if (b.allow_protected) L.push('protected paths: ALLOWED for this bounty');
   if (b.description) L.push('', b.description);
   if ((b.criteria || []).length) {
     L.push('', 'Acceptance criteria:');
@@ -263,6 +266,7 @@ async function main() {
       if (pos[0]) d.title = pos[0];
       if (opt.brief) d.description = fs.readFileSync(opt.brief, 'utf8');
       if (opt['t3-runtime']) d.t3_runtime = opt['t3-runtime'] === 'default' ? null : opt['t3-runtime'];
+      if (opt['allow-protected']) d.allow_protected = true;
       if (opt.desc) d.description = opt.desc;
       if (opt.criteria) d.criteria = list(opt.criteria);
       for (const k of ['type', 'tier', 'priority', 'project']) if (opt[k]) d[k] = opt[k];
@@ -314,6 +318,8 @@ async function main() {
       if (opt.file) Object.assign(d, parseTaskFile(opt.file));
       for (const k of ['title', 'type', 'tier', 'priority', 'project']) if (opt[k]) d[k] = opt[k];
       if (opt['t3-runtime']) d.t3_runtime = opt['t3-runtime'] === 'default' ? null : opt['t3-runtime'];
+      if (opt['allow-protected']) d.allow_protected = true;
+      if (opt['no-allow-protected']) d.allow_protected = false;
       if (opt.desc) d.description = opt.desc;
       if (opt.brief) d.description = fs.readFileSync(opt.brief, 'utf8');
       if (opt.criteria) d.criteria = list(opt.criteria);
@@ -398,8 +404,9 @@ async function main() {
     }
     case 'submit': {
       const id = idOf(pos);
-      const r = await api('POST', `/bounties/${id}/submit`, { branch: opt.branch });
-      console.log(`submitted #${id}: branch ${r.branch}, ${r.commits.length} commit(s), ${r.files} file(s). Verifying: ${r.verify}`);
+      const ev = typeof opt.evidence === 'string' ? opt.evidence : (Array.isArray(opt.evidence) ? opt.evidence.join('\n') : undefined);
+      const r = await api('POST', `/bounties/${id}/submit`, { branch: opt.branch, evidence: ev });
+      console.log(`submitted #${id}: branch ${r.branch} @ ${String(r.sha || '').slice(0, 10)}, ${r.commits.length} commit(s), ${r.files} file(s). Verifying: ${r.verify}`);
       if (opt['no-wait']) return;
       const waitMin = Number(opt['wait-min'] || 8);
       const until = Date.now() + waitMin * 60000;
@@ -434,6 +441,13 @@ async function main() {
       if (!commits.length || commits.includes('true')) die('close-merged ID --commit SHA [--commit SHA]... ["evidence"]');
       const r = await api('POST', `/bounties/${id}/close-merged`, { commits, evidence: pos.slice(1).join(' ') });
       console.log(`#${id} DONE (close-merged: ${r.commits.map(c => c.slice(0, 10)).join(' ')} on main); ${r.credited ? `+$${r.reward} loot to ${r.credited}` : 'no slot credited (work done off the board)'}`);
+      return;
+    }
+    case 'trailer': {
+      const r = await api('GET', `/bounties/${idOf(pos)}/trailer`);
+      if (opt.json) { console.log(JSON.stringify(r, null, 2)); return; }
+      console.log(r.text);
+      if (!opt.quiet && r.merge_sha) console.error(`# merge ${r.merge_sha} (the reviewed sha), not the branch name`);
       return;
     }
     case 'next': {
@@ -630,10 +644,13 @@ async function main() {
     }
     case 'project': {
       const sub = pos[0] || 'list';
-      if (sub === 'list') { for (const p of await api('GET', '/projects')) console.log(`${p.id.padEnd(12)} ${p.repo}  main=${p.main_branch}  wt="${p.worktree_cmd}"  verify="${p.verify_cmd || ''}"`); return; }
+      if (sub === 'list') { for (const p of await api('GET', '/projects')) console.log(`${p.id.padEnd(12)} ${p.repo}  main=${p.main_branch}  wt="${p.worktree_cmd}"  verify="${p.verify_cmd || ''}"  protected=${(p.protected_paths || []).join(',') || '(none)'}`); return; }
       if (sub === 'add') {
         const p = { id: pos[1], repo: opt.repo, main_branch: opt.main, worktree_cmd: opt['wt-cmd'], worktree_path: opt['wt-path'], verify_cmd: opt.verify, name: opt.name };
         if (opt.rules) p.rules = list(opt.rules);
+        if (opt.protected) p.protected_paths = list(opt.protected).flatMap(x => String(x).split(',')).map(x => x.trim()).filter(Boolean);
+        if (opt['protected-default']) p.protected_paths = null;
+        if (opt['no-protected']) p.protected_paths = [];
         const r = await api('POST', '/projects', p);
         console.log(`project ${r.id} saved`);
         return;

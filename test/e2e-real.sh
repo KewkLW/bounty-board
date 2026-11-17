@@ -37,13 +37,14 @@ cat > "$work/board.json" <<JSON
   "merge_check_seconds": 5,
   "reviewer": { "runner": "codex", "timeout_minutes": 15 },
   "runners": { "claude": { "bin": "claude", "allowed_tools": "Bash,Read,Grep,Glob,Edit,Write" }, "codex": { "bin": "codex" } },
-  "slots": [ { "id": "haiku-e2e", "runner": "claude", "model": "haiku" } ]
+  "slots": [ { "id": "haiku-e2e", "name": "E2E", "runner": "claude", "model": "haiku" } ]
 }
 JSON
 BOUNTY_CONFIG=$work/board.json BOUNTY_NO_SEED=1 node "$root/server.js" > "$work/server.log" 2>&1 &
 server=$!
 trap 'kill $server 2>/dev/null || true' EXIT
 export BOUNTY_URL=http://127.0.0.1:$port
+export PATH="$root/bin:$PATH"   # this checkout's CLI
 for _ in $(seq 50); do curl -sf "$BOUNTY_URL/health" >/dev/null && break; sleep 0.2; done
 
 bounty project add e2e --repo "$repo" --main main --wt-cmd 'git worktree add {path} -b {branch} {main}' --wt-path "$work/wt/{task}" --verify ./verify.sh

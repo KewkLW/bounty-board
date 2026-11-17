@@ -59,7 +59,8 @@
     "worktree_cmd": "git worktree add {path} -b {branch} {main}",
     "worktree_path": "/path/to/worktrees/{task}",
     "verify_cmd": "npm test",
-    "verify_timeout_min": 30
+    "verify_timeout_min": 30,
+    "protected_paths": ["REVIEW.md", "AGENTS.md", "CLAUDE.md", ".claude/**"]
   },
   "slots": [
     {
