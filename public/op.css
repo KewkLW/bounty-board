@@ -66,7 +66,7 @@ body::after {
 }
 a { color: inherit; }
 ::selection { background: rgba(122, 162, 247, .35); color: #fff; }
-.grunge { opacity: .35; }
+.grunge { opacity: .35; pointer-events: none; }  /* decorative texture: never catch taps (it sits above the dock) */
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: #0e0e14; }
