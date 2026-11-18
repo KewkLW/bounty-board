@@ -57,3 +57,26 @@
 .st-sub { margin-top: 3px; font-size: 12px; color: var(--st-muted); }
 .st-line { display: flex; align-items: baseline; gap: 8px; font-size: 13px; padding: 2px 0; }
 .st-line .st-sub { margin: 0 0 0 auto; white-space: nowrap; }
+/* Gaps: the ledger of gaps workers posed and the orchestrator's decisions. Open ones first, highlighted. */
+.st-gap { font-size: 13px; }
+.st-gap-open { border-color: var(--st-warn); box-shadow: 0 0 0 1px var(--st-warn); background: color-mix(in srgb, var(--st-warn) 8%, var(--st-panel)); }
+.st-gap-rejected { opacity: .7; }
+.st-gap-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.st-gap-id { font-family: ui-monospace, monospace; font-weight: 800; color: var(--st-accent); }
+.st-gap-when { margin-left: auto; font-size: 12px; color: var(--st-muted); white-space: nowrap; }
+.st-gap-who { margin-top: 6px; font-size: 12px; color: var(--st-muted); }
+.st-gap-who b { color: var(--st-fg); }
+.st-gap-slot { font-family: ui-monospace, monospace; font-size: 11px; }
+.st-gap-text { margin-top: 6px; font-size: 14px; font-weight: 600; line-height: 1.45; white-space: pre-wrap; }
+.st-gap-dl { margin: 8px 0 0; display: grid; grid-template-columns: 1fr; gap: 2px; }
+.st-gap-dl dt { margin-top: 4px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--st-muted); }
+.st-gap-dl dd { margin: 0; line-height: 1.45; white-space: pre-wrap; }
+@media (min-width: 640px) {
+  .st-gap-dl { grid-template-columns: 9.5rem 1fr; column-gap: 12px; }
+  .st-gap-dl dt { margin-top: 0; }
+}
+.st-badge-gap-open { color: #111; background: var(--st-warn); border-color: var(--st-warn); }
+.st-badge-gap-now { color: var(--st-ok); border-color: var(--st-ok); }
+.st-badge-gap-later { color: var(--st-run); border-color: var(--st-run); }
+.st-badge-gap-rejected { color: var(--st-bad); border-color: var(--st-bad); }
+.st-muted { color: var(--st-muted); }

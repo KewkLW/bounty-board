@@ -82,7 +82,7 @@ backlog -> ready -> in_progress -> review -> approved -> done
 | Step | Who | What the board checks |
 |---|---|---|
 | backlog to ready | orchestrator (`bounty ready`, UI) | a project, and at least one acceptance criterion |
-| ready to in_progress | the worker (`bounty start`) | the dispatcher spawned it for the assigned slot |
+| ready to in_progress | the assigned worker only (`bounty start`) | the bounty is assigned to the worker's slot. A worker starting an unassigned bounty gets 403 (`bounty N is not assigned to you; the orchestrator assigns work (ask it)`); one assigned to another slot gets 409. The dispatcher spawns the worker for the assigned slot (an `autopilot: true` slot's pick of an unassigned bounty is assigned to it before the spawn) |
 | in_progress to review | `bounty submit`, then the gates | the branch exists; its diff against main is not empty; the diff is not only notes/logs (docs and research bounties may be docs-only); the diff touches no [protected path](#keep-the-checks-out-of-reach-of-the-change) unless the orchestrator allowed it; the project verify command passes on the exact commit submitted (`submitted_sha`; result, log and `verified_sha` stored) |
 | review to approved / ready | the reviewer (Codex, `codex exec -s read-only`) | reads the real diff of the verified commit (`main...verified_sha`, never later commits) and the acceptance criteria, with the project's `REVIEW.md`/`AGENTS.md` taken from main; returns approve/reject with per-criterion evidence and severity-tagged findings; an approval that does not show every criterion met is overruled to reject. Approve records `reviewed_sha`. Reject sends the bounty back to ready with the notes for a fresh worker |
 | approved to done | the merge check (every 60 s, or `bounty done`) | every recorded commit is reachable from main (or main holds the same patch: rebase, cherry-pick or squash merges count). Branch commits after `reviewed_sha` that reached main raise a `FLAG unreviewed commits merged` event |
@@ -312,13 +312,17 @@ project afterwards. It requires the installed `codex` subscription provider and
 Every spawned worker gets a prompt containing the bounty, its acceptance criteria, notes from earlier attempts, project rule docs, and the CLI protocol:
 
 ```
-bounty start                       # first (prints any waiting orchestrator notes)
+bounty start                       # first (prints any waiting orchestrator notes); only the bounty assigned to this slot
 bounty inbox                       # unread orchestrator notes, marked read
 bounty progress "note" [--check N] # heartbeat, at least every 15 min
-bounty split "title" --desc "..."  # gaps found go to backlog as children
+bounty gap "what is missing" --why "why it matters" [--suggest "a bounty that fills it"]
+                                   # a gap outside the bounty goes to the orchestrator; never acted on (see Gaps)
 bounty block "reason"              # stuck: block and exit
 bounty submit                      # commit on the branch first; gates + review follow
+bounty next                        # the next bounty assigned to this slot (never an unassigned one)
 ```
+
+Hard rules, in the prompt and enforced by the board: a worker works only on the bounty assigned to its slot. It never starts, splits or creates work: `bounty start` on an unassigned bounty, `bounty split` and `bounty add` from a worker are refused with 403 (`workers can't create work; file a gap request: bounty gap ...`). Every gap it finds goes through `bounty gap`.
 
 The prompt also carries `machine_rules` from `config/board.json` and every orchestrator note on the bounty.
 
@@ -518,6 +522,25 @@ For projects that need machine-wide resource locks (e.g. GPU, build server), con
 
 Workers take and release the lock via the configured script. The dashboard shows who holds it. Other resources use the board's own TTL lease table: exclusive, renewable, released on expiry or when the holder's worker dies.
 
+## Gaps
+
+Workers never create work and never act on a gap they find outside their bounty: they pose it to the orchestrator, and the orchestrator keeps a ledger of every gap, what it did about it and why.
+
+```
+# worker (BOUNTY_ID / BOUNTY_SLOT set by the dispatcher)
+bounty gap "the importer drops rows with a BOM" --why "half the March data is missing" --suggest "strip the BOM in lib/importer.js"
+# orchestrator
+bounty gaps                            # open gaps (waiting on you); --all for the whole ledger, --json
+bounty add "Strip the BOM in the importer" --criteria "..." --slot opus-2 --ready     # -> #31
+bounty gap-decide 4 --decision now --bounty 31 --action "made #31 for opus-2" --why "it blocks the March report"
+bounty gap-decide 5 --decision later --action "noted for the next milestone" --why "not on the current goal"
+bounty gap-decide 6 --decision rejected --action "nothing" --why "already covered by #18"
+```
+
+- **Filing** (`bounty gap`, `POST /api/bounties/:id/gaps {gap, why, suggestion}`, a worker on its own bounty or the orchestrator): an open gap tied to the bounty, a `gap` event in the bounty history, a line to the orchestrator in the project's room (`@Conductor GAP #4 on #12 from Alpha: a gap outside the bounty waits for your decision (not acted on). bounty gaps`; the gap text stays on the board) and the open count in the orchestrator's presence (`bounty orchestrator`, `bounty status`, `bounty live`, the register output). The bounty's scope and status do not change.
+- **Deciding** (`bounty gap-decide`, `POST /api/gaps/:id/decide {decision, action, reason, bounty}`, orchestrator only: 403 for workers): `now` (fill it now; `--bounty` names the bounty that does, required), `later` or `rejected`. `--action` (what was done) and `--why` (the reason) are always required (400 without). A decided gap can be decided again; the history keeps both.
+- **The ledger** (`GET /api/gaps`, `?status=open|decided`, `?bounty=ID`): every gap with the date, who asked (slot and bounty), the gap, why, the suggestion, the decision, the action, the reason and the bounty it became. The [Status page](#the-status-page-goals-and-the-orchestrators-note) shows it in its Gaps section, open gaps first and highlighted.
+
 ## Notes to live workers
 
 `bounty note ID "text"` (API `POST /api/bounties/:id/notes {text}`, or the note box in the dashboard drawer) tells a running worker something new: a changed requirement, a machine rule. Notes are `message` events in the bounty history with a read mark. The worker gets unread ones from `bounty inbox`, and in the output of `bounty start` and `bounty progress`; each gets marked read by whoever received it. Every later attempt gets all notes in its prompt. `bounty inbox ID --peek` (`GET /api/bounties/:id/inbox`) shows what a worker hasn't read yet without marking it; `bounty inbox ID --all` lists all notes with read state.
@@ -634,6 +657,9 @@ bounty note 12 "new requirement"       # reaches the live worker and later attem
 bounty replies                         # what the human answered from the hub (marks it read)
 bounty incidents [--follow]            # broken attempts waiting for a decision (see Incidents)
 bounty retry 12 [--slot S]            # or: bounty incident 3 --human "TEXT"
+bounty gaps [--open|--all] [--json]    # gaps workers posed (see Gaps); --open (default) is what waits on you
+bounty gap-decide 4 --decision now|later|rejected --action "what was done" --why "reason" [--bounty 31]
+bounty split "Title" --parent 12 --desc "..."   # a child bounty in backlog (orchestrator only)
 bounty assign 12 opus-2 && bounty ready 12
 bounty show 12 / bounty log 12         # history, attempts, logs, review notes
 bounty approve 12 | bounty reject 12 "what to fix"
@@ -685,7 +711,7 @@ See the "A board per project" philosophy: every new board must get its own theme
 
 ## The Status page: goals and the orchestrator's note
 
-`/status.html` is the page to check instead of asking. It shows the project's goals with the bounties that lead to each one, the orchestrator's latest note, what is running, what needs attention, and what finished in the last 24 hours. It refreshes every 30 seconds and reads the board API live, plus two files the orchestrator keeps in the board's public folder:
+`/status.html` is the page to check instead of asking. It shows the project's goals with the bounties that lead to each one, the orchestrator's latest note, what is running, what needs attention, the [gap ledger](#gaps) (open gaps first, highlighted), and what finished in the last 24 hours. It refreshes every 30 seconds and reads the board API live, plus two files the orchestrator keeps in the board's public folder:
 
 `status-goals.json`:
 ```json

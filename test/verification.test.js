@@ -24,7 +24,7 @@ function commitOnBranch(repo, branch, files, { from = 'main' } = {}) {
 }
 const ev = (board, id, like) => board.db.prepare('SELECT note FROM events WHERE bounty_id = ? AND note LIKE ?').get(id, like);
 const newBounty = (board, title, extra = {}) => {
-  const b = board.create({ title, project: 'scratch', criteria: CRIT, ...extra });
+  const b = board.create({ title, project: 'scratch', criteria: CRIT, ...extra, assignee_slot: 'fake-1' });
   board.ready(b.id); board.start(b.id, 'fake-1');
   return b.id;
 };

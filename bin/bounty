@@ -43,6 +43,13 @@ Orchestrator
   bounty incident ID --human "TEXT"
                                    decide an incident: hand it to a human (block reason "Waiting on a human: TEXT",
                                    shown in the hub's Needs you list)
+  bounty gaps [--open|--all] [--json]
+                                   the gap ledger: every gap a worker posed (open first), the decision, what was
+                                   done, why, and the bounty it became. Default --open (the ones waiting on you)
+  bounty gap-decide GAPID --decision now|later|rejected --action "what was done" --why "reason" [--bounty NEW_ID]
+                                   decide a gap; --action and --why are required, "now" needs --bounty (the bounty
+                                   that fills it: create it with bounty add, or bounty split --parent ID)
+  bounty split "<title>" --parent ID [--desc TEXT] [--criteria "..."]...   a child bounty in backlog (orchestrator only)
   bounty pause | resume            bounty status             bounty import <source>
   bounty live [--json] [--watch [SEC]]  what every slot is doing now: bounty, pipeline stage, verify/CI stage,
                                    last actions, progress note, lock waits/holders, tester, queue, last 24 h
@@ -68,11 +75,13 @@ Orchestrator
   bounty sentinel --check-install  is the bounty-sentinel.timer installed and active, and when did it last run
   bounty project list | bounty project add ID --repo PATH [--main main] [--wt-cmd CMD] [--wt-path TPL] [--verify CMD] [--protected GLOB,GLOB|--protected-default|--no-protected]
 Workers (BOUNTY_ID / BOUNTY_SLOT from the environment)
-  bounty start                     bounty progress "note" [--check N]...     (both print unread notes)
+  Work only on the bounty assigned to you. Workers never start, split or create work: the orchestrator assigns it.
+  bounty start                     (only the bounty assigned to your slot)   bounty progress "note" [--check N]...  (both print unread notes)
   bounty inbox                     unread orchestrator notes and messages from the human; marks them read. Check it often.
-  bounty block "reason"            bounty split "<title>" [--desc TEXT] [--criteria "..."]...
-  bounty submit [--branch B] [--evidence "what you ran in the real app and saw"] [--no-wait]
-  bounty next                      bounty lease gpu [--ttl MIN] [--no-wait]    bounty release gpu
+  bounty gap "what is missing" --why "why it matters" [--suggest "suggested bounty"]
+                                   pose a gap you found outside your bounty to the orchestrator; it decides. Never act on it
+  bounty block "reason"            bounty submit [--branch B] [--evidence "what you ran in the real app and saw"] [--no-wait]
+  bounty next                      (bounties assigned to your slot only)     bounty lease gpu [--ttl MIN] [--no-wait]    bounty release gpu
 `;
 
 function parse(argv) {
@@ -82,7 +91,7 @@ function parse(argv) {
     if (a.startsWith('--')) {
       const k = a.slice(2);
       const nxt = argv[i + 1];
-      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help', 'peek', 'kill', 'orchestrators', 'check-install', 'follow', 'allow-protected', 'no-allow-protected', 'protected-default', 'no-protected', 'quiet'].includes(k);
+      const flag = ['ready', 'all', 'json', 'raw', 'no-wait', 'wait', 'force', 'help', 'peek', 'kill', 'orchestrators', 'check-install', 'follow', 'allow-protected', 'no-allow-protected', 'protected-default', 'no-protected', 'quiet', 'open'].includes(k);
       const v = flag || nxt === undefined || nxt.startsWith('--') ? true : (i++, nxt);
       if (opt[k] === undefined) opt[k] = v; else opt[k] = [].concat(opt[k], v);
     } else pos.push(a);
@@ -254,7 +263,7 @@ async function main() {
   const cmd = pos.shift();
   if (!cmd || cmd === 'help' || opt.help) { console.log(HELP); return; }
   const worker = !!SLOT;
-  const orchOnly = ['add', 'edit', 'note', 'replies', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'close-merged', 'pause', 'resume', 'import', 'retry', 'incident', 'incidents'];
+  const orchOnly = ['add', 'edit', 'note', 'replies', 'assign', 'ready', 'backlog', 'approve', 'reject', 'done', 'fail', 'kill', 'close-merged', 'pause', 'resume', 'import', 'retry', 'incident', 'incidents', 'gaps'];
   if (worker && orchOnly.includes(cmd)) die(`'${cmd}' is an orchestrator command; you are worker ${SLOT}`);
 
   if (cmd === 'sentinel') return sentinel(opt);
@@ -395,11 +404,58 @@ async function main() {
       return;
     }
     case 'split': {
+      // Orchestrator only (the board refuses a worker with how to file a gap instead).
       const id = opt.parent ? Number(opt.parent) : idOf([]);
       const title = pos.join(' ');
-      if (!title) die('split "<title>" [--desc TEXT]');
+      if (!title) die('split "<title>" --parent ID [--desc TEXT]');
       const b = await api('POST', `/bounties/${id}/split`, { title, description: opt.desc || '', criteria: list(opt.criteria), type: opt.type, tier: opt.tier, priority: opt.priority });
-      console.log(`split #${b.id} from #${id}: ${b.title} (backlog; the orchestrator triages it)`);
+      console.log(`split #${b.id} from #${id}: ${b.title} [backlog]`);
+      return;
+    }
+    case 'gap': {
+      // A worker poses a gap on its own bounty (BOUNTY_ID); the orchestrator may name one with --bounty.
+      const str = k => (typeof opt[k] === 'string' ? opt[k] : Array.isArray(opt[k]) ? opt[k].filter(v => typeof v === 'string').join('\n') : undefined);
+      const usage = 'usage: bounty gap "what is missing" --why "why it matters" [--suggest "suggested bounty"]';
+      const gap = pos.join(' ').trim();
+      if (!gap) die(usage);
+      if (!str('why') || !str('why').trim()) die(`--why is required. ${usage}`);
+      if (opt.suggest !== undefined && !str('suggest')) die(`--suggest needs text. ${usage}`);
+      const id = opt.bounty && !worker ? Number(opt.bounty) : idOf([]);
+      const g = await api('POST', `/bounties/${id}/gaps`, { gap, why: str('why'), suggestion: str('suggest') });
+      if (opt.json) { console.log(JSON.stringify(g, null, 2)); return; }
+      console.log(`gap #${g.id} on #${g.bounty_id} posed to the orchestrator: ${g.gap}`);
+      if (worker) console.log('Do not act on it: the orchestrator decides. Carry on with your own bounty (its scope and status are unchanged).');
+      return;
+    }
+    case 'gaps': {
+      const rows = await api('GET', `/gaps${opt.all ? '' : '?status=open'}`);
+      if (opt.json) { console.log(JSON.stringify(rows, null, 2)); return; }
+      if (!rows.length) { console.log(opt.all ? 'no gaps' : 'no open gaps'); return; }
+      const when = t => String(t || '').slice(0, 16).replace('T', ' ');
+      for (const g of rows) {
+        console.log(`GAP #${g.id}  ${g.status === 'open' ? 'OPEN' : `decided: ${g.decision.toUpperCase()}`}  ${when(g.created_at)}  from ${g.from_actor}${g.from_name !== g.from_actor ? ` (${g.from_name})` : ''} on #${g.bounty_id}${g.bounty ? ` ${g.bounty.title}` : ''}`);
+        console.log(`    gap: ${g.gap}`);
+        console.log(`    why: ${g.why}`);
+        if (g.suggestion) console.log(`    suggested: ${g.suggestion}`);
+        if (g.status === 'decided') {
+          console.log(`    action: ${g.action}`);
+          console.log(`    reason: ${g.reason}`);
+          console.log(`    bounty: ${g.new_bounty_id ? `#${g.new_bounty_id}${g.new_bounty ? ` ${g.new_bounty.title} [${g.new_bounty.status}]` : ''}` : '-'}   decided by ${g.decided_by} ${when(g.decided_at)}`);
+        }
+      }
+      const open = rows.filter(g => g.status === 'open').length;
+      console.log(`\n${rows.length} gap${rows.length > 1 ? 's' : ''}${opt.all ? `, ${open} open` : ' open'}.${open ? ' Decide: bounty gap-decide GAPID --decision now|later|rejected --action "what was done" --why "reason" [--bounty NEW_ID]' : ''}`);
+      return;
+    }
+    case 'gap-decide': {
+      // The board checks who asks (orchestrator only) before it checks the fields.
+      const id = pos[0];
+      if (!id || !/^\d+$/.test(id)) die('usage: bounty gap-decide GAPID --decision now|later|rejected --action "what was done" --why "reason" [--bounty NEW_ID]');
+      const val = k => (typeof opt[k] === 'string' ? opt[k] : undefined); // a bare --flag (no value) counts as missing
+      const body = { decision: val('decision'), action: val('action'), reason: val('why'), bounty: val('bounty') };
+      const g = await api('POST', `/gaps/${id}/decide`, body);
+      if (opt.json) { console.log(JSON.stringify(g, null, 2)); return; }
+      console.log(`gap #${g.id} decided: ${g.decision}${g.new_bounty_id ? ` -> #${g.new_bounty_id}` : ''}; action: ${g.action}; why: ${g.reason}`);
       return;
     }
     case 'submit': {
@@ -454,7 +510,7 @@ async function main() {
       const slot = pos[0] || SLOT;
       if (!slot) die('next [SLOT] (or set BOUNTY_SLOT)');
       const r = await api('GET', `/next?slot=${encodeURIComponent(slot)}`);
-      if (!r.next) { console.log(`no ready bounty for ${slot}: idle.${worker ? ' Exit now; the dispatcher spawns a fresh worker when there is work.' : ''}`); return; }
+      if (!r.next) { console.log(`no ready bounty assigned to ${slot}: idle.${worker ? ' Exit now; the orchestrator assigns work and the dispatcher spawns a fresh worker for it.' : ''}`); return; }
       console.log(`next for ${slot}: #${r.next.id} ${r.next.title}${worker ? '\nDon\'t start it yourself: exit, and the dispatcher spawns a fresh worker for it.' : ''}`);
       return;
     }
@@ -602,6 +658,8 @@ async function main() {
         console.log(`registered orchestrator '${o.name}' pid ${o.pid}${opt.pid ? '' : ` (${procComm(o.pid) || 'your agent process'})`}: ${o.online ? 'online' : 'NOT online'}`);
         const n = o.open_incidents || 0;
         console.log(n ? `${n} open incident${n > 1 ? 's' : ''} waiting for a decision: bounty incidents` : 'no open incidents');
+        const g = o.open_gaps || 0;
+        console.log(g ? `${g} open gap request${g > 1 ? 's' : ''} from workers waiting for a decision: bounty gaps` : 'no open gap requests');
         return;
       }
       if (pos[0]) die('usage: bounty orchestrator [--json] | bounty orchestrator register [--name N] [--pid P]');

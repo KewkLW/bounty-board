@@ -30,7 +30,7 @@ test('human-notes API: header check, 400/404/409, unblock, list and read marks',
   const t = await startBoard('human-api', { dispatch: false });
   try {
     const { board, url, call } = t;
-    const b = board.create({ title: 'needs a decision', project: 'scratch', criteria: CRIT });
+    const b = board.create({ title: 'needs a decision', project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
     const p = `/bounties/${b.id}/human-notes`;
 
     // 403: no X-Board-Request header (the helper's call() sends JSON but not the header)
@@ -164,7 +164,7 @@ test('human notes reach workers: live inbox/progress and the prompt of a later w
   const t = await startBoard('human-worker', { dispatch: false });
   try {
     const { board, url } = t;
-    const b = board.create({ title: 'x', project: 'scratch', criteria: CRIT });
+    const b = board.create({ title: 'x', project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
     board.ready(b.id);
     const w = { BOUNTY_ID: String(b.id), BOUNTY_SLOT: 'fake-1' };
     let r = await cli(url, ['start'], w);

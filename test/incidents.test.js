@@ -245,7 +245,7 @@ test('break paths: never ran start, exited without submit, stall kill (+ its exi
     assert.ok(all.every(r => r.c === ([odd.id, ext.id].includes(r.bounty_id) ? 2 : 1)), JSON.stringify(all));
     assert.strictEqual(all.length, 7);
     // a worker's own `bounty block` is a decision, not a break: no incident
-    const self = board.create({ criteria: CRIT, title: 'self block', project: 'scratch' });
+    const self = board.create({ criteria: CRIT, title: 'self block', project: 'scratch', assignee_slot: 'fake-1' });
     board.ready(self.id); board.start(self.id, 'fake-1'); board.block(self.id, 'need a decision', 'fake-1');
     assert.strictEqual(incs(self.id).length, 0);
   } finally { await t.s.close(); }
@@ -255,7 +255,7 @@ test('verify failure after the worker left: an incident, the board requeues; the
   const t = await startBoard('inc-verify', { dispatch: false, verify: 'fail', over: { retry: { max_attempts: 2, escalate_after_failures: 9, escalate_model: {} } } });
   try {
     const { board, repo } = t;
-    const b = board.create({ title: 'code', project: 'scratch', criteria: CRIT });
+    const b = board.create({ title: 'code', project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
     sh(repo, 'git checkout -q -b vf main && echo "module.exports = 1;" > x.js && git add -A && git commit -qm x && git checkout -q main');
     const submitOnce = async n => {
       board.db.prepare('UPDATE bounties SET attempts = ? WHERE id = ?').run(n, b.id);
@@ -441,7 +441,7 @@ test('retry is refused while the broken worker is still being stopped, and on a 
   const t = await startBoard('inc-alive', { dispatch: false });
   try {
     const { board } = t;
-    const b = board.create({ title: 'x', project: 'scratch', criteria: CRIT });
+    const b = board.create({ title: 'x', project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
     board.ready(b.id); board.start(b.id, 'fake-1'); board.block(b.id, 'stuck', 'fake-1');
     t.s.dispatcher.live.set(b.id, { runner: 't3', slot: 'fake-1' }); // looks alive
     const r = await t.call('POST', `/bounties/${b.id}/retry`, {});
@@ -564,7 +564,7 @@ test('the cap joins only an open incident of the current attempt; retry with no 
   const t = await startBoard('inc-cap-older', { dispatch: false, over: { retry: { max_attempts: 2, escalate_after_failures: 9, escalate_model: {} } } });
   try {
     const { board } = t;
-    const b = board.create({ title: 'older', project: 'scratch', criteria: CRIT });
+    const b = board.create({ title: 'older', project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
     board.ready(b.id);
     // attempt 1 broke and nobody decided it: its incident stays open
     board.db.prepare('UPDATE bounties SET attempts = 1 WHERE id = ?').run(b.id);
@@ -584,7 +584,7 @@ test('the cap joins only an open incident of the current attempt; retry with no 
     assert.strictEqual(rows[1].cause_kind, 'attempt_cap');
 
     // a blocked bounty with no open incident: retry refuses, points at bounty ready, changes nothing
-    const c = board.create({ title: 'no incident', project: 'scratch', criteria: CRIT });
+    const c = board.create({ title: 'no incident', project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
     board.ready(c.id);
     board.start(c.id, 'fake-1');
     transition(board.db, c.id, 'blocked', { actor: 'test', note: 'blocked by hand' });
@@ -600,7 +600,7 @@ test('the cap joins only an open incident of the current attempt; retry with no 
 
     // a retry that hits the cap while the only open incident is an older attempt's: the cap is its
     // own record and the same decision resolves both
-    const e2 = board.create({ title: 'retry at cap, older incident', project: 'scratch', criteria: CRIT });
+    const e2 = board.create({ title: 'retry at cap, older incident', project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
     board.ready(e2.id); board.start(e2.id, 'fake-1');
     board.db.prepare('UPDATE bounties SET attempts = 1 WHERE id = ?').run(e2.id);
     board.incidents.record({ bounty: e2.id, kind: 'exit_no_submit', attemptNo: 1, slot: 'fake-1', exitCode: 1, countFailure: true });
@@ -622,7 +622,7 @@ test('an attempt that ends without an exit code keeps its end reason in the repo
     const d = t.s.dispatcher;
     const DEAD = 2147483646; // no such pid
     const mk = title => {
-      const b = board.create({ title, project: 'scratch', criteria: CRIT });
+      const b = board.create({ title, project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
       board.ready(b.id); board.start(b.id, 'fake-1');
       board.db.prepare('UPDATE bounties SET attempts = 1 WHERE id = ?').run(b.id);
       const a = board.db.prepare("INSERT INTO attempts (bounty_id, slot, runner, started_at, kind, pid) VALUES (?, 'fake-1', 'command', ?, 'worker', ?)")

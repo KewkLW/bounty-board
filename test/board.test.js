@@ -26,7 +26,7 @@ test('status machine: legal edges, illegal edges, guarded edges', async () => {
   const t = await startBoard('machine', { dispatch: false });
   try {
     const { board } = t;
-    const b = board.create({ title: 'x', project: 'scratch', criteria: CRIT });
+    const b = board.create({ title: 'x', project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
     assert.strictEqual(b.status, 'backlog');
     assert.throws(() => transition(board.db, b.id, 'in_progress', {}), /backlog -> in_progress is not allowed/);
     board.ready(b.id);
@@ -55,8 +55,18 @@ test('API: workers cannot approve, assign, ready or mark done', async () => {
     assert.strictEqual((await call('POST', `/bounties/${b.id}/ready`, {}, 'fake-1')).status, 403);
     assert.strictEqual((await call('POST', `/bounties/${b.id}/assign`, { slot: 'fake-1' }, 'fake-1')).status, 403);
     assert.strictEqual((await call('POST', `/bounties/${b.id}/done`, {}, 'fake-1')).status, 403);
-    assert.strictEqual((await call('POST', '/bounties', { title: 'sneaky' }, 'fake-1')).status, 403);
+    const sneaky = await call('POST', '/bounties', { title: 'sneaky' }, 'fake-1');
+    assert.strictEqual(sneaky.status, 403);
+    assert.match(sneaky.data.error, /workers can't create work; file a gap request: bounty gap/);
     assert.strictEqual((await call('POST', `/bounties/${b.id}/ready`, {})).status, 200);
+    // an unassigned bounty: a worker can't take it; the orchestrator assigns, then the slot starts it
+    const self = await call('POST', `/bounties/${b.id}/start`, {}, 'fake-1');
+    assert.strictEqual(self.status, 403);
+    assert.strictEqual(self.data.error, `bounty ${b.id} is not assigned to you; the orchestrator assigns work (ask it)`);
+    assert.strictEqual(t.board.raw(b.id).status, 'ready');
+    assert.strictEqual(t.board.raw(b.id).assignee_slot, null, 'no self-assign');
+    assert.strictEqual((await call('POST', `/bounties/${b.id}/assign`, { slot: 'fake-1' })).status, 200);
+    assert.strictEqual((await call('POST', `/bounties/${b.id}/start`, {}, 'fake-2')).status, 409, 'assigned to another slot');
     assert.strictEqual((await call('POST', `/bounties/${b.id}/start`, {}, 'fake-1')).status, 200);
     t.board.db.prepare("UPDATE bounties SET status='review' WHERE id=?").run(b.id);
     assert.strictEqual((await call('POST', `/bounties/${b.id}/approve`, {}, 'fake-1')).status, 403);
@@ -68,7 +78,7 @@ test('gates: no branch, empty diff, docs-only diff on a code bounty are refused'
   const t = await startBoard('gates', { dispatch: false });
   try {
     const { board, repo, call } = t;
-    const b = board.create({ title: 'code', project: 'scratch', type: 'task', criteria: CRIT });
+    const b = board.create({ title: 'code', project: 'scratch', type: 'task', criteria: CRIT, assignee_slot: 'fake-1' });
     board.ready(b.id); board.start(b.id, 'fake-1');
     let r = await call('POST', `/bounties/${b.id}/submit`, {}, 'fake-1');
     assert.strictEqual(r.status, 422); assert.match(r.data.error, /no branch/);
@@ -82,7 +92,7 @@ test('gates: no branch, empty diff, docs-only diff on a code bounty are refused'
     assert.strictEqual(r.status, 422); assert.match(r.data.error, /only touches notes\/logs/);
     assert.strictEqual(board.raw(b.id).status, 'in_progress');
     // a research bounty may be docs-only
-    const d = board.create({ criteria: CRIT, title: 'research', project: 'scratch', type: 'research' });
+    const d = board.create({ criteria: CRIT, title: 'research', project: 'scratch', type: 'research', assignee_slot: 'fake-1' });
     board.ready(d.id); board.start(d.id, 'fake-1');
     r = await call('POST', `/bounties/${d.id}/submit`, { branch: 'notes-br' }, 'fake-1');
     assert.strictEqual(r.status, 200, JSON.stringify(r.data));
@@ -95,7 +105,7 @@ test('gates: verify failure keeps the bounty out of review; with no live worker 
   const t = await startBoard('verifyfail', { dispatch: false, verify: 'fail' });
   try {
     const { board, repo, call } = t;
-    const b = board.create({ title: 'code', project: 'scratch', criteria: CRIT });
+    const b = board.create({ title: 'code', project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
     board.ready(b.id); board.start(b.id, 'fake-1');
     commitOnBranch(repo, 'real-br', { 'math.js': 'function add(a,b){return a+b}\nfunction mul(a,b){return a*b}\nmodule.exports={add,mul}\n' });
     const r = await call('POST', `/bounties/${b.id}/submit`, { branch: 'real-br' }, 'fake-1');
@@ -113,7 +123,7 @@ test('done: refused until the commits are on main; merge (or cherry-pick) makes 
   try {
     const { board, repo, call } = t;
     const mk = (branch, file) => {
-      const b = board.create({ title: branch, project: 'scratch', criteria: CRIT });
+      const b = board.create({ title: branch, project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
       board.ready(b.id); board.start(b.id, 'fake-1');
       commitOnBranch(repo, branch, { [file]: `// ${branch}\nmodule.exports = 1;\n` });
       board.submit(b.id, { branch, actor: 'fake-1' });
@@ -156,8 +166,8 @@ test('leases: exclusive, renewable, released on TTL expiry and when the holder b
   const t = await startBoard('lease', { dispatch: false });
   try {
     const { board, call } = t;
-    const a = board.create({ criteria: CRIT, title: 'a', project: 'scratch' }); board.ready(a.id); board.start(a.id, 'fake-1');
-    const b = board.create({ criteria: CRIT, title: 'b', project: 'scratch' }); board.ready(b.id); board.start(b.id, 'fake-2');
+    const a = board.create({ criteria: CRIT, title: 'a', project: 'scratch', assignee_slot: 'fake-1' }); board.ready(a.id); board.start(a.id, 'fake-1');
+    const b = board.create({ criteria: CRIT, title: 'b', project: 'scratch', assignee_slot: 'fake-2' }); board.ready(b.id); board.start(b.id, 'fake-2');
     let r = await call('POST', '/leases/gpu', { bounty_id: a.id, slot: 'fake-1' }, 'fake-1');
     assert.strictEqual(r.data.granted, true);
     r = await call('POST', '/leases/gpu', { bounty_id: b.id, slot: 'fake-2' }, 'fake-2');
@@ -401,7 +411,7 @@ test('notes: orchestrator -> live worker via inbox, start and progress; later at
   const t = await startBoard('notes', { dispatch: false, over: { machine_rules: ['One heavy job at a time: check free -g first.'] } });
   try {
     const { board, call, url } = t;
-    const b = board.create({ title: 'x', project: 'scratch', criteria: CRIT });
+    const b = board.create({ title: 'x', project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
     board.ready(b.id);
     // workers can't send notes; empty notes are refused
     assert.strictEqual((await call('POST', `/bounties/${b.id}/notes`, { text: 'hi' }, 'fake-1')).status, 403);

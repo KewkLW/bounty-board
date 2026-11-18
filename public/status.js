@@ -4,6 +4,9 @@
 //   status-notes.json  { "written_at", "headline", "body": ["paragraph", ...] }
 // A goal is "reached" only when the orchestrator records it (state "reached" with evidence) or its gate
 // bounty is done. A road that is all done without that is shown as waiting on its exit test.
+// Gaps: the gap ledger (GET /api/gaps): every gap a worker posed, the orchestrator's decision, what it
+// did, why, and the bounty it became; open gaps first. A themed status.html without a #st-gaps slot
+// gets the section added before "Finished"; a board without the gaps API shows nothing for it.
 (() => {
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -81,10 +84,71 @@
     </div>`;
   }
 
+  const DECISION = { now: 'Now', later: 'Later', rejected: 'Rejected' };
+  const day = t => {
+    if (!t) return '';
+    const d = new Date(t);
+    return isNaN(d) ? esc(t) : d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  };
+
+  // The Gaps section's container: the page's own, or one added before the last section (Finished).
+  function gapsBox() {
+    let box = $('st-gaps');
+    if (box) return box;
+    const wrap = document.querySelector('.st-wrap');
+    if (!wrap) return null;
+    const sec = document.createElement('section');
+    sec.id = 'st-gaps-section';
+    sec.innerHTML = '<h2>Gaps <small id="st-gcount">gaps workers posed, what the orchestrator decided and why</small></h2><div id="st-gaps" class="st-list"></div>';
+    const recent = $('st-recent');
+    const before = recent ? recent.closest('section') : null;
+    wrap.insertBefore(sec, before && before.parentNode === wrap ? before : null);
+    return $('st-gaps');
+  }
+
+  // A bounty chip, or a grey #id when this page does not know the bounty.
+  const ref = (b, id) => (b && b.status ? chip(b) : `<span class="st-chip st-missing">#${esc(id)}</span>`);
+
+  function renderGap(g, byId) {
+    const from = byId.get(g.bounty_id) || g.bounty || { id: g.bounty_id };
+    const into = g.new_bounty_id ? (byId.get(g.new_bounty_id) || g.new_bounty || { id: g.new_bounty_id }) : null;
+    const open = g.status === 'open';
+    const who = `${esc(g.from_name || g.from_actor)}${g.from_name && g.from_name !== g.from_actor ? ` <span class="st-gap-slot">${esc(g.from_actor)}</span>` : ''}`;
+    return `<div class="st-panel st-gap${open ? ' st-gap-open' : ` st-gap-${esc(g.decision)}`}" data-gap="${esc(g.id)}">
+      <div class="st-gap-head">
+        <span class="st-gap-id">GAP #${esc(g.id)}</span>
+        <span class="st-badge st-badge-gap-${open ? 'open' : esc(g.decision)}">${open ? 'Open: waiting on the orchestrator' : esc(DECISION[g.decision] || g.decision)}</span>
+        <span class="st-gap-when">${day(g.created_at)}</span>
+      </div>
+      <div class="st-gap-who">asked by <b>${who}</b> on ${ref(from, g.bounty_id)} ${from.title ? esc(from.title) : ''}</div>
+      <div class="st-gap-text">${esc(g.gap)}</div>
+      <dl class="st-gap-dl">
+        <dt>Why it matters</dt><dd>${esc(g.why)}</dd>
+        ${g.suggestion ? `<dt>Suggested</dt><dd>${esc(g.suggestion)}</dd>` : ''}
+        ${open ? '' : `<dt>Decision</dt><dd>${esc(DECISION[g.decision] || g.decision)} · ${esc(g.decided_by || '')}${g.decided_at ? ', ' + day(g.decided_at) : ''}</dd>
+        <dt>Action</dt><dd>${esc(g.action)}</dd>
+        <dt>Why</dt><dd>${esc(g.reason)}</dd>
+        <dt>Became</dt><dd>${into ? `${ref(into, g.new_bounty_id)} ${into.title ? esc(into.title) : ''}` : '<span class="st-muted">no bounty</span>'}</dd>`}
+      </dl>
+    </div>`;
+  }
+
+  function renderGaps(gaps, byId) {
+    const box = gapsBox();
+    if (!box) return;
+    if (!Array.isArray(gaps)) { box.innerHTML = '<div class="st-panel st-empty">This board has no gap ledger yet.</div>'; return; }
+    const open = gaps.filter(g => g.status === 'open');
+    const decided = gaps.filter(g => g.status !== 'open');
+    const count = $('st-gcount');
+    if (count) count.textContent = gaps.length ? `${open.length} open · ${decided.length} decided` : 'gaps workers posed, what the orchestrator decided and why';
+    box.innerHTML = gaps.length ? [...open, ...decided].map(g => renderGap(g, byId)).join('')
+      : '<div class="st-panel st-empty">No gaps posed. A worker that finds one files it with <code>bounty gap</code>; the orchestrator decides it here.</div>';
+  }
+
   async function load() {
-    const [stats, all, live, state, goalsFile, notes] = await Promise.all([
+    const [stats, all, live, state, goalsFile, notes, gaps] = await Promise.all([
       get('/api/bounties/stats'), get('/api/bounties'), get('/api/live'), get('/api/state'),
-      get('/status-goals.json'), get('/status-notes.json'),
+      get('/status-goals.json'), get('/status-notes.json'), get('/api/gaps'),
     ]);
     if (!all) { $('st-updated').textContent = 'board unreachable'; return; }
     const byId = new Map(all.map(b => [b.id, b]));
@@ -97,6 +161,7 @@
     $('st-note').innerHTML = renderNote(notes);
     if (notes?.written_at) $('st-notewhen').textContent = ago(notes.written_at);
     $('st-goals').innerHTML = renderGoals(goalsFile?.goals, byId, all);
+    try { renderGaps(gaps, byId); } catch (e) { console.error('[status] gaps', e); }
 
     const names = new Map((state?.slots || []).map(x => [x.id, x.name]));
     const slots = (live?.slots || []).filter(x => x.bounty);

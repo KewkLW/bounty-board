@@ -165,7 +165,7 @@ test('idle shutdown: no active bounty (or paused) for idle_shutdown_minutes stop
   const t = await startBoard('agents-idle', { dispatch: false, over: { idle_shutdown_minutes: 0.02 } }); // 1.2 s
   try {
     const { board } = t;
-    const b = board.create({ title: 'busy', project: 'scratch', criteria: CRIT });
+    const b = board.create({ title: 'busy', project: 'scratch', criteria: CRIT, assignee_slot: 'fake-1' });
     board.ready(b.id); board.start(b.id, 'fake-1'); // in_progress: the board is not idle
     const w = child('sleep 600'), br = child('sleep 600'), o = child('sleep 600');
     board.agents.register({ pid: w, name: 'Hand', kind: 'worker' });
